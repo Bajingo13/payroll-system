@@ -6,6 +6,6 @@
     "puppeteer": "^24.36.0"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node server.js"
   }
 }
