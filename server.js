@@ -59,5 +59,5 @@ require('./backend/audit_logs')(app, pool);
 require('./backend/utilities')(app, pool);
 
 // ----------- START SERVER -----------
-const PORT = 3000;
+const PORT = 12687;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
