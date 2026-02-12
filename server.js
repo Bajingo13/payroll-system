@@ -40,7 +40,7 @@ app.get('/dashboard', isAuthenticated, (req, res) =>
 
 // ----------- MYSQL CONNECTION POOL -----------
 const pool = mysql.createPool({
-  host: 'hopper.proxy.rlwy.net',
+  host: 'mysql.railway.internal',
   user: 'root',
   password: 'pyKVWdEYXvZuFEjzLMbZElLotRmusrOV',
   database: 'payroll_system',
