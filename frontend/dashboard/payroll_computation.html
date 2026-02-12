@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payroll Computation | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+<div class="container">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li class="active"><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="payroll-section" class="section">
+    <header class="header">
+      <h2>Payroll Computation</h2>
+      <p>Compute employee payroll with automated deductions and real-time payslip generation.</p>
+    </header>
+
+    <!-- STEP 1: Setup Payroll -->
+    <section id="filterSection">
+      <h3>Step 1: Setup Payroll</h3>
+
+      <form id="filterForm" class="filter-form">
+        <div class="setup-container">
+
+          <!-- Payroll Period Panel -->
+          <div class="payroll-period-panel">
+            <h4>Payroll Period</h4>
+
+            <div class="form-grid">
+              <div class="payroll-period-row">
+                <label for="payrollGroup">Payroll Group:</label>
+                <select id="payrollGroup" required>
+                  <option disabled selected>-- Loading Groups --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Period:</label>
+                <select id="periodOption" required>
+                  <option disabled selected>-- Loading Periods --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Month:</label>
+                <select id="month" required>
+                  <option disabled selected>-- Loading Months --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Year:</label>
+                <select id="year" required>
+                  <option disabled selected>-- Loading Years --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Generated Payroll Range:</label>
+                <input type="text" id="payrollRange" disabled>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Panel -->
+          <div class="filter-panel">
+            <h4>Filter</h4>
+
+            <div class="form-grid" id="categorySelector">
+              <!-- Filter dropdowns -->
+              <div class="filter-row">
+                <label>Company:</label>
+                <select id="company"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Location:</label>
+                <select id="location"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Branch:</label>
+                <select id="branch"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Division:</label>
+                <select id="division"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Department:</label>
+                <select id="department"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Class:</label>
+                <select id="class"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Position:</label>
+                <select id="position"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Employee Type:</label>
+                <select id="empType"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Salary Type:</label>
+                <select id="salaryType"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Employee:</label>
+                <select id="employee"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <input type="text" id="employeeName" style="text-align: center;" disabled>
+              </div>
+            </div>
+
+            <div style="margin-top: 15px;">
+              <!-- Clear button -->
+              <button id="clearFiltersBtn" class="btn" type="button" style="float: right;">Clear Filters</button>
+              
+              <!-- Radio buttons -->
+              <label>Option:</label><br>
+              <label><input type="radio" id="allEmployees" name="option" value="all"> All</label>
+              <label><input type="radio" id="activeEmployees" name="option" value="active" checked> Active</label>
+              <label><input type="radio" id="resignedEmployees" name="option" value="hold"> Hold</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="margin-top:25px; text-align:right;">
+          <button type="button" id="computationButton" class="btn">Proceed to Computation</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Employee Selection Modal -->
+    <div id="employeeSelectModal" class="modal hidden">
+      <div class="modal-content large-modal">
+          <h3>Select Employees to Add to Payroll</h3>
+          <p>Choose the employees you want to include in this payroll run.</p>
+          
+          <!-- Helper Tools -->
+          <div class="helper-tools" style="margin: 10px 0;">
+            <label><input type="radio" id="selectAllBtn"> Select All</label>
+            <label style="margin-left: 5px"><input type="radio" id="clearAllBtn"> Clear All</label>
+              <label style="margin-left: 10px">Quick Search:</label>
+              <select id="searchCategoryModal">
+                <option value="employee_id">Employee ID</option>
+                <option value="last_name">Last Name</option>
+                <option value="first_name">First Name</option>
+              </select>
+              <input type="text" id="searchInputModal" placeholder="Type to search..." style="margin-left: 5px">
+          </div>
+
+          <div class="employee-select-container">
+            <table id="employeeSelectTable">
+                <thead>
+                  <tr>
+                    <th>Select</th>
+                    <th>Employee ID</th>
+                    <th>Last Name</th>
+                    <th>First Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Employees to select will be injected here -->
+                </tbody>
+            </table>
+          </div>
+
+          <div class="modal-buttons">
+            <button class="btn proceed" id="employeeSelectProceed">Proceed</button>
+            <button class="btn cancel-select" id="employeeSelectCancel">Cancel</button>
+          </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Payroll Computation -->
+    <section id="computationSection" class="hidden section-content">
+      <h3>Step 2: Payroll Computation</h3>
+      <!-- Profile Header -->
+      <div id="profile-header" class="profile-header hidden">
+        <div class="profile-photo">
+          <div class="pic-placeholder">No Image</div>
+        </div>
+
+        <div class="profile-info">
+            <h2 id="empFNameDetail"></h2>
+            <p><strong>Employee ID:</strong> <span id="empIdDetail"></span></p>
+            <p><strong>Department:</strong> <span id="empDeptDetail"></span></p>
+            <p><strong>Position:</strong> <span id="empPosDetail"></span></p>
+            <p><strong>Status:</strong> <span id="empStatDetail"></span></p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="details-actions">
+            <button class="btn edit-btn" id="editPayrollBtn">✏️ Edit</button>
+            <button class="btn delete-btn" id="deletePayrollBtn">🗑️ Delete</button>
+            <button class="btn save-btn hidden" id="savePayrollBtn">💾 Save</button>
+            <button class="btn cancel-btn hidden" id="cancelEditBtn">✖️ Cancel</button>
+        </div>
+      </div>
+
+      <!-- Employee List Section -->
+      <div id="employeeListContainer" class="table-section">
+        <h3 id="payrollRangeHeader"></h3>
+
+        <div class="table-header">
+          <h4>Employee List</h4>
+          <div class="quick-search">
+            <label>Quick Search:</label>
+            <select id="searchCategory">
+              <option value="employee_id">Employee ID</option>
+              <option value="last_name">Last Name</option>
+              <option value="first_name">First Name</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Type to search...">
+          </div>
+        </div>
+
+        <table id="employeeTable">
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Company</th>
+              <th>Department</th>
+              <th>Last Name</th>
+              <th>First Name</th>
+              <th>Employee ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Filtered employee results appear here -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tab-buttons hidden">
+          <button class="tab-btn" data-tab="payroll">Payroll</button>
+          <button class="tab-btn" data-tab="ot-nd">OT / ND</button>
+          <button class="tab-btn" data-tab="allowances">Allowances</button>
+          <button class="tab-btn" data-tab="deductions">Deductions</button>
+          <button class="tab-btn" data-tab="loans">Loans</button>
+          <button class="tab-btn" data-tab="attendanceAdj">Attendance Adj</button>
+          <button class="tab-btn" data-tab="ot-adj">Overtime Adj</button>
+          <button class="tab-btn" data-tab="otherDeductions">Other Deductions</button>
+          <button class="tab-btn" data-tab="leaves">Leaves</button>
+      </div>
+      
+      <!-- Payroll Section -->
+      <form id="payroll" class="tab-content hidden summary-input">
+        <div class="payslip-grid">
+          <!-- Gross Earnings -->
+          <div class="panel gross-panel">
+            <h4>Gross Earnings</h4>
+            <table>
+              <tr>
+                <th></th>
+                <th>Time</th>
+                <th>Amount</th>
+              </tr>
+              <tr>
+                <td>Basic Salary</td>
+                <td></td>
+                <td><input type="number" id="basicSalary"></td>
+              </tr>
+              <tr>
+                <td>Absences</td>
+                <td><input type="text" id="absenceTime" maxlength="8" placeholder="00:00:00" data-time-field data-format="absence"></td>
+                <td><input type="number" id="absenceDeduction"></td>
+              </tr>
+              <tr>
+                <td>Late</td>
+                <td><input type="text" id="lateTime" maxlength="6" placeholder="000:00" data-time-field data-format="time-field"></td>
+                <td><input type="number" id="lateDeduction"></td>
+              </tr>
+              <tr>
+                <td>Undertime</td>
+                <td><input type="text" id="undertime" maxlength="6" placeholder="000:00" data-time-field data-format="time-field"></td>
+                <td><input type="number" id="undertimeDeduction"></td>
+              </tr>
+              <tr><td>Total Overtime</td><td><td><input type="number" id="overtime"></td></tr>
+              <tr><td>Total Taxable Allowances</td><td></td><td><input type="number" id="taxableAllowances"></td></tr>
+              <tr><td>Total Non-Taxable Allowances</td><td></td><td><input type="number"id="nonTaxableAllowances"></td></tr>
+              <tr><td>Total Adj. (Compensation)</td><td></td><td><input type="number" id="adjComp"></td></tr>
+              <tr><td>Total Adj. (Non-Comp.)</td><td></td><td><input type="number" id="adjNonComp" step="0.01" min="0"></td></tr>
+              <tr><td>Total Leaves Used</td><td></td><td><input type="number" id="leavesUsed"></td></tr>
+            </table>
+          </div>
+
+          <!-- Deductions -->
+          <div class="panel deduction-panel">
+            <h4>Deductions</h4>
+            <table>
+              <tr><th></th><th>Employee</th><th>Employer</th><th>ECC</th></tr>
+              <tr><td>GSIS</td><td><input type="number" id="gsisEE"></td><td><input type="number" id="gsisER"></td><td><input type="number" id="gsisECC"></td></tr>
+              <tr><td>SSS</td><td><input type="number" id="sssEE"></td><td><input type="number" id="sssER"></td><td><input type="number" id="sssECC"></td></tr>
+              <tr><td>Pag-ibig</td><td><input type="number" id="pagibigEE"></td><td><input type="number" id="pagibigER"></td><td><input type="number" id="pagibigECC"></td></tr>
+              <tr><td>Philhealth</td><td><input type="number" id="philhealthEE"></td><td><input type="number" id="philhealthER"></td><td><input type="number" id="philhealthECC"></td></tr>
+              <tr><td>Tax Withheld</td><td><input type="number" id="taxWithheld"></td><td colspan="2"></td></tr>
+              <tr><td>Total Deductions</td><td><input type="number" id="totalDeductions"></td><td colspan="2"></td></tr>
+              <tr><td>Total Loans</td><td><input type="number" id="totalLoans"></td><td colspan="2"></td></tr>
+              <tr><td>Other Deductions</td><td><input type="number" id="otherDeductions"></td>
+              <td>Premium Adj.</td><td colspan="3"><input type="number" id="premiumAdj"></td></tr>
+            </table>
+
+            <table class="ytd">
+              <tr><td>YTD SSS</td><td><input type="number" id="ytdSSS"></td><td>YTD Wtax</td><td><input type="number" id="ytdWtax"></td></tr>
+              <tr><td>YTD Philhealth</td><td><input type="number" id="ytdPhilhealth"></td><td>YTD GSIS</td><td><input type="number" id="ytdGSIS"></td></tr>
+              <tr><td>YTD Pag-ibig</td><td><input type="number" id="ytdPagibig"></td><td>YTD Gross</td><td><input type="number" id="ytdGross"></td></tr>
+            </table>
+          </div>
+        </div>
+      </form>
+
+      <!-- Overtime / Night Differential Section -->
+      <div id="ot-nd" class="tab-content hidden summary-input">
+          <div class="ot-nd-payroll-grid">
+              <!-- OVERTIME -->
+              <div class="form-box">
+                  <h4>Overtime</h4>
+
+                  <table class="ot-nd-table">
+                      <thead>
+                          <tr>
+                              <th>Type</th>
+                              <th style="width: 120px;">Rate</th>
+                              <th style="width: 120px;">Hours</th>
+                              <th style="width: 120px;">Amount</th>
+                          </tr>
+                      </thead>
+                      
+                      <tbody id="otNdOvertimeRows">
+                      </tbody>
+                  </table>
+              </div>
+
+              <!-- NIGHT DIFFERENTIAL -->
+              <div class="form-box">
+                  <h4>Night Differential</h4>
+
+                  <table class="ot-nd-table">
+                      <thead>
+                          <tr>
+                              <th>Type</th>
+                              <th style="width: 120px;">Rate</th>
+                              <th style="width: 120px;">Hours</th>
+                              <th style="width: 120px;">Amount</th>
+                          </tr>
+                      </thead>
+
+                      <tbody id="otNdNightRows">
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      </div>
+
+      <!-- Allowances Section -->
+      <div id="allowances" class="tab-content hidden summary-input">
+        <div class="allowance-payroll-grid">
+          <!-- TAXABLE -->
+          <div class="form-box">
+            <h4>Taxable Allowances</h4>
+
+            <table class="allowance-table">
+              <thead>
+                <tr>
+                  <th style="width: 30px;"></th>
+                  <th>Allowance</th>
+                  <th style="width: 120px;">Amount</th>
+                  <th style="width: 120px;">Action</th>
+                </tr>
+              </thead>
+              
+              <tbody id="taxableAllowanceRows"></tbody>
+            </table>
+          </div>
+
+          <!-- NON-TAXABLE -->
+          <div class="form-box">
+            <h4>Non-Taxable Allowances</h4>
+
+            <table class="allowance-table">
+              <thead>
+                <tr>
+                  <th style="width: 30px;"></th>
+                  <th>Allowance</th>
+                  <th style="width: 120px;">Amount</th>
+                  <th style="width: 120px;">Action</th>
+                </tr>
+              </thead>
+
+              <tbody id="nontaxableAllowanceRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deductions Section -->
+      <div id="deductions" class="tab-content hidden summary-input">
+          <div class="deduction-payroll-grid">
+
+              <div class="deduction-box-container">
+                  <div class="form-box">
+                      <h4>Deductions</h4>
+
+                      <table class="deduction-table">
+                          <thead>
+                              <tr>
+                                  <th style="width: 30px;"></th>
+                                  <th>Deductions</th>
+                                  <th style="width: 120px;">Amount</th>
+                                  <th style="width: 120px;">Action</th>
+                              </tr>
+                          </thead>
+                          
+                          <tbody id="deductionRows">
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
+      </div>
+      
+      <!-- Loans Section -->
+      <div id="loans" class="tab-content hidden summary-input">
+      </div>
+      
+      <!-- Attendance Adjustments Section -->
+      <div id="attendanceAdj" class="tab-content hidden summary-input">
+        <div class="attendance-adj-grid">
+
+          <!-- Attendance Adjustments -->
+          <div class="form-box attendance-box">
+            <h4>Attendance Adjustments</h4>
+
+            <table class="attendance-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th style="width: 120px;">Time</th>
+                  <th style="width: 120px;">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceRows"></tbody>
+            </table>
+          </div>
+
+          <!-- Premium Adjustments -->
+          <div class="form-box premium-box">
+            <h4>Premium Adjustments</h4>
+
+            <table class="premium-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th style="width: 120px;">Employee Share</th>
+                  <th style="width: 120px;">Employer Share</th>
+                  <th style="width: 120px;">ECC</th>
+                </tr>
+              </thead>
+              <tbody id="premiumRows"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+      
+      <!-- Overtime / Night Differential Adjustments Section -->
+      <div id="ot-adj" class="tab-content hidden summary-input">
+          <div class="ot-adj-payroll-grid">
+              <!-- OVERTIME -->
+              <div class="form-box">
+                  <h4>Overtime</h4>
+
+                  <table class="ot-adj-table">
+                      <thead>
+                          <tr>
+                              <th>Type</th>
+                              <th style="width: 120px;">Rate</th>
+                              <th style="width: 120px;">Hours</th>
+                              <th style="width: 120px;">Amount</th>
+                          </tr>
+                      </thead>
+                      
+                      <tbody id="otAdjOvertimeRows">
+                      </tbody>
+                  </table>
+              </div>
+
+              <!-- NIGHT DIFFERENTIAL -->
+              <div class="form-box">
+                  <h4>Night Differential</h4>
+
+                  <table class="ot-adj-table">
+                      <thead>
+                          <tr>
+                              <th>Type</th>
+                              <th style="width: 120px;">Rate</th>
+                              <th style="width: 120px;">Hours</th>
+                              <th style="width: 120px;">Amount</th>
+                          </tr>
+                      </thead>
+
+                      <tbody id="otAdjNightRows">
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      </div>
+
+      <!-- Other Deductions Section -->
+      <div id="otherDeductions" class="tab-content hidden summary-input">
+      </div>
+      
+      <!-- Leaves Section -->
+      <div id="leaves" class="tab-content hidden summary-input">
+          <div class="allowance-payroll-grid">
+              <!-- TAXABLE -->
+              <div class="form-box">
+                  <h4>Taxable Allowances</h4>
+
+                  <table class="allowance-table">
+                      <thead>
+                          <tr>
+                              <th style="width: 30px;"></th>
+                              <th>Allowance</th>
+                              <th style="width: 120px;">Amount</th>
+                              <th style="width: 120px;">Action</th>
+                          </tr>
+                      </thead>
+                      
+                      <tbody id="taxableAllowanceRows">
+                      </tbody>
+                  </table>
+              </div>
+
+              <!-- NON-TAXABLE -->
+              <div class="form-box">
+                  <h4>Non-Taxable Allowances</h4>
+
+                  <table class="allowance-table">
+                      <thead>
+                          <tr>
+                              <th style="width: 30px;"></th>
+                              <th>Allowance</th>
+                              <th style="width: 120px;">Amount</th>
+                              <th style="width: 120px;">Action</th>
+                          </tr>
+                      </thead>
+
+                      <tbody id="nontaxableAllowanceRows">
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      </div>
+
+      <!-- Summary bar -->
+      <div class="summary-bar">
+        <label><input type="checkbox" id="holdCheckbox" disabled> Hold</label>
+        <div><strong>Gross Pay:</strong> ₱<span id="grossPay"></span></div>
+        <div><strong>Grand Total Ded.:</strong> ₱<span id="grandTotalDeductions"></span></div>
+        <div><strong>Net Pay:</strong> ₱<span id="netPay"></span></div>
+      </div>
+      
+      <!-- Payroll Buttons -->
+      <div class="payroll-buttons">
+        <!-- Left button -->
+        <button type="button" class="add-employee-btn" id="addButton">+ Add New Employee</button>
+
+        <!-- Right buttons wrapper -->
+        <div class="right-buttons">
+          <button type="button" id="backButton" class="btn">← Back to Filters</button>
+          <button type="button" id="savePayroll" class="btn">💾 Save Payroll</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Missing Employees Notification Modal -->
+<div id="missingEmployeesModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Incomplete Payroll</h3>
+
+    <p id="missingEmployeesText"></p>
+
+    <div class="modal-buttons">
+      <button type="button" id="missingAddBtn" class="btn add-employees">
+        Add Employees
+      </button>
+
+      <button type="button" id="missingBackBtn" class="btn secondary hidden">
+        Back
+      </button>
+
+      <button type="button" id="missingContinueBtn" class="btn continue-without-adding">
+        Continue Without Adding
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Negative Payroll Warning Modal -->
+<div id="negativePayrollModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Negative Payroll Detected</h3>
+    <p id="negativePayrollText"></p>
+    <div class="modal-buttons">
+      <button type="button" id="negativeHoldBtn" class="btn add-employees">
+        Put on Hold
+      </button>
+      <button type="button" id="negativeContinueBtn" class="btn continue-without-adding">
+        Continue Anyway
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Save Confirmation Modal -->
+<div id="saveModal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Confirm Save</h3>
+        <p>💾 Do you want to save these changes?</p>
+
+        <div class="modal-buttons">
+        <button class="btn confirm-save" id="confirmSaveBtn">Yes, Save</button>
+        <button class="btn cancel-save" id="cancelSaveBtn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel Confirmation Modal -->
+<div id="cancelModal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Confirm Cancel</h3>
+        <p>❌ Discard unsaved changes?</p>
+
+        <div class="modal-buttons">
+            <button class="btn confirm-delete" id="confirmCancelBtn">OK</button>
+            <button class="btn cancel-delete" id="cancelCancelBtn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Confirm Delete</h3>
+        <p>Are you sure you want to delete the Payroll record of this employee?</p>
+
+        <div class="modal-buttons">
+            <button class="btn confirm-delete" id="confirmDeleteBtn">Yes, Delete</button>
+            <button class="btn cancel-delete" id="cancelDeleteBtn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Back Confirmation Modal -->
+<div id="backConfirmModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Unsaved Changes</h3>
+    <p>⚠️ You haven’t saved this payroll yet. Going back will discard your changes.</p>
+
+    <div class="modal-buttons">
+      <button class="btn confirm-delete" id="confirmBackBtn">
+        Yes, Go Back
+      </button>
+      <button class="btn cancel-delete" id="cancelBackBtn">
+        Stay Here
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toastSuccess" class="toastSuccess"></div>
+<div id="toastWarning" class="toastWarning"></div>
+<div id="toastMissingFields" class="toastMissingFields"></div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

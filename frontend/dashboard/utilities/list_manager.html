@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>List Manager | Payroll System</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="../dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="../employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="../employee_management.html">Employee File</a></li>
+                    <li><a href="../employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="../payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="../auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="../payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="../payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="../gross_pay.html">Gross Pay</a></li>
+                    <li><a href="../net_pay.html">Net Pay</a></li>
+                    <li><a href="../gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li class="active"><a href="../utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <div class="section">
+    <header class="header">
+      <h2>Manage System Lists</h2>
+      <p>Configure dropdown options used in forms throughout the system.</p>
+    </header>
+
+    <section>
+      <!-- =====================
+          STANDARD LIST SECTION
+      ====================== -->
+      <div class="table-section">
+        <label for="listType">Select List Type:</label>
+        <select id="listType" onchange="loadListItems()">
+          <option value="gender">Gender</option>
+          <option value="civil_status">Civil Status</option>
+          <hr>
+          <option value="company">Companies</option>
+          <option value="department">Departments</option>
+          <option value="position">Positions</option>
+          <option value="employee_type">Employee Types</option>
+          <option value="status">Employee Status</option>
+          <!--<option value="overtimeRates">Overtime Rates</option>-->
+          <option value="bank">Bank</option>
+          <option value="bank_branch">Bank Branch</option>
+          <option value="allowances">Allowances</option>
+          <option value="deductions">Deductions</option>
+          <option value="leaves">Leaves</option>-->
+          <hr>
+          <option value="location">Locations</option>
+          <option value="branch">Branches</option>
+          <option value="division">Divisions</option>
+          <option value="class">Classes</option>
+          <!--<option value="loans">Loans</option>-->
+          <option value="projects">Projects</option>
+          <option value="salary_type">Salary Types</option>
+          <!--<hr>
+          <option value="taxStatus">Tax Status</option>-->
+          <hr>
+          <option value="payroll_period">Payroll Periods</option>
+          <option value="payroll_rate">Payroll Rates</option>
+          <option value="ot_rate">OT Rates</option>
+        </select>
+      </div>
+
+      <div id="standardList" class="table-section hidden">
+        <h3>List Items</h3>
+
+        <table id="listItemsTable">
+          <thead>
+            <tr><th>Value</th><th>Action</th></tr>
+          </thead>
+          <tbody id="listItemsBody"></tbody>
+        </table>
+
+        <div class="form-row" style="margin-top: 15px;">
+          <input type="text" id="newListItem" style="margin-right: 10px;" placeholder="Add new item..."/>
+          <button class="btn" onclick="addListItem()">Add</button>
+        </div>
+      </div>
+
+      <!-- =====================
+          ALLOWANCE SECTION 
+      ====================== -->
+      <div id="allowanceList" class="table-section hidden">
+          <h3>Allowance Types</h3>
+
+          <table id="allowanceTable">
+              <thead>
+                  <tr>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Amount</th>
+                  </tr>
+              </thead>
+              <tbody id="allowanceListBody"></tbody>
+          </table>
+
+          <div id="addSection" class="form-row">
+              <!-- Name input -->
+              <label for="allowanceName">Name: </label>
+              <input type="text" id="allowanceName" placeholder="Allowance name..." required />
+
+              <!-- Type select -->
+              <label for="allowanceTaxable">Type: </label>
+              <select id="allowanceTaxable" required>
+                  <option value="1">Taxable</option>
+                  <option value="0">Non-Taxable</option>
+              </select>
+
+              <!-- Amount input -->
+              <label for="allowanceAmount">Amount: </label>
+              <input type="number" id="allowanceAmount" step="0.01" min="0" placeholder="0.00" required />
+
+              <button class="btn" id="addButton">Add</button>
+          </div>
+      </div>
+
+      <!-- =====================
+          DEDUCTION SECTION
+      ====================== -->
+      <div id="deductionList" class="table-section hidden">
+          <h3>Deduction Types</h3>
+
+          <table id="deductionTable">
+              <thead>
+                  <tr>
+                      <th>Name</th>
+                      <th>Amount</th>
+                  </tr>
+              </thead>
+              <tbody id="deductionListBody"></tbody>
+          </table>
+
+          <div class="form-row"">
+              <!-- Name input -->
+              <label for="deductionName">Name: </label>
+              <input type="text" id="deductionName" placeholder="Deduction name..." required />
+
+              <!-- Amount input -->
+              <label for="deductionAmount">Amount: </label>
+              <input type="number" id="deductionAmount" step="0.01" min="0" placeholder="0.00" required />
+
+              <button class="btn" id="addButton">Add</button>
+          </div>
+      </div>
+
+      <!-- Button Row -->
+      <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+          <!-- Back Button (Left) -->
+          <button type="button" class="btn" id="backButton">← Back to Utilities Section</button>
+
+          <!-- Action Buttons (Right) -->
+          <div id="actionButtons" style="display: flex; gap: 10px;">
+            <div id="mainButtons">
+              <button type="button" class="btn" id="editButton">✏️ Edit</button>
+              <button type="button" class="btn" id="deleteButton">🗑️ Delete</button>
+            </div>
+            <div id="editButtons">
+              <button type="button" class="btn" id="saveButton">💾 Save</button>
+              <button type="button" class="btn" id="cancelButton">✖️ Cancel</button>
+            </div>
+          </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Save Confirmation Modal -->
+  <div id="saveModal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Confirm Save</h3>
+        <p>💾 Do you want to save these changes?</p>
+
+        <div class="modal-buttons">
+        <button class="btn confirm-save" id="confirmSaveBtn">Yes, Save</button>
+        <button class="btn cancel-save" id="cancelSaveBtn">Cancel</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- Cancel Confirmation Modal -->
+  <div id="cancelModal" class="modal hidden">
+      <div class="modal-content">
+          <h3>Confirm Cancel</h3>
+          <p>❌ Discard unsaved changes?</p>
+
+          <div class="modal-buttons">
+              <button class="btn confirm-delete" id="confirmCancelBtn">OK</button>
+              <button class="btn cancel-delete" id="cancelCancelBtn">Cancel</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Confirm Delete</h3>
+      <p>Are you sure you want to delete this row?</p>
+
+      <div class="modal-buttons">
+        <button class="btn confirm-delete" id="confirmDeleteBtn">Yes, Delete</button>
+        <button class="btn cancel-delete" id="cancelDeleteBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Toast -->
+  <div id="toastSuccess" class="toastSuccess"></div>
+  <div id="toastWarning" class="toastWarning"></div>
+
+  <script src="js/script.js"></script>
+</body>
+</html>

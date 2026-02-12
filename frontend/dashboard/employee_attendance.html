@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Employee Attendance | Payroll System</title>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+<div class="container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="profile">
+            <div class="logo">Business Set Up & Compliance Inc.</div>
+            <h3></h3>
+            <p></p>
+        </div>
+
+    <nav>
+        <ul>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html" class="sub-active">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <section class="section">
+
+        <!-- Header -->
+        <header class="header">
+            <h2>Employee Attendance</h2>
+            <p>Timekeeping and attendance monitoring for payroll processing.</p>
+        </header>
+
+        <!-- Summary Cards -->
+        <section class="summary">
+            <div class="card">
+                <span>Date</span>
+                <strong>—</strong>
+                <small>Selected Day</small>
+            </div>
+            <div class="card">
+                <span>Total Employees</span>
+                <strong>—</strong>
+            </div>
+            <div class="card">
+                <span>Present</span>
+                <strong>—</strong>
+            </div>
+            <div class="card">
+                <span>Late / Incomplete</span>
+                <strong>—</strong>
+            </div>
+        </section>
+
+        <!-- Attendance Filters -->
+        <div class="setup-container">
+
+            <div class="filter-panel">
+                <h4>Attendance Filters</h4>
+
+                <div class="filter-row">
+                    <label>Date</label>
+                    <select>
+                        <option selected>Today</option>
+                        <option>Yesterday</option>
+                        <option>This Week</option>
+                        <option>This Month</option>
+                    </select>
+                </div>
+
+                <div class="filter-row">
+                    <label>Department</label>
+                    <select>
+                        <option selected>All</option>
+                    </select>
+                </div>
+
+                <div class="filter-row">
+                    <label>Employee</label>
+                    <select>
+                        <option selected>All</option>
+                    </select>
+                </div>
+
+                <div class="filter-row">
+                    <label>Status</label>
+                    <select>
+                        <option selected>All</option>
+                        <option>Present</option>
+                        <option>Late</option>
+                        <option>Absent</option>
+                        <option>Incomplete</option>
+                    </select>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Attendance Table -->
+        <section class="table-section" style="margin-top:20px;">
+            <h3>Attendance Records</h3>
+
+            <div class="table-header">
+                <div class="dropdown-container">
+                    <label>Show</label>
+                    <select>
+                        <option>10</option>
+                        <option>25</option>
+                        <option>50</option>
+                    </select>
+                    <label>entries</label>
+
+                    <div class="right-actions">
+                        <label>Search:
+                            <input type="text" placeholder="Search employee...">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>Department</th>
+                        <th>Time In</th>
+                        <th>Break Out</th>
+                        <th>Break In</th>
+                        <th>Time Out</th>
+                        <th>Total Hours</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td>EMP-001</td>
+                        <td>Juan Dela Cruz</td>
+                        <td>Accounting</td>
+                        <td>08:03 AM</td>
+                        <td>12:00 PM</td>
+                        <td>01:00 PM</td>
+                        <td>05:05 PM</td>
+                        <td>8.0</td>
+                        <td class="status present">Present</td>
+                        <td><button class="btn small-btn">View</button></td>
+                    </tr>
+
+                    <tr>
+                        <td>EMP-002</td>
+                        <td>Maria Santos</td>
+                        <td>HR</td>
+                        <td>08:25 AM</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td class="status pending">Incomplete</td>
+                        <td><button class="btn small-btn">View</button></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="table-footer">
+                <div style="font-size:13px;color:#555;">
+                    Showing X to Y of Z entries
+                </div>
+
+                <div class="pagination">
+                    <button>Previous</button>
+                    <div class="activepage">1</div>
+                    <button>Next</button>
+                </div>
+            </div>
+        </section>
+
+    </section>
+</div>
+</body>
+</html>

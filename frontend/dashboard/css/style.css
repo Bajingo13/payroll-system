@@ -1,0 +1,1365 @@
+/* ===============================
+// RESET AND BASE
+=============================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Inter", sans-serif;
+}
+
+/* Body */
+body {
+    background-color: #f8f9f8;
+    color: #333;
+}
+
+/* Layout Container */
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+/* ===============================
+// SIDEBAR
+=============================== */
+.sidebar {
+    width: 240px;
+    background-color: #1f1f1f;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+}
+
+.profile {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/*.profile img {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+}
+<img src="../img/profile.jpg" alt="Admin Profile Photo">*/
+
+.profile .logo {
+  font-family: 'MyCustomFont', sans-serif;
+  margin-top: 10px;
+}
+
+@font-face {
+  font-family: 'MyCustomFont';
+  src: url('fonts/Fontspring-DEMO-proximanovaexcn-regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+.profile h3 {
+    font-size: 16px;
+    margin-top: 50px;
+}
+
+.profile p {
+    font-size: 12px;
+    color: #bbb;
+}
+
+.sidebar nav ul {
+    list-style: none;
+}
+
+.sidebar nav ul li {
+    margin: 10px 0;
+}
+
+.sidebar nav ul li a {
+    text-decoration: none;
+    color: #ccc;
+    font-size: 14px;
+    padding: 8px;
+    display: block;
+    border-radius: 4px;
+    transition: 0.3s;
+}
+
+/* Sidebar links active + hover */
+.sidebar nav ul li.active > a,
+.sidebar nav ul li a:hover {
+  background-color: #5ab75a;
+  color: #fff;
+}
+
+/* Dropdown Styling */
+.sidebar ul li.dropdown {
+  position: relative;
+}
+
+.sidebar ul li .dropdown-menu {
+  display: none;
+  flex-direction: column;
+  background-color: #1e1e1e;
+  padding-left: 15px;
+  margin-top: 5px;
+  border-left: 2px solid #3498db;
+}
+
+/* Show dropdown when hovered or active submenu exists */
+.sidebar ul li.dropdown:hover .dropdown-menu,
+.sidebar ul li.dropdown:has(.sub-active) .dropdown-menu {
+  display: flex;
+}
+
+.sidebar ul li .dropdown-menu a {
+  color: #ddd;
+  font-size: 14px;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+/* Hover for submenu links */
+.sidebar ul li .dropdown-menu a:hover {
+  color: #fff;
+  background-color: rgba(90, 183, 90, 0.2);
+}
+
+/* Highlight only Employee File */
+.sidebar ul li .dropdown-menu a.sub-active {
+  background-color: #5ab75a;
+  color: #fff;
+}
+
+/* Dropdown arrow default (points right) */
+.dropdown-toggle::after {
+  content: '';
+  display: inline-block;
+  margin-left: 8px;
+  border-top: 5px solid #fff;
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+  transform: rotate(270deg);
+  transition: transform 0.2s ease;
+}
+
+/* Rotate arrow when hovered or when submenu has active item */
+.sidebar ul li.dropdown:hover .dropdown-toggle::after,
+.sidebar ul li.dropdown:has(.sub-active) .dropdown-toggle::after {
+  transform: rotate(0deg);
+}
+
+/* ===============================
+// SECTION LAYOUT
+=============================== */
+.section {
+    flex: 1;
+    padding: 20px 30px;
+    overflow-y: auto;
+    display: block;
+}
+
+.section h3 {
+    margin-bottom: 10px;
+}
+
+/* Header */
+.header h2 {
+    color: #222;
+    font-size: 20px;
+}
+
+.header p {
+    font-size: 13px;
+    color: #777;
+    margin-bottom: 20px;
+}
+
+/* ===============================
+// SUMMARY CARDS
+=============================== */
+.summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.card {
+    background-color: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+}
+
+.card span {
+    display: block;
+    color: #666;
+    font-size: 13px;
+}
+
+.card strong {
+    display: block;
+    font-size: 18px;
+    color: #2b7a2b;
+    margin-top: 5px;
+}
+
+.card small {
+    display: block;
+    color: #999;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+/* ===============================
+// BUTTONS
+=============================== */
+.btn {
+    background-color: #5ab75a;
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.save-btn, .cancel-btn {
+  margin-top: 10px;
+}
+
+.btn:hover {
+    background-color: #489948;
+}
+
+.btn.disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.add-employee-btn
+{
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.add-employee-btn:hover
+{
+    background-color: #0056b3;
+}
+
+/* ===============================
+// EMPLOYEE DETAILS
+=============================== */
+.tab-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.tab-btn {
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.tab-btn.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.form-box {
+  border: 1px solid #ccc;
+  padding: 15px;
+  border-radius: 8px;
+  background-color: #fff;
+  margin-top: 10px;
+}
+
+.form-box h4 {
+  margin-bottom: 10px;
+}
+
+#employeeDetails select {
+  width: 150px;
+  text-overflow: ellipsis; /* Truncate text */
+}
+
+/* SectionGrids */
+.info-grid, .payroll-info-grid, .payroll-compu-grid, .ot-nd-payroll-grid, .allowance-payroll-grid, .deduction-payroll-grid, .ot-adj-payroll-grid, .attendance-adj-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.payroll-compu-grid.bottom {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+}
+
+.payroll-compu-grid.bottom .title-row {
+  display: grid;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.payroll-compu-grid.bottom .title-row label {
+  text-align: center;
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+/* Center the deduction box */
+.deduction-box-container {
+    grid-column: 1 / span 2;      /* Take up both columns */
+    display: flex;
+    justify-content: center;      /* Center horizontally */
+}
+
+/* Lock width to match other form-box widths (half the grid) */
+.deduction-box-container .form-box {
+    width: 100%;
+    max-width: 650px;
+}
+
+.info-left,
+.info-right {
+  flex: 1;
+  min-width: 300px;
+}
+
+.profile-pic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.pic-placeholder {
+  width: 150px;
+  height: 150px;
+  border: 1px solid #aaa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.form-row label, #payrollRange, #summaryPayrollRangePeriod, #summaryPayrollRangeRange {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+#employeeDetails .form-row label, #payrollRange {
+  flex: 0 0 45%;
+}
+
+.form-row input,
+.form-row select,
+.form-row p {
+  flex: 1;
+  background: #f8f8f8;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+} 
+
+/* Basic Information */
+.dependents-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.dependents-table th,
+.dependents-table td {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: left;
+}
+
+.dependents-table input {
+  width: 95%;
+}
+
+.small-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* Profile Header */
+.profile-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.profile-photo {
+  text-align: center;
+}
+
+.profile-photo .pic-placeholder {
+  width: 130px;
+  height: 130px;
+  border: 1px solid #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.profile-info h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.profile-info p {
+  margin: 3px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.details-actions, .edit-employee-actions {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Payroll Information */
+.divider {
+  grid-column: span 2;
+  border: none;
+  border-top: 2px solid #ddd;
+  margin: 15px 0;
+}
+
+.rehired-checkbox {
+  margin-top: -5px;
+}
+
+.rehired-checkbox input[type="checkbox"] {
+  transform: scale(1.1);
+  accent-color: #007bff;
+}
+
+.back-btn {
+  background-color: #28a745;
+  color: white;
+  font-weight: 600;
+}
+
+/* Allowance and Deduction Payroll Entry */
+/* Table Styling */
+.ot-nd-table, .allowance-table, .deduction-table, .ot-adj-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+.allowance-table th,
+.allowance-table td,
+.deduction-table th,
+.deduction-table td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    background: #fff;
+}
+
+.allowance-table select,
+.allowance-table input,
+.deduction-table select,
+.deduction-table input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    background-color: #f8f8f8;
+    box-sizing: border-box;
+}
+
+/* ===============================
+// MODAL
+=============================== */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: white;
+  padding: 25px 30px;
+  border-radius: 8px;
+  text-align: center;
+  max-width: 400px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.confirm-delete {
+  background-color: #dc3545;
+  color: white;
+}
+
+.cancel-delete, .cancel-select, .continue-without-adding {
+  background-color: #6c757d;
+  color: white;
+}
+
+.proceed, .add-employees {
+  background-color: #5ab75a;
+  color: white;
+}
+
+/* Container layout */
+.payroll-buttons {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.right-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+/* Etc. */
+.dropdown-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.right-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+label
+{
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  color: #555;
+}
+
+input {
+  padding:6px; border:1px solid #ccc; border-radius:5px;
+}
+
+select
+{
+  padding: 5px 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.pagination
+{
+  display: flex;
+  justify-content: right;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.pagination button
+{
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  background-color: #f9f9f9;
+  cursor: pointer;
+}
+
+.pagination button:hover
+{
+  background-color: #e0e0e0;
+}
+
+.pagination .activepage
+{
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  background-color: #2196F3;
+  color: white;
+  border: 1px solid #2196F3;
+}
+
+/* Payroll Computation */
+.form-grid {
+  grid-template-columns: 1fr; gap: 15px;
+}
+
+.form-grid select {
+  margin-bottom: 10px;
+}
+
+.covered-date-options {
+  margin-left: 40%;
+  margin-bottom: 7px;
+}
+
+.covered-date-options label {
+  margin-right: 30px;
+  font-weight: 600;
+}
+
+.payroll-period-panel .payroll-period-row, .filter-panel .filter-row {
+  display: flex;
+}
+
+.payroll-period-panel .payroll-period-row label {
+  flex: 0 0 40%;
+  font-weight: 600;
+  color: #333;
+  margin-top: 7px;
+}
+
+.filter-panel .filter-row label {
+  flex: 0 0 20%;
+  font-weight: 600;
+  color: #333;
+  margin-top: 7px;
+}
+
+.payroll-period-panel .payroll-period-row select, .filter-panel .filter-row select, .filter-panel .filter-row input, .payroll-period-row input {
+  flex: 1;
+  border: 1px solid #ddd;
+}
+
+.filter-panel {
+    flex: 1; min-width: 350px;
+    border: 1px solid #ccc; padding: 20px;
+    border-radius: 8px;
+}
+
+.filter-panel h4 {
+    margin-bottom: 15px;
+}
+
+.filter-panel select {
+    margin-left: 50px;
+    padding-left: 100px;
+    padding-right: 100px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.section-content {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.payroll-period-panel {
+    flex: 1; min-width: 350px;
+    border: 1px solid #ccc; padding: 20px;
+    border-radius: 8px;
+}
+
+.payroll-period-panel h4 {
+    margin-bottom: 15px;
+}
+
+.setup-container {
+    display: flex; gap: 30px; flex-wrap: wrap;
+}
+
+.payslip-grid {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.panel {
+  flex: 1;
+  min-width: 400px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 15px;
+  background: #fafafa;
+}
+.panel h4 {
+  margin-bottom: 10px;
+  color: #333;
+  font-weight: 600;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.panel table td, .panel table th {
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.panel input[type="number"], .panel input[type="text"] {
+  width: 100%;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+.summary-bar {
+  margin-top: 15px;
+  padding: 10px;
+  background: #e8f5e9;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.summary-bar div { margin-left: 15px; }
+
+.payroll-period-panel select, .filter-panel select, #payroll-section #allowancePayrollEntry #periodSelect, #payroll-section #deductionPayrollEntry #periodSelect {
+  width: 50%;
+  text-overflow: ellipsis; /* Truncate text */
+}
+
+#payroll-section .large-modal {
+  width: 625px;
+  max-width: 95vw;   /* allow it to grow on large screens */
+  max-height: 90vh;  /* height should use vh */
+  overflow-y: auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+#payroll-section .employee-select-container {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 10px 0;
+}
+
+#payroll-section #employeeSelectTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#payroll-section #employeeSelectTable th, 
+#payroll-section #employeeSelectTable td {
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+/* ===============================
+   PAYROLL JOURNAL (STEP 2)
+=============================== */
+
+/* Header */
+.journal-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.journal-header-center {
+  text-align: center;
+}
+
+.journal-header-center h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.journal-header-center p {
+  font-size: 13px;
+  color: #555;
+}
+
+/* Table wrapper for horizontal scroll */
+.journal-table-wrapper {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+/* Journal Table */
+.journal-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+/* Header cells */
+.journal-table thead th {
+  background-color: #e6e6e6;
+  border: 1px solid #aaa;
+  padding: 6px 4px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Body cells */
+.journal-table tbody td {
+  border: 1px solid #ddd;
+  padding: 5px 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Left-align employee name */
+.journal-table tbody td:first-child {
+  text-align: left;
+}
+
+/* ===============================
+   GROUPING ROWS
+=============================== */
+
+/* Company */
+.company-row td {
+  background-color: #f4f4f4;
+  font-weight: 700;
+  text-align: left !important;
+  border-top: 2px solid #000;
+}
+
+/* Order-by group (Department, Position, etc.) */
+.group-row td {
+  background-color: #fafafa;
+  font-weight: 600;
+  text-align: left !important;
+}
+
+/* ===============================
+   SUBTOTALS & TOTALS
+=============================== */
+
+.subtotal-row td,
+.subtotal-company-row td {
+  background-color: #fdfdfd;
+  font-weight: 600;
+  border-top: 1px dashed #555;
+}
+
+.subtotal-row td:first-child,
+.subtotal-company-row td:first-child {
+  text-align: left !important;
+}
+
+/* Grand total */
+.grand-total-row td {
+  background-color: #eef6ee;
+  font-weight: 700;
+  border-top: 2px solid #2b7a2b;
+}
+
+.grand-total-row td:first-child {
+  text-align: left !important;
+}
+
+/* ===============================
+   PRINT MODAL
+=============================== */
+#printPayrollForm .form-row {
+  display: flex;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+#printPayrollForm .form-row select,
+#printPayrollForm .form-row input[type="number"] {
+  flex:0 0 66%;
+}
+
+#printPayrollForm .form-row input[type="number"] {
+  flex:0 0 45%;
+}
+
+/* ===============================
+// UTILITIES
+=============================== */
+
+.utility-panel {
+  flex: 1;
+  padding: 20px 30px;
+  overflow-y: auto;
+  display: block;
+}
+
+/* Table Section */
+.table-section {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 15px;
+}
+
+.table-section h3 {
+    margin-bottom: 10px;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.table-header h3 {
+  margin: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table-footer
+{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  text-align: center;
+}
+
+th {
+  background-color: #f1f1f1;
+  color: #333;
+}
+
+/** ==== EMPLOYEE BENEFITS === **/
+#standardList,
+#allowanceList,
+#deductionList,
+#contributionsListContainer,
+#taxExemptionsContainer,
+#taxContainer,
+#regionalWageContainer {
+  margin-top: 15px;
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column; /* Stack table and form vertically */
+}
+
+#listItemsTable,
+#allowanceTable,
+#contributionsTable,
+#taxExemptionsTable,
+#taxTable,
+#regionalWageTable {
+  overflow-y: auto;
+  display: block;
+  flex: 1; /* Allow table to grow and scroll */
+}
+
+#listItemsTable tbody,
+#allowanceTable tbody,
+#contributionsTable tbody,
+#taxExemptionsTable tbody,
+#taxTable tbody,
+#regionalWageTable tbody {
+  display: block;
+  max-height: 294px; /* Make tbody scrollable */
+  overflow-y: auto;
+}
+
+#standardList tbody td,
+#allowanceList tbody td,
+#deductionList tbody td,
+#contributionsListContainer tbody td,
+#taxExemptionsContainer tbody td,
+#taxContainer tbody td,
+#regionalWageContainer tbody td {
+  color: #333;
+  font-size: 13px;
+}
+
+#listItemsTable thead, #listItemsTable tbody tr,
+#allowanceTable thead, #allowanceTable tbody tr,
+#contributionsTable thead, #contributionsTable tbody tr,
+#taxExemptionsTable thead, #taxExemptionsTable tbody tr,
+#taxTable thead, #taxTable tbody tr,
+#regionalWageTable thead, #regionalWageTable tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+#listItemsTable tbody tr input,
+#allowanceTable tbody tr input,
+#contributionsTable tbody tr input,
+#taxExemptionsTable tbody tr input,
+#taxTable tbody tr input,
+#regionalWageTable tbody tr input {
+  width: 80%;
+}
+
+#standardList thead th,
+#allowanceList thead th,
+#deductionList thead th,
+#contributionsListContainer thead th,
+#taxExemptionsContainer thead th,
+#taxContainer thead th,
+#regionalWageContainer thead th {
+  background-color: #f1f1f1;
+  color: #1f1f1f;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#allowanceList tbody tr:hover,
+#deductionList tbody tr:hover,
+#contributionsListContainer tbody tr:hover,
+#taxExemptionsContainer tbody tr:hover,
+#taxContainer tbody tr:hover,
+#regionalWageContainer tbody tr:hover {
+  background-color: #e6f7e6;
+  cursor: pointer;
+}
+
+#standardList .form-row,
+#allowanceList .form-row,
+#deductionList .form-row,
+#contributionsListContainer .form-row,
+#taxExemptionsContainer .form-row,
+#taxContainer .form-row,
+#regionalWageContainer .form-row {
+  margin-top: 25px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2; /* Above table content */
+  display: flex;
+  flex-wrap: wrap; /* Allow items to wrap to the next line if necessary */
+  gap: 15px; /* Space between input groups */
+  justify-content: space-between;
+}
+
+#standardList .form-row input,
+#allowanceList .form-row input,
+#deductionList .form-row input,
+#contributionsListContainer .form-row input,
+#taxExemptionsContainer .form-row input,
+#taxContainer .form-row input,
+#regionalWageContainer .form-row input {
+  width: 100%;
+}
+
+/* Style for the input group */
+.input-group {
+  display: flex;
+  flex-direction: column; /* Align label and input vertically */
+  width: 14%;
+}
+
+.input-group label {
+  margin-bottom: 5px; /* Space between label and input */
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.selected-row {
+  background-color: #dbeafe;
+  font-weight: 600;
+}
+
+.selected-row:hover {
+  background-color: #dbeafe !important;
+}
+
+#listHeader {
+  font-weight: bold;
+  font-size: 1.25rem;
+  color: #2c3e50;
+  padding: 10px 0;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+/* ===============================
+// STATUS LABELS
+=============================== */
+.status.present { color: #28a745; font-weight: 600; }
+.status.rest { color: #6c757d; }
+.status.pending { color: #ffc107; }
+.status.completed { color: #007bff; }
+
+/* Employee Status Labels */
+.status {
+  font-weight: 600;
+}
+
+.status.active {
+  color: #28a745; /* Green */
+}
+
+.status.contract-ended {
+  color: #ffc107; /* Yellow */
+}
+
+.status.resigned {
+  color: #007bff; /* Blue */
+}
+
+.status.terminated {
+  color: #dc3545; /* Red */
+}
+
+/* Base Toast Styles */
+.toastSuccess,
+.toastWarning,
+.toastError,
+.toastInfo {
+  visibility: hidden;
+  min-width: 260px;
+  color: #fff;
+  text-align: center;
+  border-radius: 8px;
+  padding: 12px 16px;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.4s ease, bottom 0.4s ease;
+  font-size: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.toastSuccess.show,
+.toastWarning.show,
+.toastError.show,
+.toastInfo.show {
+  visibility: visible;
+  opacity: 1;
+  bottom: 50px;
+}
+
+/* Individual colors */
+.toastSuccess { background-color: #4CAF50; }
+.toastWarning { background-color: #FF9800; }
+.toastError   { background-color: #F44336; }
+.toastInfo    { background-color: #2196F3; }
+
+.toastMissingFields {
+  position: fixed;
+  top: 20px;
+  left: calc(50% + 120px); /* shift by half the sidebar width */
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 16px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.4s ease, top 0.4s ease;
+  z-index: 1000;
+  max-width: 400px;
+  text-align: left;
+  backdrop-filter: blur(6px);
+  white-space: pre-line; /* <-- this is the key line */
+}
+
+.toastMissingFields.show {
+  visibility: visible;
+  opacity: 1;
+  top: 40px; /* Slight move for entrance animation */
+}
+
+/* ===== Modal Styles ===== */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  transition: opacity 0.3s ease;
+  opacity: 1;
+}
+
+.modal-content {
+  background: white;
+  padding: 25px 30px;
+  border-radius: 10px;
+  width: 350px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  text-align: center;
+  animation: popIn 0.2s ease;
+}
+
+.modal-buttons {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-evenly;
+}
+
+@keyframes popIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Employee List Table (Payroll Computation Step 2) */
+#employeeListContainer {
+  margin-top: 15px;
+  margin-bottom: 25px;
+  max-height: 500px; /* Fixed height for scrollable content */
+  display: flex;
+  flex-direction: column; /* Stack table and form vertically */
+}
+
+#employeeListContainer #employeeTable {
+  overflow-y: auto;
+  display: block;
+  flex: 1; /* Allow table to grow and scroll */
+}
+
+#employeeListContainer #employeeTable tbody {
+  display: block;
+  max-height: 300px; /* Make tbody scrollable */
+  overflow-y: auto;
+}
+
+#employeeListContainer #employeeTable thead, #employeeListContainer #employeeTable tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+#employeeListContainer tbody tr:hover {
+  background-color: #e6f7e6;
+  cursor: pointer;
+}
+
+#employeeListContainer thead th {
+  background-color: #f1f1f1;
+  color: #1f1f1f;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#employeeListContainer tbody td {
+  color: #333;
+  font-size: 13px;
+}
+
+.selected-row {
+  background-color: #dbeafe;
+  font-weight: 600;
+}
+
+.selected-row:hover {
+  background-color: #dbeafe !important;
+}
+
+#payrollRangeHeader {
+  font-weight: bold;  /* Makes the text bold */
+  font-size: 1.25rem; /* Slightly larger font size */
+  color: #2c3e50; /* A darker, contrasting color */
+  padding: 10px 0;  /* Adds space around the text */
+  border-bottom: 2px solid #e0e0e0; /* Optional: adds a subtle divider below the date range */
+}
+
+.quick-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#employeeListContainer .table-header h4 {
+    color:#1f1f1f;
+}
+
+#employeeListContainer .table-header label {
+    font-weight:600;
+}
+
+#employeeListContainer .table-header input {
+    padding:6px;
+    margin-left:5px;
+}

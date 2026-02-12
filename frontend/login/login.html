@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Login</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+
+<!-- Login Form -->
+<form id="loginForm">
+    <h2>Login Here</h2>
+    <input type="text" id="username" placeholder="Enter Email Here" required>
+    <input type="password" id="password" placeholder="Enter password Here" required>
+    <button type="submit" class="btnn" id="loginBtn">Login</button>
+    <div id="loginMessage"></div>
+</form>
+
+<!-- Toast Containers -->
+<div id="toastSuccess" class="toastSuccess"></div>
+<div id="toastWarning" class="toastWarning"></div>
+<div id="toastError" class="toastError"></div>
+
+<script src="script.js"></script>
+</body>
+</html>

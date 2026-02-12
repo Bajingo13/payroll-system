@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li class="active"><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <!-- Dashboard Section -->
+  <main id="dashboard" class="section">
+    <header class="header">
+      <h2>Welcome, </h2>
+      <p>Here’s your overview of employees, payrolls, and system updates.</p>
+    </header>
+
+    <section class="summary">
+      <div class="card"><span>Total Employees</span><strong></strong></div>
+      <div class="card"><span>Processed Payrolls</span><strong></strong></div>
+      <div class="card"><span>System Logs Today</span><strong></strong></div>
+    </section>
+
+    <section class="table-section">
+      <h3>Recent System Activities</h3>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Date / Time</th>
+            <th scope="col">Activity</th>
+            <th scope="col">Performed By</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        
+        <tbody>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

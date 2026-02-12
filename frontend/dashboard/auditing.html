@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auditing | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  
+</head>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li class="active"><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <!-- Main Section -->
+  <main class="section" id="auditing-section" role="main">
+    <header class="header">
+      <h2>Audit Logs</h2>
+      <p>Monitor all administrative activities and system operations.</p>
+    </header>
+
+    <section class="table-section">
+      <h3>System Activity Log</h3>
+      
+      <!-- Action Bar -->
+      <div class="table-header">
+        <div class="dropdown-container">
+            <label>Show</label>
+            <select id="entriesSelect">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+            </select>
+            <label>entries</label>
+            
+            <label style="margin-left: 500px;">Quick Search</label>
+            <select id="searchCategorySelect">
+                <option value="ID" selected>Employee ID</option>
+                <option value="Name">Name</option>
+                <option value="Company">Company</option>
+                <option value="Department">Department</option>
+            </select>
+
+            <div style="margin-left: 20px;">
+              <input type="text" id="searchLogs" placeholder="Search logs..." style="padding:6px; border:1px solid #ccc; border-radius:5px;">
+              <button class="btn" id="exportLogs">Export Logs</button>
+            </div>
+        </div>
+      </div>
+
+      <table id="auditTable">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Admin User</th>
+            <th>Action</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+      
+      <div class="table-footer">
+          <div id="entryInfo" style="font-size: 13px; color: #555;">
+            Showing <span id="entriesStart">X</span> to <span id="entriesEnd">Y</span> of <span id="totalEntries">Z</span> entries
+          </div>
+
+          <div class="pagination">
+            <button id="prevBtn">Previous</button>
+            <div class="activepage">#</div>
+            <button id="nextBtn">Next</button>
+          </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toastSuccess" class="toastSuccess">Logs Exported Successfully!</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

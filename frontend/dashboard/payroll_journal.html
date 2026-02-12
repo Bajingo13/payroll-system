@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payroll Summary Report | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html" class="sub-active">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div id="payroll-journal" class="section">
+    <header class="header">
+      <h2>Payroll Summary Report</h2>
+      <p>View a summarized breakdown of payroll entries for the selected period or range.</p>
+    </header>
+
+    <!-- ============================== -->
+    <!-- STEP 1 : SETUP PAYROLL JOURNAL -->
+    <!-- ============================== -->
+    <section id="summaryFilterSection">
+      <h3>Step 1: Setup Payroll Journal</h3>
+
+      <form id="summaryFilterForm" class="filter-form">
+        <div class="setup-container">
+
+          <!-- Payroll Period Panel -->
+          <div class="payroll-period-panel">
+            <h4>Covered Date</h4>
+
+            <!-- Covered Date Option -->
+            <div class="covered-date-options">
+              <label>
+                <input type="radio"
+                      id="summaryOptionPeriod"
+                      name="summaryCoveredDateOption"
+                      value="period"
+                      checked>
+                Period
+              </label>
+
+              <label>
+                <input type="radio"
+                      id="summaryOptionRange"
+                      name="summaryCoveredDateOption"
+                      value="range">
+                Range
+              </label>
+            </div>
+
+            <!-- Period -->
+            <div id="summaryPeriod" class="form-grid">
+              <div class="payroll-period-row">
+                <label for="summaryPayrollGroupPeriod">Payroll Group:</label>
+                <select id="summaryPayrollGroupPeriod" required>
+                  <option disabled selected>-- Loading Groups --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Period:</label>
+                <select id="summaryPeriodPeriod" required>
+                  <option disabled selected>-- Loading Periods --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Month:</label>
+                <select id="summaryMonthPeriod" required>
+                  <option disabled selected>-- Loading Months --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Year:</label>
+                <select id="summaryYearPeriod" required>
+                  <option disabled selected>-- Loading Years --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Generated Payroll Range:</label>
+                <input type="text" id="summaryPayrollRangePeriod" disabled>
+              </div>
+            </div>
+
+            <!-- Range -->
+            <div id="summaryRange" class="form-grid hidden">
+              <div class="payroll-period-row">
+                <label for="summaryPayrollGroupRange">Payroll Group:</label>
+                <select id="summaryPayrollGroupRange" required>
+                  <option disabled selected>-- Loading Groups --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>From:</label>
+                <select id="summaryPeriodFrom" required>
+                  <option disabled selected>-- Loading Periods --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label></label>
+                <select id="summaryMonthFrom" required>
+                  <option disabled selected>-- Loading Months --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label></label>
+                <select id="summaryYearFrom" required>
+                  <option disabled selected>-- Loading Years --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>To:</label>
+                <select id="summaryPeriodTo" required>
+                  <option disabled selected>-- Loading Periods --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label></label>
+                <select id="summaryMonthTo" required>
+                  <option disabled selected>-- Loading Months --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label></label>
+                <select id="summaryYearTo" required>
+                  <option disabled selected>-- Loading Years --</option>
+                </select>
+              </div>
+
+              <div class="payroll-period-row">
+                <label>Generated Payroll Range:</label>
+                <input type="text" id="summaryPayrollRangeRange" disabled>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Panel -->
+          <div class="filter-panel">
+            <h4>Filter</h4>
+
+            <div class="form-grid" id="summaryCategorySelector">
+              <div class="filter-row">
+                <label>Company:</label>
+                <select id="summaryCompany"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Location:</label>
+                <select id="summaryLocation"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Branch:</label>
+                <select id="summaryBranch"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Division:</label>
+                <select id="summaryDivision"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Department:</label>
+                <select id="summaryDepartment"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Class:</label>
+                <select id="summaryClass"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Position:</label>
+                <select id="summaryPosition"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Employee Type:</label>
+                <select id="summaryEmpType"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Salary Type:</label>
+                <select id="summarySalaryType"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <label>Employee:</label>
+                <select id="summaryEmployee"><option value=""></option></select>
+              </div>
+              <div class="filter-row">
+                <input type="text" id="summaryEmployeeName" style="text-align: center;" disabled>
+              </div>
+            </div>
+
+            <div style="margin-top: 15px;">
+              <!-- Clear button -->
+              <button id="summaryClearFiltersBtn" class="btn" type="button" style="float: right;">
+                Clear Filters
+              </button>
+
+              <!-- Radio buttons -->
+              <label>Option:</label><br>
+              <label>
+                <input type="radio" id="summaryAllEmployees" name="summaryOption" value="all">
+                All
+              </label>
+              <label>
+                <input type="radio" id="summaryActiveEmployees" name="summaryOption" value="active" checked>
+                Active
+              </label>
+              <label>
+                <input type="radio" id="summaryHoldEmployees" name="summaryOption" value="hold">
+                Hold
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="margin-top:25px; text-align:right;">
+          <button type="button" id="generateSummaryButton" class="btn">
+            Generate Payroll Journal
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ======================== -->
+    <!-- STEP 2 : PAYROLL JOURNAL -->
+    <!-- ======================== -->
+    <section id="payrollJournalSection" class="hidden table-section section-content">
+      <!-- Report Header -->
+      <div id="journalHeader" class="journal-header">
+        <div class="journal-header-center">
+          <h3>Payroll Journal Details</h3>
+          <p>
+            For the Period
+            <strong id="journalCoveredDate">
+              [ Date Covered ]
+            </strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Order By -->
+      <div id="orderBy" class="table-header">
+        <div>
+          <label for="journalOrderBy"><strong>Order by:</strong></label>
+          <select id="journalOrderBy">
+            <option value="department_surname" selected>Department + Surname</option>
+            <option value="department_employeeid">Department + Employee ID</option>
+            <option value="division_surname">Division + Surname</option>
+            <option value="division_employeeid">Division + Employee ID</option>
+            <option value="branch_department_surname">Branch + Department + Surname</option>
+            <option value="branch_department_employeeid">Branch + Department + Employee ID</option>
+            <option value="project_salary-type_surname">Project + Salary Type + Surname</option>
+            <option value="project_salary-type_employeeid">Project + Salary Type + Employee ID</option>
+            <option value="surname">Surname</option>
+            <option value="employeeid">Employee ID</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Journal Table -->
+      <div id="journalTable" class="journal-table-wrapper">
+        <table class="journal-table">
+          <thead>
+            <tr>
+              <th rowspan="2">Employee Name</th>
+              <th rowspan="2">Basic Pay</th>
+              <th rowspan="2">Absences</th>
+              <th colspan="1">Late</th>
+              <th rowspan="2">Total OT</th>
+
+              <!-- Overtimes / Night Differentials -->
+              <th colspan="1">RG RATE</th><th colspan="1">RG OT</th>
+              <th colspan="1">RD RATE</th><th colspan="1">RD OT</th>
+              <th colspan="1">SD RATE</th><th colspan="1">SD OT</th>
+              <th colspan="1">SDRD RATE</th><th colspan="1">SDRD OT</th>
+              <th colspan="1">HD RATE</th><th colspan="1">HD OT</th>
+              <th colspan="1">HDRD RATE</th><th colspan="1">HDRD OT</th>
+
+              <!-- Earnings -->
+              <th rowspan="2">Tax Adj</th>
+              <th rowspan="2">Taxable<br>Allowance</th>
+              <th rowspan="2">Gross Taxable</th>
+              <th rowspan="2">Non-Tax Adj</th>
+              <th rowspan="2">Non-Taxable<br>Allowance</th>
+
+              <!-- Contributions -->
+              <th>SSS</th>
+              <th>PhilHealth</th>
+              <th>Pag-IBIG</th>
+              <th>Tax Withheld</th>
+
+              <th rowspan="2">Total<br>Deductions</th>
+              <th rowspan="2">Total Loans</th>
+              <th rowspan="2">Total Other<br>Deductions</th>
+              <th rowspan="2">Net Pay</th>
+            </tr>
+
+            <tr>
+              <th>Undertime</th>
+
+              <th>RG ND</th><th>RG OTND</th>
+              <th>RD ND</th><th>RD OTND</th>
+              <th>SD ND</th><th>SD OTND</th>
+              <th>SDRD ND</th><th>SDRD OT ND</th>
+              <th>HD ND</th><th>HD OTND</th>
+              <th>HDRD ND</th><th>HDRD OTND</th>
+
+              <th colspan="4">Adjustments</th>
+            </tr>
+          </thead>
+
+          <tbody id="payrollJournalTableBody">
+            <!-- ================= COMPANY ================= -->
+            <tr class="company-row">
+              <td colspan="999"><strong>Insert Company</strong></td>
+            </tr>
+
+            <!-- ================= GROUP / ORDER BY ================= -->
+            <!--style="padding-left: ${level * 30}px"-->
+            <!-- Branch -->
+            <tr class="group-row" style="padding-left: 30px;">
+              <td colspan="999"><strong>Insert Branch</strong></td>
+            </tr>
+
+            <!-- Department -->
+            <tr class="group-row" style="padding-left: 60px;">
+              <td colspan="999"><strong>Insert Department</strong></td>
+            </tr>
+            
+            <!-- ================= EMPLOYEE ROW ================= -->
+            <tr>
+              <td>
+                <span style="display:inline-block; width:90px;">1. EMP_000</span>
+                <span>0.00</span><br>
+                DELA CRUZ, JUAN
+              </td>
+              <td>-</td>
+              <td>-</td>
+              <td>-<br>-</td>
+              <td>-</td>
+
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<BR>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+            </tr>
+
+            <!-- ================= SUBTOTAL PER GROUP ================= -->
+            <tr class="subtotal-row">
+              <td>
+                <strong>Sub Total Per Department</strong><br>
+                <span style="display:inline-block; width:90px;"></span>
+                <span>- record(s)</span>
+              </td>
+              <td>-</td>
+              <td>-</td>
+              <td>-<br>-</td>
+              <td>-</td>
+
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<BR>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>--</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td colspan="999"><strong>-</strong></td>
+            </tr>
+
+            <tr class="subtotal-row">
+              <td>
+                <strong>Sub Total Per Branch</strong><br>
+                <span style="display:inline-block; width:90px;"></span>
+                <span>- record(s)</span>
+              </td>
+              <td>-</td>
+              <td>-</td>
+              <td>-<br>-</td>
+              <td>-</td>
+
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<BR>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td colspan="999"><strong>-</strong></td>
+            </tr>
+
+            <!-- ================= SUBTOTAL PER COMPANY ================= -->
+            <tr class="subtotal-company-row">
+              <td>
+                <strong>Sub Total Per Company</strong><br>
+                <span style="display:inline-block; width:90px;"></span>
+                <span>- record(s)</span>
+              </td>
+              <td>-</td>
+              <td>-</td>
+              <td>-<br>-</td>
+              <td>-</td>
+
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<BR>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td colspan="999"><strong>-</strong></td>
+            </tr>
+
+            <!-- ================= GRAND TOTAL ================= -->
+            <tr class="grand-total-row">
+              <td>
+                <strong>GRAND TOTAL</strong><br>
+                <span style="display:inline-block; width:90px;"></span>
+                <span>- record(s)</span>
+              </td>
+              <td>-</td>
+              <td>-</td>
+              <td>-<br>-</td>
+              <td>-</td>
+
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<br>-</td>
+              <td>-<br>-</td><td>-<BR>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+
+              <td>-</td>
+              <td>-</td>
+              <td>-</td>
+              <td colspan="999"><strong>-</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Payroll Journal Buttons -->
+      <div class="payroll-buttons">
+        <!-- Left button -->
+          <button type="button" id="backButton" class="btn">← Back to Filters</button>
+
+        <!-- Right buttons wrapper -->
+        <div class="right-buttons">
+          <button type="button" id="printPayrollJournal" class="btn">🖨️ Print Payroll</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Missing Payroll Run Modal -->
+<div id="missingPayrollRunModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>No Payroll Run Found</h3>
+
+    <p id="missingPayrollRunText">
+      There is no payroll record for the selected period.
+      Would you like to create one now?
+    </p>
+
+    <div class="modal-buttons">
+      <button
+        type="button"
+        id="createPayrollRunBtn"
+        class="btn add-employees"
+      >
+        Yes, Create Payroll
+      </button>
+
+      <button
+        type="button"
+        id="cancelPayrollRunBtn"
+        class="btn continue-without-adding"
+      >
+        No, Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Print Payroll Modal -->
+<div id="printPayrollModal" class="modal hidden">
+  <div class="modal-content" style="max-width:480px;">
+    <h3>Print Payroll Journal</h3>
+
+    <form id="printPayrollForm">
+      <!-- OUTPUT -->
+      <div class="form-row">
+        <label>Output</label>
+        <select id="printOutput" required>
+          <option value="printer">Printer</option>
+          <option value="excel">Excel</option>
+        </select>
+      </div>
+
+      <!-- PAPER SIZE -->
+      <div class="form-row">
+        <label>Paper Size</label>
+        <select id="printPaperSize">
+          <option value="legal" selected>Legal</option>
+          <option value="a4">A4</option>
+          <option value="letter">Letter</option>
+        </select>
+      </div>
+
+      <!-- COPIES -->
+      <div class="form-row">
+        <label>No. of Copies</label>
+        <input type="number" id="printCopies" min="1" value="1">
+      </div>
+
+      <!-- PRINT RANGE -->
+      <div class="form-row">
+        <label>Print Range</label><br>
+        <label>
+          <input type="radio" name="printRange" value="all" checked>
+          All Pages
+        </label>
+        <label style="margin-left:15px;">
+          <input type="radio" name="printRange" value="range">
+          Pages
+        </label>
+      </div>
+
+      <!-- PAGE RANGE -->
+      <div class="form-row" id="pageRangeInputs" style="display:none;">
+        <input type="number" id="pageFrom" min="1" placeholder="From" style="width:80px;">
+        <span>to</span>
+        <input type="number" id="pageTo" min="1" placeholder="To" style="width:80px;">
+      </div>
+
+      <!-- BUTTONS -->
+      <div class="modal-buttons" style="margin-top:20px;">
+        <button type="button" id="confirmPrintBtn" class="btn">Print</button>
+        <button type="button" id="cancelPrintBtn" class="btn continue-without-adding">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toastSuccess" class="toastSuccess"></div>
+<div id="toastWarning" class="toastWarning"></div>
+<div id="toastMissingFields" class="toastMissingFields"></div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

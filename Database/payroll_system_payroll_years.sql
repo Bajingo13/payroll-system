@@ -1,0 +1,52 @@
+-- MySQL dump 10.13  Distrib 8.0.43, for Win64 (x86_64)
+--
+-- Host: localhost    Database: payroll_system
+-- ------------------------------------------------------
+-- Server version	8.0.43
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!50503 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Table structure for table `payroll_years`
+--
+
+DROP TABLE IF EXISTS `payroll_years`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `payroll_years` (
+  `year_id` int NOT NULL AUTO_INCREMENT,
+  `year_value` int DEFAULT NULL,
+  PRIMARY KEY (`year_id`),
+  UNIQUE KEY `year_value` (`year_value`)
+) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `payroll_years`
+--
+
+LOCK TABLES `payroll_years` WRITE;
+/*!40000 ALTER TABLE `payroll_years` DISABLE KEYS */;
+INSERT INTO `payroll_years` VALUES (1,1990),(2,1991),(3,1992),(4,1993),(5,1994),(6,1995),(7,1996),(8,1997),(9,1998),(10,1999),(11,2000),(12,2001),(13,2002),(14,2003),(15,2004),(16,2005),(17,2006),(18,2007),(19,2008),(20,2009),(21,2010),(22,2011),(23,2012),(24,2013),(25,2014),(26,2015),(27,2016),(28,2017),(29,2018),(30,2019),(31,2020),(32,2021),(33,2022),(34,2023),(35,2024),(36,2025),(37,2026),(38,2027),(39,2028),(40,2029),(41,2030);
+/*!40000 ALTER TABLE `payroll_years` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2026-02-12 15:27:05

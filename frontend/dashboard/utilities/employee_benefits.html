@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee Benefits | Payroll System</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="../dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="../employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="../employee_management.html">Employee File</a></li>
+                    <li><a href="../employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="../payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="../auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="../payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="../payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="../gross_pay.html">Gross Pay</a></li>
+                    <li><a href="../net_pay.html">Net Pay</a></li>
+                    <li><a href="../gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li class="active"><a href="../utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <div class="section">
+    <header class="header">
+      <h2>Manage Employee Benefits</h2>
+      <p>Set and manage government-mandated contributions and benefit rates.</p>
+    </header>
+
+    <!-- =====================
+        CONTRIBUTION LIST SECTION
+    ====================== -->
+    <section>
+      <div class="form-box">
+        <label for="listType">Select List Type:</label>
+        <select id="listType">
+          <option value="sss">SSS Table</option>
+          <option value="pagibig">Pag-IBIG Table</option>
+          <option value="philhealth">Philhealth Table</option>
+          <hr>
+          <option value="taxExemptions">Tax Exemptions</option>
+          <option value="taxTable">Tax Table</option>
+          <option value="regionalMinimumWageRate">Regional Minimum Wage Rate</option>
+        </select>
+      </div>
+
+      <!-- =====================
+          CONTRIBUTIONS TABLE
+      ====================== -->
+      <div id="contributionsListContainer" class="table-section hidden">
+        <h3 id="contributionsHeader"></h3>
+
+        <table id="contributionsTable">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="form-row">
+          <!-- Low Salary Range -->
+          <div class="input-group">
+            <label for="lowSalaryInput">Low: </label>
+            <input type="number" id="lowSalaryInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- High Salary Range -->
+          <div class="input-group">
+            <label for="highSalaryInput">High: </label>
+            <input type="number" id="highSalaryInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- Employee Share -->
+          <div class="input-group">
+            <label for="eeInput">EE Share: </label>
+            <input type="number" id="eeInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- Employer Share -->
+          <div class="input-group">
+            <label for="erInput">ER Share: </label>
+            <input type="number" id="erInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- ECC Share -->
+          <div class="input-group">
+            <label for="eccInput">ECC Share: </label>
+            <input type="number" id="eccInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- Date Effective -->
+          <div class="input-group">
+            <label for="dateEffective">Date Effective: </label>
+            <input type="date" id="dateEffective" required />
+          </div>
+
+          <button id="addButton" class="btn" style="margin-top: 15px;">Add</button>
+        </div>
+      </div>
+      
+      <!-- =====================
+          TAX EXEMPTIONS TABLE
+      ====================== -->
+      <div id="taxExemptionsContainer" class="table-section hidden">
+        <h3 id="taxExemptionsHeader"></h3>
+
+        <table id="taxExemptionsTable">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="form-row">
+          <!-- Code -->
+          <label for="codeInput">Code: </label>
+          <input type="text" id="codeInput" placeholder="Tax code..." required />
+
+          <!-- Description -->
+          <label for="descriptionInput">Description: </label>
+          <input type="text" id="descriptionInput" placeholder="Tax description..." required />
+
+          <!-- Amount -->
+          <label for="taxExemptionInput">Amount: </label>
+          <input type="number" id="taxExemptionInput" step="0.01" min="0" placeholder="0.00" required />
+
+          <button id="addButton" class="btn">Add</button>
+        </div>
+      </div>
+            
+      <!-- =====================
+          WITHHOLDING TAX TABLE
+      ====================== -->
+      <div id="taxContainer" class="table-section hidden">
+        <h3 id="taxTableHeader"></h3>
+
+        <table id="taxTable">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="form-row">
+          <!-- Pay Period -->
+          <div class="input-group">
+            <label for="payPeriodSelect">Pay Period: </label>
+            <select id="payPeriodSelect" required></select>
+          </div>
+
+          <!-- Status -->
+          <div class="input-group">
+            <label for="statusSelect">Status: </label>
+            <select id="statusSelect" required></select>
+          </div>
+
+          <!-- Low Tax Range -->
+          <div class="input-group">
+            <label for="lowTaxInput">Low: </label>
+            <input type="number" id="lowTaxInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- High Tax Range -->
+          <div class="input-group">
+            <label for="highTaxInput">High: </label>
+            <input type="number" id="highTaxInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <!-- %Over -->
+          <div class="input-group">
+            <label for="percentOver">%Over: </label>
+            <input type="number" id="percentOver" step="0.01" min="0" placeholder="0.00%" required />
+          </div>
+
+          <!-- Amount -->
+          <div class="input-group">
+            <label for="withholdingTaxInput">Amount: </label>
+            <input type="number" id="withholdingTaxInput" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+
+          <button id="addButton" class="btn" style="margin-top: 15px;">Add</button>
+        </div>
+      </div>
+             
+      <!-- =====================
+          REGIONAL MINIMUM WAGE TABLE
+      ===================== -->
+      <div id="regionalWageContainer" class="table-section hidden">
+        <h3 id="regionalWageTableHeader"></h3>
+
+        <table id="regionalWageTable">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="form-row">
+          <!-- Region Code -->
+          <label for="regionCodeInput">Region Code: </label>
+          <input type="text" maxlength="15" id="regionCodeInput" placeholder="e.g., NCR" required />
+
+          <!-- Region Name -->
+          <label for="regionNameInput">Region Name: </label>
+          <input type="text" maxlength="50" id="regionNameInput" placeholder="e.g., National Capital Region" required />
+
+          <!-- Wage Rate -->
+          <label for="wageRateInput">Wage Rate: </label>
+          <input type="number" id="wageRateInput" step="0.01" min="0" placeholder="0.00" required />
+
+          <button id="addButton" class="btn">Add</button>
+        </div>
+      </div>
+      
+      <!-- Button Row -->
+      <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+          <!-- Back Button (Left) -->
+          <button type="button" class="btn" id="backButton">← Back to Utilities Section</button>
+
+          <!-- Action Buttons (Right) -->
+          <div id="actionButtons" style="display: flex; gap: 10px;">
+            <div id="mainButtons">
+              <button type="button" class="btn" id="editButton">✏️ Edit</button>
+              <button type="button" class="btn" id="deleteButton">🗑️ Delete</button>
+            </div>
+            <div id="editButtons">
+              <button type="button" class="btn" id="saveButton">💾 Save</button>
+              <button type="button" class="btn" id="cancelButton">✖️ Cancel</button>
+            </div>
+          </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Save Confirmation Modal -->
+  <div id="saveModal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Confirm Save</h3>
+        <p>💾 Do you want to save these changes?</p>
+
+        <div class="modal-buttons">
+        <button class="btn confirm-save" id="confirmSaveBtn">Yes, Save</button>
+        <button class="btn cancel-save" id="cancelSaveBtn">Cancel</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- Cancel Confirmation Modal -->
+  <div id="cancelModal" class="modal hidden">
+      <div class="modal-content">
+          <h3>Confirm Cancel</h3>
+          <p>❌ Discard unsaved changes?</p>
+
+          <div class="modal-buttons">
+              <button class="btn confirm-delete" id="confirmCancelBtn">OK</button>
+              <button class="btn cancel-delete" id="cancelCancelBtn">Cancel</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Confirm Delete</h3>
+      <p>Are you sure you want to delete this row?</p>
+
+      <div class="modal-buttons">
+        <button class="btn confirm-delete" id="confirmDeleteBtn">Yes, Delete</button>
+        <button class="btn cancel-delete" id="cancelDeleteBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Toast -->
+  <div id="toastSuccess" class="toastSuccess"></div>
+  <div id="toastWarning" class="toastWarning"></div>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

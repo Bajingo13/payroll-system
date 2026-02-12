@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Utilities | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li class="active"><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+    <!-- Main Content for Utilities -->
+    <div class="section">
+        <header class="header">
+            <h2>Utilities</h2>
+            <p>Manage system configurations, employee benefits, backups, and more.</p>
+        </header>
+
+        <!-- Utilities Options -->
+        <section class="utilities-options" id="utilitiesSection">
+            <div class="utility-panel">
+                <h4>Manage System Lists</h4>
+                <p>Configure dropdown values for forms such as Gender, Civil Status, Employee Type, and more.</p>
+                <button class="btn" onclick="window.location.href='utilities/list_manager.html'">Manage Lists</button>
+            </div>
+
+            <div class="utility-panel">
+                <h4>Manage Employee Benefits</h4>
+                <p>Manage employee benefits like SSS, Pag-IBIG, PhilHealth, etc.</p>
+                <button class="btn" onclick="window.location.href='utilities/employee_benefits.html'">Manage Benefits</button>
+            </div>
+
+            <div class="utility-panel">
+                <h4>Employee Data Backup</h4>
+                <p>Backup employee data for safekeeping and restore when necessary.</p>
+                <button class="btn" onclick="backupEmployeeData()">Backup Data</button>
+            </div>
+
+            <div class="utility-panel">
+                <h4>System Settings</h4>
+                <p>Configure system settings like tax rates, deductions, and other parameters.</p>
+                <button class="btn" onclick="window.location.href='utilities/system_settings.html'">Configure Settings</button>
+            </div>
+
+            <!-- <div class="utility-panel">
+                <h4>Generate System Reports</h4>
+                <p>Generate system reports for auditing and analysis purposes.</p>
+                <button class="btn" onclick="window.location.href='generate_reports.html'">Generate Reports</button>
+            </div> -->
+
+            <div class="utility-panel">
+                <h4>Update or Sync Database</h4>
+                <p>Ensure the system database is updated and synced with the latest employee and payroll information.</p>
+                <button class="btn" onclick="syncDatabase()">Sync Database</button>
+            </div>
+
+            <!-- <div class="utility-panel">
+                <h4>Manage User Roles</h4>
+                <p>Control user permissions and roles within the system to ensure proper access levels.</p>
+                <button class="btn" onclick="window.location.href='user_roles.html'">Manage Roles</button>
+            </div> -->
+            
+            <!-- <div id="modal" class="modal hidden">
+                <div class="modal-content">
+                    <span class="close" onclick="closeModal()">&times;</span>
+                    <p id="modalText">Action completed successfully.</p>
+                </div>
+            </div> -->
+        </section>
+    </div>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>
