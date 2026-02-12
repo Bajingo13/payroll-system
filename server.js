@@ -40,9 +40,9 @@ app.get('/dashboard', isAuthenticated, (req, res) =>
 
 // ----------- MYSQL CONNECTION POOL -----------
 const pool = mysql.createPool({
-  host: 'localhost',
+  host: 'hopper.proxy.rlwy.net',
   user: 'root',
-  password: 'bsucompliance',
+  password: 'pyKVWdEYXvZuFEjzLMbZElLotRmusrOV',
   database: 'payroll_system',
   timezone: '+08:00',  // PH timezone
   dateStrings: true,   // Return DATE/DATETIME as strings
@@ -59,5 +59,5 @@ require('./backend/audit_logs')(app, pool);
 require('./backend/utilities')(app, pool);
 
 // ----------- START SERVER -----------
-const PORT = 3000;
+const PORT = 12687;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
