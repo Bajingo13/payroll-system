@@ -1,8 +1,6 @@
 // ================== server.js ==================
 
 // ----------- IMPORTS AND INITIAL SETUP -----------
-require('dotenv').config();  // <--- ADD THIS
-
 const express = require('express');
 const mysql = require('mysql2/promise');
 const path = require('path');
@@ -13,7 +11,7 @@ app.use(express.json());
 
 // ----------- SESSION CONFIGURATION -----------
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: 'payroll_secret_key',
   resave: false,
   saveUninitialized: true
 }));
@@ -31,23 +29,23 @@ function isAuthenticated(req, res, next) {
 app.use(express.static(path.join(__dirname, 'frontend')));
 
 // ----------- HTML ROUTES -----------
-app.get('/', (req, res) =>
+app.get('/', (req, res) => 
   res.sendFile(path.join(__dirname, 'frontend', 'index.html'))
 );
 
-// Protected dashboard route
+// ✅ Protected dashboard route
 app.get('/dashboard', isAuthenticated, (req, res) =>
   res.sendFile(path.join(__dirname, 'frontend', 'dashboard', 'Dashboard.html'))
 );
 
 // ----------- MYSQL CONNECTION POOL -----------
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  timezone: process.env.DB_TIMEZONE,
-  dateStrings: true,
+  host: 'mysql.railway.internal',
+  user: 'root',
+  password: 'pyKVWdEYXvZuFEjzLMbZElLotRmusrOV',
+  database: 'payroll_system',
+  timezone: '+08:00',  // PH timezone
+  dateStrings: true,   // Return DATE/DATETIME as strings
 });
 
 // ----------- ROUTES -----------
@@ -61,5 +59,5 @@ require('./backend/audit_logs')(app, pool);
 require('./backend/utilities')(app, pool);
 
 // ----------- START SERVER -----------
-const PORT = process.env.PORT || 12687;
+const PORT = 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
