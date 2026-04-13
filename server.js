@@ -15,8 +15,55 @@ function isRunningOnRailway() {
     !!process.env.RAILWAY_ENVIRONMENT ||
     !!process.env.RAILWAY_PROJECT_ID ||
     !!process.env.RAILWAY_SERVICE_ID ||
-    process.env.NODE_ENV === 'production'
+    !!process.env.RAILWAY_PUBLIC_DOMAIN
   );
+}
+
+function getAllowedOrigins() {
+  const configured = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+
+  const defaults = [
+    'http://127.0.0.1:5500',
+    'http://localhost:5500',
+    'http://127.0.0.1:3000',
+    'http://localhost:3000'
+  ];
+
+  const railwayOrigins = [];
+
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    railwayOrigins.push(`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
+  }
+
+  return [...new Set([...defaults, ...configured, ...railwayOrigins])];
+}
+
+function isRailwayAppOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    return url.hostname.endsWith('.up.railway.app');
+  } catch {
+    return false;
+  }
+}
+
+function buildLocalDbConfig() {
+  return {
+    host: process.env.LOCAL_DB_HOST || '127.0.0.1',
+    port: Number(process.env.LOCAL_DB_PORT || 3306),
+    user: process.env.LOCAL_DB_USER || 'root',
+    password: process.env.LOCAL_DB_PASSWORD || '',
+    database: process.env.LOCAL_DB_NAME || 'payroll_system',
+    timezone: process.env.DB_TIMEZONE || '+08:00',
+    dateStrings: true,
+    waitForConnections: true,
+    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
+    queueLimit: 0,
+    connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 10000)
+  };
 }
 
 function buildPrimaryDbConfig() {
@@ -51,66 +98,68 @@ function buildRailwayInternalFallbackConfig() {
   };
 }
 
-async function createWorkingPool() {
-  const primaryConfig = buildPrimaryDbConfig();
-  const primaryPool = mysql.createPool(primaryConfig);
-
+async function testPool(pool, label, config) {
+  const conn = await pool.getConnection();
   try {
-    const conn = await primaryPool.getConnection();
     const [rows] = await conn.query('SELECT DATABASE() AS db, NOW() AS server_time');
-    conn.release();
-
-    console.log('✅ DATABASE CONNECTED USING PRIMARY CONFIG');
-    console.log('✅ DB HOST:', primaryConfig.host);
-    console.log('✅ DB PORT:', primaryConfig.port);
+    console.log(`✅ DATABASE CONNECTED USING ${label}`);
+    console.log('✅ DB HOST:', config.host);
+    console.log('✅ DB PORT:', config.port);
     console.log('✅ ACTIVE DATABASE:', rows[0].db);
     console.log('✅ SERVER TIME:', rows[0].server_time);
-
-    return { pool: primaryPool, dbMode: 'primary' };
-  } catch (primaryErr) {
-    console.error('❌ PRIMARY DB CONNECTION FAILED:', primaryErr.message);
-
-    const onRailway = isRunningOnRailway();
-    if (!onRailway) {
-      throw primaryErr;
-    }
-
-    const fallbackConfig = buildRailwayInternalFallbackConfig();
-    const fallbackPool = mysql.createPool(fallbackConfig);
-
-    try {
-      const conn = await fallbackPool.getConnection();
-      const [rows] = await conn.query('SELECT DATABASE() AS db, NOW() AS server_time');
-      conn.release();
-
-      console.log('✅ DATABASE CONNECTED USING RAILWAY INTERNAL FALLBACK');
-      console.log('✅ DB HOST:', fallbackConfig.host);
-      console.log('✅ DB PORT:', fallbackConfig.port);
-      console.log('✅ ACTIVE DATABASE:', rows[0].db);
-      console.log('✅ SERVER TIME:', rows[0].server_time);
-
-      return { pool: fallbackPool, dbMode: 'railway-internal-fallback' };
-    } catch (fallbackErr) {
-      console.error('❌ RAILWAY INTERNAL FALLBACK FAILED:', fallbackErr.message);
-      throw fallbackErr;
-    }
+    return rows[0];
+  } finally {
+    conn.release();
   }
 }
 
-function getAllowedOrigins() {
-  const configured = (process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map(v => v.trim())
-    .filter(Boolean);
+async function tryConnect(label, config) {
+  const pool = mysql.createPool(config);
+  await testPool(pool, label, config);
+  return pool;
+}
 
-  const defaults = [
-    'http://127.0.0.1:5500',
-    'http://localhost:5500',
-    'http://127.0.0.1:3000',
-    'http://localhost:3000'
-  ];
+async function createWorkingPool() {
+  const onRailway = isRunningOnRailway();
 
-  return [...new Set([...defaults, ...configured])];
+  if (!onRailway) {
+    // 1) Try local MySQL first
+    const localConfig = buildLocalDbConfig();
+    try {
+      const localPool = await tryConnect('LOCAL MYSQL', localConfig);
+      return { pool: localPool, dbMode: 'local-mysql' };
+    } catch (localErr) {
+      console.error('❌ LOCAL MYSQL CONNECTION FAILED:', localErr.message);
+    }
+
+    // 2) If local fails, try Railway public DB from local machine
+    const primaryConfig = buildPrimaryDbConfig();
+    try {
+      const primaryPool = await tryConnect('RAILWAY PUBLIC DB FROM LOCAL', primaryConfig);
+      return { pool: primaryPool, dbMode: 'railway-public-from-local' };
+    } catch (primaryErr) {
+      console.error('❌ RAILWAY PUBLIC DB FROM LOCAL FAILED:', primaryErr.message);
+      throw primaryErr;
+    }
+  }
+
+  // Running on Railway
+  const primaryConfig = buildPrimaryDbConfig();
+  try {
+    const primaryPool = await tryConnect('PRIMARY CONFIG', primaryConfig);
+    return { pool: primaryPool, dbMode: 'primary' };
+  } catch (primaryErr) {
+    console.error('❌ PRIMARY DB CONNECTION FAILED:', primaryErr.message);
+  }
+
+  const fallbackConfig = buildRailwayInternalFallbackConfig();
+  try {
+    const fallbackPool = await tryConnect('RAILWAY INTERNAL FALLBACK', fallbackConfig);
+    return { pool: fallbackPool, dbMode: 'railway-internal-fallback' };
+  } catch (fallbackErr) {
+    console.error('❌ RAILWAY INTERNAL FALLBACK FAILED:', fallbackErr.message);
+    throw fallbackErr;
+  }
 }
 
 // ----------- MIDDLEWARE -----------
@@ -119,7 +168,16 @@ const allowedOrigins = getAllowedOrigins();
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Automatically allow Railway app domains
+    if (isRailwayAppOrigin(origin)) {
+      return callback(null, true);
+    }
+
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true
@@ -127,7 +185,6 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.set('trust proxy', 1);
 
 // ----------- SESSION CONFIGURATION -----------
@@ -136,7 +193,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,
+    secure: isRunningOnRailway(), // true on Railway, false locally
     httpOnly: true,
     sameSite: 'lax'
   }
@@ -159,21 +216,17 @@ app.get('/', (req, res) => {
 });
 
 app.get('/dashboard', isAuthenticated, (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'dashboard', 'Dashboard.html'));
+  res.sendFile(path.join(__dirname, 'frontend', 'dashboard', 'dashboard.html'));
 });
 
 // ----------- START APP AFTER DB CONNECTS -----------
 (async () => {
   try {
     console.log('RUNNING FILE:', __filename);
-    console.log('DB_HOST FROM ENV:', process.env.DB_HOST);
-    console.log('DB_PORT FROM ENV:', process.env.DB_PORT);
-    console.log('DB_NAME FROM ENV:', process.env.DB_NAME);
     console.log('RAILWAY DETECTED:', isRunningOnRailway());
 
     const { pool, dbMode } = await createWorkingPool();
 
-    // ----------- ROUTES -----------
     require('./backend/login')(app, pool);
     require('./backend/profile_sidebar')(app, pool);
     require('./backend/dashboard')(app, pool);
@@ -183,7 +236,6 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     require('./backend/audit_logs')(app, pool);
     require('./backend/utilities')(app, pool);
 
-    // ----------- DB TEST ROUTE -----------
     app.get('/api/db-test', async (req, res) => {
       let conn;
       try {
