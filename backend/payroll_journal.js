@@ -21,6 +21,8 @@ module.exports = function (app, pool) {
         }
     }
 
+
+
     // === EMPLOYEE PAYROLL === 
     // GET payroll periods selectors from the payroll_periods, payroll_groups, payroll_months, payroll_years
     app.get("/api/payroll_periods", async (req, res) => {
@@ -704,3 +706,90 @@ module.exports = function (app, pool) {
         }
     });
 }
+
+let currentEmployees = [];
+
+function fullName(emp) {
+  return `${emp.first_name || ""} ${emp.last_name || ""}`.trim();
+}
+
+function getSelectedEmployee(inputId = "summaryEmployee") {
+  const input = document.getElementById(inputId);
+  if (!input) return null;
+
+  const value = input.value.trim();
+  if (!value) return null;
+
+  return currentEmployees.find(emp => emp.display === value) || null;
+}
+
+function clearEmployeeInput(inputId = "summaryEmployee", nameId = "summaryEmployeeName") {
+  const input = document.getElementById(inputId);
+  const name = document.getElementById(nameId);
+  const list = document.getElementById(`${inputId}List`);
+
+  if (input) input.value = "";
+  if (name) name.value = "";
+  if (list) list.innerHTML = "";
+  currentEmployees = [];
+}
+
+async function loadEmployeeSuggestions({
+  inputId = "summaryEmployee",
+  listId = "summaryEmployeeList",
+  nameId = "summaryEmployeeName",
+  q = "",
+  run_id = "",
+  run_ids = "",
+  company = "",
+  location = "",
+  branch = "",
+  division = "",
+  department = "",
+  empClass = "",
+  position = "",
+  empType = "",
+  salaryType = "",
+  option = "active"
+} = {}) {
+  const list = document.getElementById(listId);
+  const nameInput = document.getElementById(nameId);
+
+  if (!list) return;
+
+  const qs = new URLSearchParams();
+
+  if (q) qs.set("q", q);
+  if (run_id) qs.set("run_id", run_id);
+  if (run_ids) qs.set("run_ids", run_ids);
+  if (company) qs.set("company", company);
+  if (location) qs.set("location", location);
+  if (branch) qs.set("branch", branch);
+  if (division) qs.set("division", division);
+  if (department) qs.set("department", department);
+  if (empClass) qs.set("class", empClass);
+  if (position) qs.set("position", position);
+  if (empType) qs.set("empType", empType);
+  if (salaryType) qs.set("salaryType", salaryType);
+  if (option) qs.set("option", option);
+
+  const res = await fetch(`/api/employee_autocomplete?${qs.toString()}`);
+  const data = await res.json();
+
+  list.innerHTML = "";
+  currentEmployees = data.success ? data.employees || [] : [];
+
+  currentEmployees.forEach(emp => {
+    const opt = document.createElement("option");
+    opt.value = emp.display;
+    list.appendChild(opt);
+  });
+
+  const selected = getSelectedEmployee(inputId);
+  if (nameInput) {
+    nameInput.value = selected ? selected.full_name : "";
+  }
+}
+
+
+

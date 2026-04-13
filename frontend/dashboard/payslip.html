@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payslip | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"> 
+</head>
+
+<script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="profile">
+                <div class="logo">Business Set Up & Compliance Inc.</div>
+                <h3></h3>
+                <p></p>
+            </div>
+
+            <nav>
+                <ul>
+                    <li class="active"><a href="dashboard.html">Dashboard</a></li>
+                    <li class="dropdown">
+                        <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                        <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li> 
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html">Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="payslip.html" class="sub-active">Payslip</a></li>
+                    <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="payslip" class="section">
+            <header class="header">
+                <h2>Employee Payslip</h2>
+                <p>Generator</p>
+            </header>
+
+            <section class="content">
+                <!-- Payslip content will go here -->
+            </section>
+
+            <div class="payslip-page">
+            <div class="payslip-title">
+              <h2>PAYSLIP</h2>
+            </div>
+
+  <div class="setup-container-payslip">
+    <!-- LEFT -->
+    <div class="panel-box-payslip">
+      <h4>Filter</h4>
+
+      <div class="form-grid-payslip">
+        <div class="form-row-payslip">
+          <label for="summaryCompany">Company</label>
+          <select id="summaryCompany">
+            <option disabled selected >-- Select Company --</option>
+          </select>
+          
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryLocation">Location</label>
+          <select id="summaryLocation">
+            <option disabled selected >-- Select Location --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryBranch">Branch</label>
+          <select id="summaryBranch">
+            <option disabled selected >-- Select Branch --</option> 
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryDivision">Division</label>
+          <select id="summaryDivision">
+            <option disabled selected >-- Select Division --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryDepartment">Department</label>
+          <select id="summaryDepartment">
+            <option disabled selected >-- Select Department --</option> 
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryClass">Class</label>
+          <select id="summaryClass">
+            <option disabled selected >-- Select Class --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryPosition">Position</label>
+          <select id="summaryPosition">
+            <option disabled selected >-- Select Position --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryEmployeeType">Employee Type</label>
+          <select id="summaryEmployeeType">
+            <option disabled selected >-- Select Employee Type --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryEmployeeStatus">Employee Status</label>
+          <select id="summaryEmployeeStatus">
+            <option disabled selected >-- Select Employee Status --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summaryProject">Project</label>
+          <select id="summaryProject">
+            <option disabled selected >-- Select Project --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+          <label for="summarySalaryType">Salary Type</label>
+          <select id="summarySalaryType">
+            <option disabled selected >-- Select Salary Type --</option>
+          </select>
+        </div>
+
+        <div class="form-row-payslip">
+            <label for="summaryEmployeeName">Employee ID</label>
+            <input
+             type="text"
+             id="summaryEmployeeName"
+             list="employeeIdOptions"
+              placeholder="Type or select Employee ID"
+              autocomplete="off">
+        <datalist id="employeeIdOptions"></datalist>
+        </div>
+
+        <div class="form-row-payslip full-width">
+          <label for="summaryPayslipName">Name</label>
+          <input type="text" id="summaryPayslipName"readonly>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="sub-panel-payslip">
+        <h5>Payroll Coverage</h5>
+
+        <div class="inline-radio-group">
+    <label>
+        <input type="radio" id="summaryOptionPeriod-payslip" name="coverage" value="period-payslip" checked>
+        Period
+    </label>
+    <label>
+      <input type="radio" id="summaryOptionRange-payslip" name="coverage" value="range-payslip">
+      Range
+    </label>
+    </div>
+
+  <div id="periodSelection" class="coverage-grid">
+    <label>Payroll Group</label>
+    <div class="row-fields">
+      <select id="payrollGroup">
+        <option value="Semi-Monthly">Semi-Monthly</option>
+        <option value="Monthly">Monthly</option>
+      </select>
+    </div>
+
+    <label>From</label>
+    <div class="row-fields">
+      <select id="fromPeriod">
+        <option value="First Half">First Half</option>
+        <option value="Second Half">Second Half</option>
+      </select>
+
+      <select id="fromMonth">
+        <option value="January">January</option>
+        <option value="February">February</option>
+        <option value="March">March</option>
+        <option value="April">April</option>
+        <option value="May">May</option>
+        <option value="June">June</option>
+        <option value="July">July</option>
+        <option value="August">August</option>
+        <option value="September">September</option>
+        <option value="October">October</option>
+        <option value="November">November</option>
+        <option value="December">December</option>
+      </select>
+
+      <input type="number" id="fromYear" value="2026" style="width:90px;">
+    </div>
+
+    <label>To</label>
+    <div class="row-fields">
+      <select id="toPeriod">
+        <option value="First Half">First Half</option>
+        <option value="Second Half">Second Half</option>
+      </select>
+
+      <select id="toMonth">
+        <option value="January">January</option>
+        <option value="February">February</option>
+        <option value="March">March</option>
+        <option value="April">April</option>
+        <option value="May">May</option>
+        <option value="June">June</option>
+        <option value="July">July</option>
+        <option value="August">August</option>
+        <option value="September">September</option>
+        <option value="October">October</option>
+        <option value="November">November</option>
+        <option value="December">December</option>
+      </select>
+
+      <input type="number" id="toYear" value="2026" style="width:90px;">
+    </div>
+  </div>
+</div>
+
+      <div class="sub-panel-payslip">
+          <h5>Payslip Orientation</h5>
+          <select id="payslipOrientation" style="width:100%; height:32px;">
+           <option value="Vertical">Vertical</option>
+           <option value="Horizontal">Horizontal</option>
+          </select>
+      </div>
+      <div class="payslip-actions">
+        <button type="button" id="printPayslipBtn" class="payslip-btn primary">Print</button>
+        <button class="payslip-btn">Close</button>
+      </div>
+  </div>
+</div>
+</section>
+</main>
+</div>
+
+<script src="js/script.js"></script>         
+</body>
+</html>

@@ -1363,3 +1363,241 @@ th {
     padding:6px;
     margin-left:5px;
 }
+
+
+/* Payslip Model */
+
+#payslip.section {
+  background: #f3f4f6;
+  min-height: 100vh;
+}
+
+#payslip .header {
+  margin-bottom: 18px;
+}
+
+#payslip .header h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+#payslip .header p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.payslip-page {
+  background: #f3f4f6;
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  color: #1f2937;
+}
+
+.payslip-title {
+  margin-bottom: 18px;
+}
+
+.payslip-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: 0.2px;
+}
+
+.setup-container-payslip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.panel-box-payslip,
+.sub-panel-payslip {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.panel-box-payslip {
+  padding: 22px 24px 24px;
+}
+
+.sub-panel-payslip {
+  padding: 18px 18px 16px;
+  margin-bottom: 14px;
+}
+
+.panel-box-payslip h4,
+.sub-panel-payslip h5 {
+  margin: 0 0 22px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.sub-panel-payslip h5 {
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.form-grid-payslip {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 14px 20px;
+  align-items: center;
+}
+
+.form-row-payslip {
+  display: contents;
+}
+
+.form-row-payslip label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.form-row-payslip select,
+.form-row-payslip input,
+.coverage-grid select,
+.coverage-grid input,
+.sub-panel-payslip select {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 15px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-row-payslip input:disabled,
+.coverage-grid input:disabled,
+.coverage-grid select:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.form-row-payslip select:focus,
+.form-row-payslip input:focus,
+.coverage-grid select:focus,
+.coverage-grid input:focus,
+.sub-panel-payslip select:focus {
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.15);
+}
+
+.inline-radio-group,
+.inline-option-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.inline-radio-group label,
+.inline-option-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.coverage-grid {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px 12px;
+  align-items: center;
+}
+
+.coverage-grid label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.coverage-grid .row-fields {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.payslip-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.payslip-btn {
+  min-width: 92px;
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: #5fb857;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.payslip-btn:hover {
+  background: #4ea74a;
+}
+
+.payslip-btn:active {
+  transform: translateY(1px);
+}
+
+.payslip-btn.primary {
+  background: #5fb857;
+}
+
+@media (max-width: 1100px) {
+  .setup-container-payslip {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .form-grid-payslip,
+  .coverage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row-payslip {
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .form-row-payslip label {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .coverage-grid .row-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .payslip-actions {
+    justify-content: stretch;
+  }
+
+  .payslip-btn {
+    flex: 1;
+  }
+}

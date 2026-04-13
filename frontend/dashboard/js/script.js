@@ -94,51 +94,51 @@ if (window.location.pathname === '/dashboard/dashboard.html') {
 async function loadRecentLogs() {
   if (window.location.pathname === '/dashboard/dashboard.html') {
     try {
-      const res = await fetch('/api/logs');
-      const logs = await res.json();
+      const res = await fetch('/api/audit_logs?limit=20&page=1');
+      const data = await res.json();
+      const logs = data.logs || []; 
 
       const tbody = document.querySelector(".table-section table tbody");
-      tbody.innerHTML = ""; // clear any old rows
+      tbody.innerHTML = "";
 
       const today = new Date();
       const yesterday = new Date();
       yesterday.setDate(today.getDate() - 1);
 
-      const todayStr = today.toLocaleDateString('en-US');
-      const yesterdayStr = yesterday.toLocaleDateString('en-US');
 
-      // Filter logs from today or yesterday
+      const todayStr= today.toLocaleDateString('en-US');
+      const yesterdayStr= yesterday.toLocaleDateString('en-US');
+
       const recentLogs = logs.filter(log => {
         const logDate = new Date(log.log_time).toLocaleDateString('en-US');
         return logDate === todayStr || logDate === yesterdayStr;
       });
 
-      // Clear previous table content
       tbody.innerHTML = '';
 
-      // Check if there are any recent logs
-      if (recentLogs.length > 0) {
+      if (recentLogs.length > 0) { 
         recentLogs.forEach(log => {
           const formattedDate = new Date(log.log_time).toLocaleString("en-US", {
-            month: "short", day: "2-digit", year: "numeric",
-            hour: "2-digit", minute: "2-digit", hour12: true
+            month:  "short", day: "2-digit", year: "numeric",
+            hour: "2-digit", minute: "2-digit", hour12: true  
           });
 
-          tbody.innerHTML += `
-            <tr>
-              <td>${formattedDate}</td>
-              <td>${log.action}</td>
-              <td>${log.admin_name}</td>
-              <td><span class="status completed">${log.status}</span></td>
-            </tr>
-          `;
+      tbody.innerHTML += `
+      <tr>
+        <td>${formattedDate}</td> 
+        <td>${log.action}</td>  
+        <td>${log.admin_name}</td>
+        <td><span class="status completed">${log.status}</span></td>
+       </tr>
+       `;
         });
       } else {
         tbody.innerHTML = `<tr><td colspan="4">No recent system activities found.</td></tr>`;
       }
+
     } catch (err) {
       console.error("Error loading logs:", err);
-    }
+    }  
   }
 }
 
@@ -146,7 +146,7 @@ async function loadRecentLogs() {
 document.addEventListener("DOMContentLoaded", loadRecentLogs);
 
 // ========== EMPLOYEE MANAGEMENT PAGE ==========
-if (window.location.pathname === '/dashboard/employee_management.html') {
+if (window.location.pathname.includes('employee_management.html')) {
   // ===============================
   // Section Controller
   // ===============================
@@ -1056,7 +1056,7 @@ if (window.location.pathname === '/dashboard/employee_management.html') {
 
   // === Load Dropdown Options from List Manager ===
   function loadDropdownOptions(category, elementId) {
-    return fetch(`/api/system_lists?category=${category}`)
+    return fetch(`/api/system_lists/${encodeURIComponent(category)}`)
       .then(res => res.json())
       .then(data => {
         const select = document.getElementById(elementId);
@@ -2502,7 +2502,8 @@ if (window.location.pathname === '/dashboard/employee_management.html') {
 }
 
 // ========== PAYROLL COMPUTATION PAGE ==========
-if (window.location.pathname === '/dashboard/payroll_computation.html') {
+if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
+  let currentEmployees = [];
   let selectedEmployeeId = null;
 
   // ===============================
@@ -2791,7 +2792,7 @@ if (window.location.pathname === '/dashboard/payroll_computation.html') {
       document.getElementById('employeeName').value = '';
 
       // Load employees based on selected filters
-      loadEmployeeDropdownByRun();
+      loadEmployeeDropdown();
     } catch (err) {
       console.error("Error loading payroll dropdowns:", err);
     }
@@ -2819,93 +2820,119 @@ if (window.location.pathname === '/dashboard/payroll_computation.html') {
   }
 
   // Load dropdown for employee category based on runId
-  async function loadEmployeeDropdownByRun() {
-    const runId = await getRunIdFromFilters();
-    const selectedOption = document.querySelector('input[name="option"]:checked')?.value || "active";
-
-    if (!runId) return; // If no run_id is found, stop execution
+  async function loadEmployeeDropdown() {
+  try {
+    const selectedOption =
+      document.querySelector('input[name="option"]:checked')?.value || "active";
 
     const params = new URLSearchParams({
-      company: document.getElementById("company").value,
-      location: document.getElementById("location").value,
-      branch: document.getElementById("branch").value,
-      division: document.getElementById("division").value,
-      department: document.getElementById("department").value,
-      class: document.getElementById("class").value,
-      position: document.getElementById("position").value,
-      empType: document.getElementById("empType").value,
-      salaryType: document.getElementById("salaryType").value
+      company: document.getElementById("company")?.value || "",
+      location: document.getElementById("location")?.value || "",
+      branch: document.getElementById("branch")?.value || "",
+      division: document.getElementById("division")?.value || "",
+      department: document.getElementById("department")?.value || "",
+      class: document.getElementById("class")?.value || "",
+      position: document.getElementById("position")?.value || "",
+      empType: document.getElementById("empType")?.value || "",
+      salaryType: document.getElementById("salaryType")?.value || "",
+      option: selectedOption
     });
 
-    // Fetch employees for this run_id
-    const res = await fetch(`/api/employees_for_payroll_run?run_id=${runId}&status=${selectedOption}&${params}`);
+    const res = await fetch(`/api/employees_for_payroll?${params.toString()}`);
     const data = await res.json();
 
     const select = document.getElementById("employee");
-    select.innerHTML = '<option value="" disabled selected>-- Select --</option>';
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Select --</option>';
+
+    if (!data.success || !Array.isArray(data.employees)) return;
 
     data.employees.forEach(emp => {
       const opt = document.createElement("option");
       opt.value = emp.employee_id;
-      opt.textContent = `${emp.last_name}`;
+      opt.textContent = `[${emp.emp_code}] ${emp.first_name} ${emp.last_name}`;
       opt.dataset.fullname = `[${emp.emp_code}] ${emp.first_name} ${emp.last_name}`;
       select.appendChild(opt);
     });
+  } catch (err) {
+    console.error("Error loading employee dropdown:", err);
   }
+}
 
   // Employee dropdown event listener
   document.getElementById("categorySelector").addEventListener("change", (e) => {
     if (e.target.tagName === "SELECT" && e.target.id !== "employee") {
-      loadEmployeeDropdownByRun();
+      loadEmployeeDropdown();
     }
   });
 
   // Employee Name field event listener
-  document.getElementById("employee").addEventListener("change", function () {
-    const selectedOption = this.options[this.selectedIndex];
-    const employeeNameInput = document.getElementById("employeeName");
+  document.getElementById("employee").addEventListener("change", async function () {
+  const selectedOption = this.options[this.selectedIndex];
+  const employeeNameInput = document.getElementById("employeeName");
+  const employeeId = this.value;
 
-    employeeNameInput.value = selectedOption.dataset.fullname || "";
+  if (employeeNameInput) {
+    employeeNameInput.value = selectedOption?.dataset.fullname || "";
+  }
+
+  if (!employeeId) {
+    resetPayrollFields();
+    return;
+  }
+
+  // 🔥 THIS IS THE IMPORTANT PART (AUTO-FILL)
+  await renderEmployeePayroll(employeeId, "employee");
   });
 
   // Radio button event listener
   document.querySelectorAll('input[name="option"]').forEach(radio => {
     radio.addEventListener("change", () => {
-      loadEmployeeDropdownByRun();
+      loadEmployeeDropdown();
     });
   });
 
   // Clear button event listener
   document.getElementById('clearFiltersBtn').addEventListener('click', function() {
-    // Get all the dropdowns (select elements)
-    const dropdowns = document.querySelectorAll('.filter-panel select');
+  const dropdowns = document.querySelectorAll('.filter-panel select');
 
-    // Loop through each dropdown and reset to default value (empty)
-    dropdowns.forEach(function(dropdown) {
-      dropdown.value = ''; // Reset to default (empty) value
-    });
-
-    document.getElementById('employeeName').value = ''; // Reset to default (empty) value
-
-    // Optionally, reset the radio buttons if needed
-    document.getElementById('activeEmployees').checked = true; // Keep 'Active' as default
+  dropdowns.forEach(function(dropdown) {
+    dropdown.value = '';
   });
-  
+
+  document.getElementById('employeeName').value = '';
+  document.getElementById('activeEmployees').checked = true;
+
+  loadEmployeeDropdown();
+});
   // Filter change event listener
   function setupFilterChangeListeners() {
     const updateDropdowns = () => {
-      loadEmployeeDropdownByRun();
+      loadEmployeeDropdown();
     };
 
     document.getElementById('payrollGroup').addEventListener('change', updateDropdowns);
     document.getElementById('periodOption').addEventListener('change', updateDropdowns);
     document.getElementById('month').addEventListener('change', updateDropdowns);
     document.getElementById('year').addEventListener('change', updateDropdowns);
+
+
+    document.getElementById('company').addEventListener('change', updateDropdowns);
+    document.getElementById('location').addEventListener('change', updateDropdowns);
+    document.getElementById('branch').addEventListener('change', updateDropdowns);
+    document.getElementById('division').addEventListener('change', updateDropdowns);
+    document.getElementById('department').addEventListener('change', updateDropdowns);
+    document.getElementById('class').addEventListener('change', updateDropdowns);
+    document.getElementById('position').addEventListener('change', updateDropdowns);
+    document.getElementById('empType').addEventListener('change', updateDropdowns);
+    document.getElementById('salaryType').addEventListener('change', updateDropdowns);
   }
 
   // call once when page loads
   loadPayrollDropdowns();
   setupFilterChangeListeners();
+  loadEmployeeDropdown
 
   // ===============================
   // STEP 1.5: CHECKER AND CREATE A PAYROLL
@@ -8067,3 +8094,2076 @@ function syncDatabase() {
     // Logic for syncing database (placeholder)
     showToast("Database sync completed successfully.");
 }
+
+//====== payslip ======
+
+document.addEventListener("DOMContentLoaded", () => {
+  const API_BASE = "http://127.0.0.1:12687";
+
+  const els = {
+    company: document.getElementById("summaryCompany"),
+    location: document.getElementById("summaryLocation"),
+    branch: document.getElementById("summaryBranch"),
+    division: document.getElementById("summaryDivision"),
+    department: document.getElementById("summaryDepartment"),
+    empClass: document.getElementById("summaryClass"),
+    position: document.getElementById("summaryPosition"),
+    empType: document.getElementById("summaryEmployeeType"),
+    empStatus: document.getElementById("summaryEmployeeStatus"),
+    project: document.getElementById("summaryProject"),
+    salaryType: document.getElementById("summarySalaryType"),
+
+    employee: document.getElementById("summaryEmployeeName"),
+    employeeList: document.getElementById("employeeIdOptions"),
+    payslipName: document.getElementById("summaryPayslipName"),
+
+    payrollGroup: document.getElementById("payrollGroup"),
+    fromPeriod: document.getElementById("fromPeriod"),
+    fromMonth: document.getElementById("fromMonth"),
+    fromYear: document.getElementById("fromYear"),
+
+    toPeriod: document.getElementById("toPeriod"),
+    toMonth: document.getElementById("toMonth"),
+    toYear: document.getElementById("toYear"),
+
+    orientation: document.getElementById("payslipOrientation"),
+    printBtn: document.getElementById("printPayslipBtn")
+  };
+
+  let payrollMeta = {
+    payrollGroups: [],
+    payrollMonths: [],
+    payrollYears: [],
+    payrollPeriods: []
+  };
+
+  let currentRunId = null;
+  let currentEmployees = [];
+  let isAutoFilling = false;
+
+  function safeText(v, fallback = "-") {
+    if (v === null || v === undefined || v === "") return fallback;
+    return String(v);
+  }
+
+  function money(v) {
+    return Number(v || 0);
+  }
+
+  function fullName(emp) {
+    return [emp.first_name, emp.last_name].filter(Boolean).join(" ").trim();
+  }
+
+  function setSelectValue(selectEl, value) {
+    if (!selectEl) return;
+
+    if (value === null || value === undefined || value === "") {
+      selectEl.value = "";
+      return;
+    }
+
+    const target = String(value).trim().toLowerCase();
+
+    let match = Array.from(selectEl.options).find(opt =>
+      String(opt.value).trim().toLowerCase() === target ||
+      String(opt.textContent).trim().toLowerCase() === target
+    );
+
+    if (!match) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      selectEl.appendChild(opt);
+      match = opt;
+    }
+
+    selectEl.value = match.value;
+  }
+
+  function clearSelect(select, placeholder) {
+    if (!select) return;
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+  }
+
+  function fillSelect(select, items, placeholder, getValue, getLabel) {
+    clearSelect(select, placeholder);
+
+    items.forEach(item => {
+      const opt = document.createElement("option");
+      opt.value = getValue(item);
+      opt.textContent = getLabel(item);
+      select.appendChild(opt);
+    });
+  }
+
+  function clearEmployeeInput() {
+    if (els.employee) els.employee.value = "";
+    if (els.employeeList) els.employeeList.innerHTML = "";
+  }
+
+  function resetEmployeeDetails() {
+    if (els.payslipName) els.payslipName.value = "";
+
+    [
+      els.company,
+      els.location,
+      els.branch,
+      els.division,
+      els.department,
+      els.empClass,
+      els.position,
+      els.empType,
+      els.empStatus,
+      els.project,
+      els.salaryType
+    ].forEach(el => {
+      if (el) el.value = "";
+    });
+  }
+
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Request failed: ${res.status} ${url}`);
+    }
+    return await res.json();
+  }
+
+  async function loadPayrollMeta() {
+    const data = await fetchJSON(`${API_BASE}/api/payroll_periods`);
+    const payload = data.data || {};
+
+    payrollMeta.payrollGroups = payload.payrollGroups || [];
+    payrollMeta.payrollMonths = payload.payrollMonths || [];
+    payrollMeta.payrollYears = payload.payrollYears || [];
+    payrollMeta.payrollPeriods = payload.payrollPeriods || [];
+  }
+
+  async function loadFilterOptions() {
+    const categories = [
+      ["company", els.company, "-- Select Company --"],
+      ["location", els.location, "-- Select Location --"],
+      ["branch", els.branch, "-- Select Branch --"],
+      ["division", els.division, "-- Select Division --"],
+      ["department", els.department, "-- Select Department --"],
+      ["class", els.empClass, "-- Select Class --"],
+      ["position", els.position, "-- Select Position --"],
+      ["employee_type", els.empType, "-- Select Employee Type --"],
+      ["status", els.empStatus, "-- Select Employee Status --"],
+      ["project", els.project, "-- Select Project --"],
+      ["salary_type", els.salaryType, "-- Select Salary Type --"]
+    ];
+
+    await Promise.all(
+      categories.map(async ([category, select, placeholder]) => {
+        try {
+          const rows = await fetchJSON(`${API_BASE}/api/system_lists/${category}`);
+          fillSelect(
+            select,
+            rows || [],
+            placeholder,
+            row => row.value,
+            row => row.value
+          );
+        } catch (err) {
+          clearSelect(select, placeholder);
+          console.warn(`Failed loading ${category}:`, err.message);
+        }
+      })
+    );
+  }
+
+  function getSelectedGroupId() {
+    const selectedName = els.payrollGroup?.value || "";
+    const match = payrollMeta.payrollGroups.find(
+      g => String(g.group_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.group_id : null;
+  }
+
+  function getSelectedMonthId() {
+    const selectedName = els.fromMonth?.value || "";
+    const match = payrollMeta.payrollMonths.find(
+      m => String(m.month_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.month_id : null;
+  }
+
+  function getSelectedYearId() {
+    const selectedYear = String(els.fromYear?.value || "").trim();
+    const match = payrollMeta.payrollYears.find(
+      y => String(y.year_value) === selectedYear
+    );
+    return match ? match.year_id : null;
+  }
+
+  function getSelectedPeriodId() {
+    const selectedName = els.fromPeriod?.value || "";
+    const match = payrollMeta.payrollPeriods.find(
+      p => String(p.period_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.period_id : null;
+  }
+
+  function getCurrentPeriodLabel() {
+    return `${els.fromPeriod.value} - ${els.fromMonth.value} ${els.fromYear.value}`;
+  }
+
+  async function resolveRunId() {
+  const payroll_group = getSelectedGroupId();
+  const payroll_period = getSelectedPeriodId();
+  const month = getSelectedMonthId();
+  const year = getSelectedYearId();
+
+  console.log("resolveRunId values:", {
+    payroll_group,
+    payroll_period,
+    month,
+    year,
+    payrollGroupText: els.payrollGroup?.value,
+    fromPeriodText: els.fromPeriod?.value,
+    fromMonthText: els.fromMonth?.value,
+    fromYearText: els.fromYear?.value
+  });
+
+  if (!payroll_group || !payroll_period || !month || !year) {
+    console.warn("resolveRunId aborted because one or more IDs are missing.");
+    currentRunId = null;
+    return null;
+  }
+
+  const qs = new URLSearchParams({
+    payroll_group,
+    payroll_period,
+    month,
+    year
+  });
+
+  const url = `${API_BASE}/api/get_run_id_payroll_computation?${qs.toString()}`;
+  console.log("resolveRunId request URL:", url);
+
+  const data = await fetchJSON(url);
+  console.log("resolveRunId response:", data);
+
+  if (!data.success || !data.run_id) {
+    console.warn("No matching run_id found.");
+    currentRunId = null;
+    return null;
+  }
+
+  currentRunId = data.run_id;
+  console.log("Resolved currentRunId:", currentRunId);
+  return currentRunId;
+}
+
+ function buildEmployeeQuery() {
+  const qs = new URLSearchParams();
+
+  if (els.company?.value) qs.append("company", els.company.value);
+  if (els.location?.value) qs.append("location", els.location.value);
+  if (els.branch?.value) qs.append("branch", els.branch.value);
+  if (els.division?.value) qs.append("division", els.division.value);
+  if (els.department?.value) qs.append("department", els.department.value);
+  if (els.empClass?.value) qs.append("class", els.empClass.value);
+  if (els.position?.value) qs.append("position", els.position.value);
+  if (els.empType?.value) qs.append("empType", els.empType.value);
+  if (els.salaryType?.value) qs.append("salaryType", els.salaryType.value);
+
+  qs.append("option", "active");
+
+  return qs.toString();
+}
+
+  async function loadEmployees() {
+    try {
+      const data = await fetchJSON(
+        `${API_BASE}/api/employees_for_payroll?${buildEmployeeQuery()}`
+      );
+
+      currentEmployees = data.employees || [];
+
+      if (els.employeeList) {
+        els.employeeList.innerHTML = "";
+
+        currentEmployees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.emp_code;
+          opt.label = `${emp.emp_code} - ${emp.first_name || ""} ${emp.last_name || ""}`.trim();
+          els.employeeList.appendChild(opt);
+        });
+      }
+
+      if (!isAutoFilling) {
+        if (els.employee) els.employee.value = "";
+        if (els.payslipName) els.payslipName.value = "";
+      }
+    } catch (err) {
+      console.error("Load employees error:", err);
+      clearEmployeeInput();
+      currentEmployees = [];
+    }
+  }
+
+  function getSelectedEmployee() {
+    const typed = String(els.employee?.value || "").trim().toLowerCase();
+    if (!typed) return null;
+
+    return currentEmployees.find(emp =>
+      String(emp.emp_code || "").trim().toLowerCase() === typed
+    ) || null;
+  }
+
+  async function autofillEmployeeFieldsFromSelection() {
+    const emp = getSelectedEmployee();
+
+    if (!emp) {
+      if (els.payslipName) els.payslipName.value = "";
+      return;
+    }
+
+    try {
+      isAutoFilling = true;
+
+      const employeeData = await fetchJSON(
+        `${API_BASE}/api/employee/${encodeURIComponent(emp.emp_code)}`
+      );
+
+      if (!employeeData.success || !employeeData.employee) {
+        alert("Employee details not found.");
+        return;
+      }
+
+      const fullEmp = employeeData.employee;
+
+      if (els.payslipName) {
+        els.payslipName.value = `${fullEmp.first_name || ""} ${fullEmp.last_name || ""}`.trim();
+      }
+
+      setSelectValue(els.company, fullEmp.company);
+      setSelectValue(els.location, fullEmp.location);
+      setSelectValue(els.branch, fullEmp.branch);
+      setSelectValue(els.division, fullEmp.division);
+      setSelectValue(els.department, fullEmp.department);
+      setSelectValue(els.empClass, fullEmp.class);
+      setSelectValue(els.position, fullEmp.position);
+      setSelectValue(els.empType, fullEmp.employee_type);
+      setSelectValue(els.empStatus, fullEmp.status);
+      setSelectValue(els.project, fullEmp.projects);
+      setSelectValue(els.salaryType, fullEmp.salary_type);
+    } catch (err) {
+      console.error("Auto-fill employee error:", err);
+      alert("Failed to load employee details.");
+    } finally {
+      isAutoFilling = false;
+    }
+  }
+
+  function buildEarnings(employeePayroll, employeeDetails) {
+    const earnings = [];
+
+    const basicSalary = money(employeePayroll.basic_salary);
+    if (basicSalary > 0) earnings.push({ label: "Basic Salary", amount: basicSalary });
+
+    const taxableAllowances = money(employeePayroll.taxable_allowances);
+    if (taxableAllowances > 0) {
+      earnings.push({ label: "Taxable Allowances", amount: taxableAllowances });
+    }
+
+    const nonTaxableAllowances = money(employeePayroll.non_taxable_allowances);
+    if (nonTaxableAllowances > 0) {
+      earnings.push({ label: "Non-Taxable Allowances", amount: nonTaxableAllowances });
+    }
+
+    const adjComp = money(employeePayroll.adj_comp);
+    if (adjComp > 0) earnings.push({ label: "Adjustment (Compensation)", amount: adjComp });
+
+    const adjNonComp = money(employeePayroll.adj_non_comp);
+    if (adjNonComp > 0) {
+      earnings.push({ label: "Adjustment (Non-Compensation)", amount: adjNonComp });
+    }
+
+    const overtime = money(employeePayroll.overtime);
+    if (overtime > 0) earnings.push({ label: "Overtime", amount: overtime });
+
+    (employeeDetails.allowances || []).forEach(item => {
+      const amount = money(item.amount);
+      if (amount > 0) {
+        earnings.push({
+          label: item.allowance_name || "Allowance",
+          amount
+        });
+      }
+    });
+
+    return earnings;
+  }
+
+  function buildDeductions(employeePayroll, employeeDetails) {
+    const deductions = [];
+
+    const absence = money(employeePayroll.absence_deduction);
+    if (absence > 0) deductions.push({ label: "Absences", amount: absence });
+
+    const late = money(employeePayroll.late_deduction);
+    if (late > 0) deductions.push({ label: "Late", amount: late });
+
+    const undertime = money(employeePayroll.undertime_deduction);
+    if (undertime > 0) deductions.push({ label: "Undertime", amount: undertime });
+
+    const loans = money(employeePayroll.loans);
+    if (loans > 0) deductions.push({ label: "Loans", amount: loans });
+
+    const otherDeductions = money(employeePayroll.other_deductions);
+    if (otherDeductions > 0) deductions.push({ label: "Other Deductions", amount: otherDeductions });
+
+    const premiumAdj = money(employeePayroll.premium_adj);
+    if (premiumAdj > 0) deductions.push({ label: "Premium Adjustment", amount: premiumAdj });
+
+    const sssEmployee = money(employeePayroll.sss_employee);
+    if (sssEmployee > 0) deductions.push({ label: "SSS", amount: sssEmployee });
+
+    const philhealthEmployee = money(employeePayroll.philhealth_employee);
+    if (philhealthEmployee > 0) deductions.push({ label: "PhilHealth", amount: philhealthEmployee });
+
+    const pagibigEmployee = money(employeePayroll.pagibig_employee);
+    if (pagibigEmployee > 0) deductions.push({ label: "Pag-IBIG", amount: pagibigEmployee });
+
+    const gsisEmployee = money(employeePayroll.gsis_employee);
+    if (gsisEmployee > 0) deductions.push({ label: "GSIS", amount: gsisEmployee });
+
+    const taxWithheld = money(employeePayroll.tax_withheld);
+    if (taxWithheld > 0) deductions.push({ label: "Withholding Tax", amount: taxWithheld });
+
+    (employeeDetails.deductions || []).forEach(item => {
+      const amount = money(item.amount);
+      if (amount > 0) {
+        deductions.push({
+          label: item.deduction_name || "Deduction",
+          amount
+        });
+      }
+    });
+
+    return deductions;
+  }
+
+ async function generatePayslipData() {
+  const selectedEmployee = getSelectedEmployee();
+  if (!selectedEmployee) {
+    alert("Please enter a valid Employee ID from the suggestions.");
+    return null;
+  }
+
+  const payroll_group = getSelectedGroupId();
+  const payroll_period = getSelectedPeriodId();
+  const month = getSelectedMonthId();
+  const year = getSelectedYearId();
+
+  if (!payroll_group || !payroll_period || !month || !year) {
+    alert("Please select a valid payroll period first.");
+    return null;
+  }
+
+  const runLookupQs = new URLSearchParams({
+    emp_code: selectedEmployee.emp_code,
+    payroll_group,
+    payroll_period,
+    month,
+    year
+  });
+
+  const runLookup = await fetchJSON(
+    `${API_BASE}/api/payslip_run_for_employee?${runLookupQs.toString()}`
+  );
+
+  if (!runLookup.success || !runLookup.data?.run_id) {
+    alert("No payroll run found for this employee in the selected period.");
+    return null;
+  }
+
+  const employeeRunId = runLookup.data.run_id;
+
+  const payrollQs = new URLSearchParams({
+    run_id: employeeRunId,
+    periodOption: els.fromPeriod.value
+  });
+
+  const payrollData = await fetchJSON(
+    `${API_BASE}/api/employee_payroll_settings/${encodeURIComponent(selectedEmployee.employee_id)}?${payrollQs.toString()}`
+  );
+
+  if (!payrollData.success || !payrollData.data) {
+    alert("Payroll details not found for this employee.");
+    return null;
+  }
+
+  const employeeData = await fetchJSON(
+    `${API_BASE}/api/employee/${encodeURIComponent(selectedEmployee.emp_code)}`
+  );
+
+  if (!employeeData.success || !employeeData.employee) {
+    alert("Employee details not found.");
+    return null;
+  }
+
+  const payroll = payrollData.data;
+  const employee = employeeData.employee;
+
+  const earnings = buildEarnings(payroll, payroll);
+  const deductions = buildDeductions(payroll, payroll);
+
+  const workedDays =
+    payroll.days_in_week ||
+    payroll.days_in_year ||
+    "-";
+
+  return {
+    orientation: els.orientation?.value || "Vertical",
+    companyName: safeText(employee.company || "Business Set Up & Compliance Inc."),
+    dateOfJoining: safeText(employee.date_hired),
+    payPeriod: getCurrentPeriodLabel(),
+    workedDays: safeText(workedDays),
+    employeeName: safeText(fullName(employee)),
+    designation: safeText(employee.position),
+    department: safeText(employee.department),
+    earnings,
+    deductions,
+    totalEarnings: money(
+      payroll.gross_pay || earnings.reduce((sum, x) => sum + money(x.amount), 0)
+    ),
+    totalDeductions: money(
+      payroll.total_deductions || deductions.reduce((sum, x) => sum + money(x.amount), 0)
+    ),
+    netPay: money(payroll.net_pay)
+  };
+}
+
+  async function handlePrint() {
+    try {
+      const payload = await generatePayslipData();
+      if (!payload) return;
+
+      localStorage.setItem("payslipData", JSON.stringify(payload));
+      window.open("payslip_print.html", "_blank");
+    } catch (err) {
+      console.error("Payslip print error:", err);
+      alert(`Failed to generate payslip: ${err.message}`);
+    }
+  }
+
+  async function refreshEmployeesAndRun() {
+    try {
+      await resolveRunId();
+      await loadEmployees();
+    } catch (err) {
+      console.error("Refresh employees error:", err);
+      clearEmployeeInput();
+      currentEmployees = [];
+    }
+  }
+
+  function wireEvents() {
+    [
+      els.company,
+      els.location,
+      els.branch,
+      els.division,
+      els.department,
+      els.empClass,
+      els.position,
+      els.empType,
+      els.empStatus,
+      els.project,
+      els.salaryType,
+      els.payrollGroup,
+      els.fromPeriod,
+      els.fromMonth,
+      els.fromYear
+    ].forEach(el => {
+      if (el) {
+        el.addEventListener("change", async () => {
+          if (!isAutoFilling) {
+            await refreshEmployeesAndRun();
+          }
+        });
+      }
+    });
+
+    if (els.employee) {
+      els.employee.addEventListener("input", async () => {
+        const selected = getSelectedEmployee();
+        if (selected) {
+          await autofillEmployeeFieldsFromSelection();
+        } else if (els.payslipName) {
+          els.payslipName.value = "";
+        }
+      });
+
+      els.employee.addEventListener("change", async () => {
+        const selected = getSelectedEmployee();
+        if (selected) {
+          await autofillEmployeeFieldsFromSelection();
+        }
+      });
+    }
+
+    if (els.printBtn) {
+      els.printBtn.addEventListener("click", handlePrint);
+    }
+  }
+
+ async function init() {
+  try {
+    if (els.payslipName) {
+      els.payslipName.readOnly = true;
+    }
+
+    resetEmployeeDetails(); // move this before loading employees
+    await loadPayrollMeta();
+    await loadFilterOptions();
+    wireEvents();
+    await refreshEmployeesAndRun();
+  } catch (err) {
+    console.error("Payslip init error:", err);
+    alert(`Failed to initialize payslip page: ${err.message}`);
+  }
+}
+
+  init();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const API_BASE = "http://127.0.0.1:12687";
+
+  const els = {
+    company: document.getElementById("summaryCompany"),
+    location: document.getElementById("summaryLocation"),
+    branch: document.getElementById("summaryBranch"),
+    division: document.getElementById("summaryDivision"),
+    department: document.getElementById("summaryDepartment"),
+    empClass: document.getElementById("summaryClass"),
+    position: document.getElementById("summaryPosition"),
+    empType: document.getElementById("summaryEmployeeType"),
+    empStatus: document.getElementById("summaryEmployeeStatus"),
+    project: document.getElementById("summaryProject"),
+    salaryType: document.getElementById("summarySalaryType"),
+
+    employee: document.getElementById("summaryEmployeeName"),
+    employeeList: document.getElementById("employeeIdOptions"),
+    payslipName: document.getElementById("summaryPayslipName"),
+
+    payrollGroup: document.getElementById("payrollGroup"),
+    fromPeriod: document.getElementById("fromPeriod"),
+    fromMonth: document.getElementById("fromMonth"),
+    fromYear: document.getElementById("fromYear"),
+
+    toPeriod: document.getElementById("toPeriod"),
+    toMonth: document.getElementById("toMonth"),
+    toYear: document.getElementById("toYear"),
+
+    orientation: document.getElementById("payslipOrientation"),
+    printBtn: document.getElementById("printPayslipBtn")
+  };
+
+  let payrollMeta = {
+    payrollGroups: [],
+    payrollMonths: [],
+    payrollYears: [],
+    payrollPeriods: []
+  };
+
+  let currentRunId = null;
+  let currentEmployees = [];
+  let isAutoFilling = false;
+
+  function safeText(v, fallback = "-") {
+    if (v === null || v === undefined || v === "") return fallback;
+    return String(v);
+  }
+
+  function money(v) {
+    return Number(v || 0);
+  }
+
+  function fullName(emp) {
+    return [emp.first_name, emp.last_name].filter(Boolean).join(" ").trim();
+  }
+
+  function setSelectValue(selectEl, value) {
+    if (!selectEl) return;
+
+    if (value === null || value === undefined || value === "") {
+      selectEl.value = "";
+      return;
+    }
+
+    const target = String(value).trim().toLowerCase();
+
+    let match = Array.from(selectEl.options).find(opt =>
+      String(opt.value).trim().toLowerCase() === target ||
+      String(opt.textContent).trim().toLowerCase() === target
+    );
+
+    if (!match) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      selectEl.appendChild(opt);
+      match = opt;
+    }
+
+    selectEl.value = match.value;
+  }
+
+  function clearSelect(select, placeholder) {
+    if (!select) return;
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+  }
+
+  function fillSelect(select, items, placeholder, getValue, getLabel) {
+    clearSelect(select, placeholder);
+
+    items.forEach(item => {
+      const opt = document.createElement("option");
+      opt.value = getValue(item);
+      opt.textContent = getLabel(item);
+      select.appendChild(opt);
+    });
+  }
+
+  function clearEmployeeInput() {
+    if (els.employee) els.employee.value = "";
+    if (els.employeeList) els.employeeList.innerHTML = "";
+  }
+
+  function resetEmployeeDetails() {
+    if (els.payslipName) els.payslipName.value = "";
+
+    [
+      els.company,
+      els.location,
+      els.branch,
+      els.division,
+      els.department,
+      els.empClass,
+      els.position,
+      els.empType,
+      els.empStatus,
+      els.project,
+      els.salaryType
+    ].forEach(el => {
+      if (el) el.value = "";
+    });
+  }
+
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Request failed: ${res.status} ${url}`);
+    }
+    return await res.json();
+  }
+
+  async function loadPayrollMeta() {
+    const data = await fetchJSON(`${API_BASE}/api/payroll_periods`);
+    const payload = data.data || {};
+
+    payrollMeta.payrollGroups = payload.payrollGroups || [];
+    payrollMeta.payrollMonths = payload.payrollMonths || [];
+    payrollMeta.payrollYears = payload.payrollYears || [];
+    payrollMeta.payrollPeriods = payload.payrollPeriods || [];
+  }
+
+  async function loadFilterOptions() {
+    const categories = [
+      ["company", els.company, "-- Select Company --"],
+      ["location", els.location, "-- Select Location --"],
+      ["branch", els.branch, "-- Select Branch --"],
+      ["division", els.division, "-- Select Division --"],
+      ["department", els.department, "-- Select Department --"],
+      ["class", els.empClass, "-- Select Class --"],
+      ["position", els.position, "-- Select Position --"],
+      ["employee_type", els.empType, "-- Select Employee Type --"],
+      ["status", els.empStatus, "-- Select Employee Status --"],
+      ["project", els.project, "-- Select Project --"],
+      ["salary_type", els.salaryType, "-- Select Salary Type --"]
+    ];
+
+    await Promise.all(
+      categories.map(async ([category, select, placeholder]) => {
+        try {
+          const rows = await fetchJSON(`${API_BASE}/api/system_lists/${category}`);
+          fillSelect(
+            select,
+            rows || [],
+            placeholder,
+            row => row.value,
+            row => row.value
+          );
+        } catch (err) {
+          clearSelect(select, placeholder);
+          console.warn(`Failed loading ${category}:`, err.message);
+        }
+      })
+    );
+  }
+
+  function getSelectedGroupId() {
+    const selectedName = els.payrollGroup?.value || "";
+    const match = payrollMeta.payrollGroups.find(
+      g => String(g.group_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.group_id : null;
+  }
+
+  function getSelectedMonthId() {
+    const selectedName = els.fromMonth?.value || "";
+    const match = payrollMeta.payrollMonths.find(
+      m => String(m.month_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.month_id : null;
+  }
+
+  function getSelectedYearId() {
+    const selectedYear = String(els.fromYear?.value || "").trim();
+    const match = payrollMeta.payrollYears.find(
+      y => String(y.year_value) === selectedYear
+    );
+    return match ? match.year_id : null;
+  }
+
+  function getSelectedPeriodId() {
+    const selectedName = els.fromPeriod?.value || "";
+    const match = payrollMeta.payrollPeriods.find(
+      p => String(p.period_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.period_id : null;
+  }
+
+  function getCurrentPeriodLabel() {
+    return `${els.fromPeriod.value} - ${els.fromMonth.value} ${els.fromYear.value}`;
+  }
+
+  async function resolveRunId() {
+    const payroll_group = getSelectedGroupId();
+    const payroll_period = getSelectedPeriodId();
+    const month = getSelectedMonthId();
+    const year = getSelectedYearId();
+
+    if (!payroll_group || !payroll_period || !month || !year) {
+      currentRunId = null;
+      return null;
+    }
+
+    const qs = new URLSearchParams({
+      payroll_group,
+      payroll_period,
+      month,
+      year
+    });
+
+    const data = await fetchJSON(
+      `${API_BASE}/api/get_run_id_payroll_computation?${qs.toString()}`
+    );
+
+    if (!data.success || !data.run_id) {
+      currentRunId = null;
+      return null;
+    }
+
+    currentRunId = data.run_id;
+    return currentRunId;
+  }
+
+  function buildEmployeeQuery() {
+    const qs = new URLSearchParams();
+
+    // use payroll group value as payroll_period filter
+    if (els.payrollGroup?.value) qs.append("payroll_period", els.payrollGroup.value);
+
+    if (els.company?.value) qs.append("company", els.company.value);
+    if (els.location?.value) qs.append("location", els.location.value);
+    if (els.branch?.value) qs.append("branch", els.branch.value);
+    if (els.division?.value) qs.append("division", els.division.value);
+    if (els.department?.value) qs.append("department", els.department.value);
+    if (els.empClass?.value) qs.append("class", els.empClass.value);
+    if (els.position?.value) qs.append("position", els.position.value);
+    if (els.empType?.value) qs.append("empType", els.empType.value);
+    if (els.salaryType?.value) qs.append("salaryType", els.salaryType.value);
+
+    qs.append("option", "active");
+
+    return qs.toString();
+  }
+
+  async function loadEmployees() {
+    try {
+      const data = await fetchJSON(
+        `${API_BASE}/api/employees_for_payroll?${buildEmployeeQuery()}`
+      );
+
+      currentEmployees = data.employees || [];
+
+      if (els.employeeList) {
+        els.employeeList.innerHTML = "";
+
+        currentEmployees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.emp_code;
+          opt.label = `${emp.emp_code} - ${emp.first_name || ""} ${emp.last_name || ""}`.trim();
+          els.employeeList.appendChild(opt);
+        });
+      }
+
+      if (!isAutoFilling) {
+        if (els.employee) els.employee.value = "";
+        if (els.payslipName) els.payslipName.value = "";
+      }
+    } catch (err) {
+      console.error("Load employees error:", err);
+      clearEmployeeInput();
+      currentEmployees = [];
+    }
+  }
+
+  function getSelectedEmployee() {
+    const typed = String(els.employee?.value || "").trim().toLowerCase();
+    if (!typed) return null;
+
+    return currentEmployees.find(emp =>
+      String(emp.emp_code || "").trim().toLowerCase() === typed
+    ) || null;
+  }
+
+  async function autofillEmployeeFieldsFromSelection() {
+    const emp = getSelectedEmployee();
+
+    if (!emp) {
+      if (els.payslipName) els.payslipName.value = "";
+      return;
+    }
+
+    try {
+      isAutoFilling = true;
+
+      const employeeData = await fetchJSON(
+        `${API_BASE}/api/employee/${encodeURIComponent(emp.emp_code)}`
+      );
+
+      if (!employeeData.success || !employeeData.employee) {
+        alert("Employee details not found.");
+        return;
+      }
+
+      const fullEmp = employeeData.employee;
+
+      if (els.payslipName) {
+        els.payslipName.value = `${fullEmp.first_name || ""} ${fullEmp.last_name || ""}`.trim();
+      }
+
+      setSelectValue(els.company, fullEmp.company);
+      setSelectValue(els.location, fullEmp.location);
+      setSelectValue(els.branch, fullEmp.branch);
+      setSelectValue(els.division, fullEmp.division);
+      setSelectValue(els.department, fullEmp.department);
+      setSelectValue(els.empClass, fullEmp.class);
+      setSelectValue(els.position, fullEmp.position);
+      setSelectValue(els.empType, fullEmp.employee_type);
+      setSelectValue(els.empStatus, fullEmp.status);
+      setSelectValue(els.project, fullEmp.projects);
+      setSelectValue(els.salaryType, fullEmp.salary_type);
+    } catch (err) {
+      console.error("Auto-fill employee error:", err);
+      alert("Failed to load employee details.");
+    } finally {
+      isAutoFilling = false;
+    }
+  }
+
+  function buildEarnings(employeePayroll, employeeDetails) {
+    const earnings = [];
+
+    const basicSalary = money(employeePayroll.basic_salary);
+    if (basicSalary > 0) earnings.push({ label: "Basic Salary", amount: basicSalary });
+
+    const taxableAllowances = money(employeePayroll.taxable_allowances);
+    if (taxableAllowances > 0) {
+      earnings.push({ label: "Taxable Allowances", amount: taxableAllowances });
+    }
+
+    const nonTaxableAllowances = money(employeePayroll.non_taxable_allowances);
+    if (nonTaxableAllowances > 0) {
+      earnings.push({ label: "Non-Taxable Allowances", amount: nonTaxableAllowances });
+    }
+
+    const adjComp = money(employeePayroll.adj_comp);
+    if (adjComp > 0) earnings.push({ label: "Adjustment (Compensation)", amount: adjComp });
+
+    const adjNonComp = money(employeePayroll.adj_non_comp);
+    if (adjNonComp > 0) {
+      earnings.push({ label: "Adjustment (Non-Compensation)", amount: adjNonComp });
+    }
+
+    const overtime = money(employeePayroll.overtime);
+    if (overtime > 0) earnings.push({ label: "Overtime", amount: overtime });
+
+    (employeeDetails.allowances || []).forEach(item => {
+      const amount = money(item.amount);
+      if (amount > 0) {
+        earnings.push({
+          label: item.allowance_name || "Allowance",
+          amount
+        });
+      }
+    });
+
+    return earnings;
+  }
+
+  function buildDeductions(employeePayroll, employeeDetails) {
+    const deductions = [];
+
+    const absence = money(employeePayroll.absence_deduction);
+    if (absence > 0) deductions.push({ label: "Absences", amount: absence });
+
+    const late = money(employeePayroll.late_deduction);
+    if (late > 0) deductions.push({ label: "Late", amount: late });
+
+    const undertime = money(employeePayroll.undertime_deduction);
+    if (undertime > 0) deductions.push({ label: "Undertime", amount: undertime });
+
+    const loans = money(employeePayroll.loans);
+    if (loans > 0) deductions.push({ label: "Loans", amount: loans });
+
+    const otherDeductions = money(employeePayroll.other_deductions);
+    if (otherDeductions > 0) deductions.push({ label: "Other Deductions", amount: otherDeductions });
+
+    const premiumAdj = money(employeePayroll.premium_adj);
+    if (premiumAdj > 0) deductions.push({ label: "Premium Adjustment", amount: premiumAdj });
+
+    const sssEmployee = money(employeePayroll.sss_employee);
+    if (sssEmployee > 0) deductions.push({ label: "SSS", amount: sssEmployee });
+
+    const philhealthEmployee = money(employeePayroll.philhealth_employee);
+    if (philhealthEmployee > 0) deductions.push({ label: "PhilHealth", amount: philhealthEmployee });
+
+    const pagibigEmployee = money(employeePayroll.pagibig_employee);
+    if (pagibigEmployee > 0) deductions.push({ label: "Pag-IBIG", amount: pagibigEmployee });
+
+    const gsisEmployee = money(employeePayroll.gsis_employee);
+    if (gsisEmployee > 0) deductions.push({ label: "GSIS", amount: gsisEmployee });
+
+    const taxWithheld = money(employeePayroll.tax_withheld);
+    if (taxWithheld > 0) deductions.push({ label: "Withholding Tax", amount: taxWithheld });
+
+    (employeeDetails.deductions || []).forEach(item => {
+      const amount = money(item.amount);
+      if (amount > 0) {
+        deductions.push({
+          label: item.deduction_name || "Deduction",
+          amount
+        });
+      }
+    });
+
+    return deductions;
+  }
+
+  
+async function generatePayslipData() {
+  const selectedEmployee = getSelectedEmployee();
+
+  if (!selectedEmployee) {
+    alert("Please enter a valid Employee ID from the suggestions.");
+    return null;
+  }
+
+  const latestPayslip = await fetchJSON(
+    `${API_BASE}/api/payslip_latest/${encodeURIComponent(selectedEmployee.emp_code)}`
+  );
+
+  if (!latestPayslip.success || !latestPayslip.data) {
+    alert("No payroll record found for this employee.");
+    return null;
+  }
+
+  const payroll = latestPayslip.data;
+
+  const earnings = [];
+  const deductions = [];
+
+  earnings.push({
+    label: "Basic Salary",
+    amount: Number(payroll.basic_salary || 0)
+  });
+
+  if (Number(payroll.overtime || 0) > 0) {
+    earnings.push({ label: "Overtime", amount: Number(payroll.overtime || 0) });
+  }
+
+  if (Number(payroll.taxable_allowances || 0) > 0) {
+    earnings.push({ label: "Taxable Allowances", amount: Number(payroll.taxable_allowances || 0) });
+  }
+
+  if (Number(payroll.non_taxable_allowances || 0) > 0) {
+    earnings.push({ label: "Non-Taxable Allowances", amount: Number(payroll.non_taxable_allowances || 0) });
+  }
+
+  if (Number(payroll.adj_comp || 0) > 0) {
+    earnings.push({ label: "Adj. Compensation", amount: Number(payroll.adj_comp || 0) });
+  }
+
+  if (Number(payroll.adj_non_comp || 0) > 0) {
+    earnings.push({ label: "Adj. Non-Compensation", amount: Number(payroll.adj_non_comp || 0) });
+  }
+
+  (payroll.allowances || []).forEach(a => {
+    earnings.push({
+      label: a.allowance_name || "Allowance",
+      amount: Number(a.amount || 0)
+    });
+  });
+
+  if (Number(payroll.sss_employee || 0) > 0) {
+    deductions.push({ label: "SSS", amount: Number(payroll.sss_employee || 0) });
+  }
+
+  if (Number(payroll.pagibig_employee || 0) > 0) {
+    deductions.push({ label: "Pag-IBIG", amount: Number(payroll.pagibig_employee || 0) });
+  }
+
+  if (Number(payroll.philhealth_employee || 0) > 0) {
+    deductions.push({ label: "PhilHealth", amount: Number(payroll.philhealth_employee || 0) });
+  }
+
+  if (Number(payroll.tax_withheld || 0) > 0) {
+    deductions.push({ label: "Withholding Tax", amount: Number(payroll.tax_withheld || 0) });
+  }
+
+  if (Number(payroll.loans || 0) > 0) {
+    deductions.push({ label: "Loans", amount: Number(payroll.loans || 0) });
+  }
+
+  if (Number(payroll.other_deductions || 0) > 0) {
+    deductions.push({ label: "Other Deductions", amount: Number(payroll.other_deductions || 0) });
+  }
+
+  (payroll.deductions || []).forEach(d => {
+    deductions.push({
+      label: d.deduction_name || "Deduction",
+      amount: Number(d.amount || 0)
+    });
+  });
+
+  return {
+    orientation: els.orientation?.value || "Vertical",
+    companyName: payroll.company || "Business Set Up & Compliance Inc.",
+    dateOfJoining: payroll.date_hired || "-",
+    payPeriod: payroll.payroll_range || `Run #${payroll.run_id}`,
+    workedDays: payroll.days_in_week || "-",
+    employeeName: [payroll.first_name, payroll.middle_name, payroll.last_name]
+      .filter(Boolean)
+      .join(" "),
+    designation: payroll.position || "-",
+    department: payroll.department || "-",
+    earnings,
+    deductions,
+    totalEarnings: Number(payroll.gross_pay || 0),
+    totalDeductions: Number(payroll.total_deductions || 0),
+    netPay: Number(payroll.net_pay || 0)
+  };
+}
+
+  async function handlePrint() {
+    try {
+      const payload = await generatePayslipData();
+      if (!payload) return;
+
+      localStorage.setItem("payslipData", JSON.stringify(payload));
+      window.open("payslip_print.html", "_blank");
+    } catch (err) {
+      console.error("Payslip print error:", err);
+      alert(`Failed to generate payslip: ${err.message}`);
+    }
+  }
+
+  async function refreshEmployeesAndRun() {
+    try {
+      await resolveRunId();
+      await loadEmployees();
+    } catch (err) {
+      console.error("Refresh employees error:", err);
+      clearEmployeeInput();
+      currentEmployees = [];
+    }
+  }
+
+  function wireEvents() {
+    [
+      els.company,
+      els.location,
+      els.branch,
+      els.division,
+      els.department,
+      els.empClass,
+      els.position,
+      els.empType,
+      els.empStatus,
+      els.project,
+      els.salaryType,
+      els.payrollGroup,
+      els.fromPeriod,
+      els.fromMonth,
+      els.fromYear
+    ].forEach(el => {
+      if (el) {
+        el.addEventListener("change", async () => {
+          if (!isAutoFilling) {
+            await refreshEmployeesAndRun();
+          }
+        });
+      }
+    });
+
+    if (els.employee) {
+      els.employee.addEventListener("input", async () => {
+        const selected = getSelectedEmployee();
+        if (selected) {
+          await autofillEmployeeFieldsFromSelection();
+        } else if (els.payslipName) {
+          els.payslipName.value = "";
+        }
+      });
+
+      els.employee.addEventListener("change", async () => {
+        const selected = getSelectedEmployee();
+        if (selected) {
+          await autofillEmployeeFieldsFromSelection();
+        }
+      });
+    }
+
+    if (els.printBtn) {
+      els.printBtn.addEventListener("click", handlePrint);
+    }
+  }
+
+  async function init() {
+  try {
+    if (els.payslipName) {
+      els.payslipName.readOnly = true;
+    }
+
+    resetEmployeeDetails();
+    await loadPayrollMeta();
+    await loadFilterOptions();
+    wireEvents();
+    await refreshEmployeesAndRun();
+  } catch (err) {
+    console.error("Payslip init error:", err);
+    alert(`Failed to initialize payslip page: ${err.message}`);
+  }
+}
+
+  init();
+});
+
+//=======payslip=======
+document.addEventListener("DOMContentLoaded", () => {
+  const API_BASE = "http://127.0.0.1:12687";
+
+  const els = {
+    company: document.getElementById("summaryCompany"),
+    location: document.getElementById("summaryLocation"),
+    branch: document.getElementById("summaryBranch"),
+    division: document.getElementById("summaryDivision"),
+    department: document.getElementById("summaryDepartment"),
+    empClass: document.getElementById("summaryClass"),
+    position: document.getElementById("summaryPosition"),
+    empType: document.getElementById("summaryEmployeeType"),
+    empStatus: document.getElementById("summaryEmployeeStatus"),
+    project: document.getElementById("summaryProject"),
+    salaryType: document.getElementById("summarySalaryType"),
+
+    employee: document.getElementById("summaryEmployeeName"),
+    employeeList: document.getElementById("employeeIdOptions"),
+    payslipName: document.getElementById("summaryPayslipName"),
+
+    payrollGroup: document.getElementById("payrollGroup"),
+    fromPeriod: document.getElementById("fromPeriod"),
+    fromMonth: document.getElementById("fromMonth"),
+    fromYear: document.getElementById("fromYear"),
+
+    toPeriod: document.getElementById("toPeriod"),
+    toMonth: document.getElementById("toMonth"),
+    toYear: document.getElementById("toYear"),
+
+    orientation: document.getElementById("payslipOrientation"),
+    printBtn: document.getElementById("printPayslipBtn")
+  };
+
+  let payrollMeta = {
+    payrollGroups: [],
+    payrollMonths: [],
+    payrollYears: [],
+    payrollPeriods: []
+  };
+
+  let currentRunId = null;
+  let currentEmployees = [];
+  let isAutoFilling = false;
+
+  function safeText(v, fallback = "-") {
+    if (v === null || v === undefined || v === "") return fallback;
+    return String(v);
+  }
+
+  function money(v) {
+    return Number(v || 0);
+  }
+
+  function fullName(emp) {
+    return [emp.first_name, emp.last_name].filter(Boolean).join(" ").trim();
+  }
+
+  function setSelectValue(selectEl, value) {
+    if (!selectEl) return;
+
+    if (value === null || value === undefined || value === "") {
+      selectEl.value = "";
+      return;
+    }
+
+    const target = String(value).trim().toLowerCase();
+
+    let match = Array.from(selectEl.options).find(opt =>
+      String(opt.value).trim().toLowerCase() === target ||
+      String(opt.textContent).trim().toLowerCase() === target
+    );
+
+    if (!match) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      selectEl.appendChild(opt);
+      match = opt;
+    }
+
+    selectEl.value = match.value;
+  }
+
+  function clearSelect(select, placeholder) {
+    if (!select) return;
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+  }
+
+  function fillSelect(select, items, placeholder, getValue, getLabel) {
+    clearSelect(select, placeholder);
+
+    items.forEach(item => {
+      const opt = document.createElement("option");
+      opt.value = getValue(item);
+      opt.textContent = getLabel(item);
+      select.appendChild(opt);
+    });
+  }
+
+  function clearEmployeeInput() {
+    if (els.employee) els.employee.value = "";
+    if (els.employeeList) els.employeeList.innerHTML = "";
+  }
+
+  function resetEmployeeDetails() {
+    if (els.payslipName) els.payslipName.value = "";
+
+    [
+      els.company,
+      els.location,
+      els.branch,
+      els.division,
+      els.department,
+      els.empClass,
+      els.position,
+      els.empType,
+      els.empStatus,
+      els.project,
+      els.salaryType
+    ].forEach(el => {
+      if (el) el.value = "";
+    });
+  }
+
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Request failed: ${res.status} ${url}`);
+    }
+    return await res.json();
+  }
+
+  async function loadPayrollMeta() {
+    const data = await fetchJSON(`${API_BASE}/api/payroll_periods`);
+    const payload = data.data || {};
+
+    payrollMeta.payrollGroups = payload.payrollGroups || [];
+    payrollMeta.payrollMonths = payload.payrollMonths || [];
+    payrollMeta.payrollYears = payload.payrollYears || [];
+    payrollMeta.payrollPeriods = payload.payrollPeriods || [];
+  }
+
+  async function loadFilterOptions() {
+    const categories = [
+      ["company", els.company, "-- Select Company --"],
+      ["location", els.location, "-- Select Location --"],
+      ["branch", els.branch, "-- Select Branch --"],
+      ["division", els.division, "-- Select Division --"],
+      ["department", els.department, "-- Select Department --"],
+      ["class", els.empClass, "-- Select Class --"],
+      ["position", els.position, "-- Select Position --"],
+      ["employee_type", els.empType, "-- Select Employee Type --"],
+      ["status", els.empStatus, "-- Select Employee Status --"],
+      ["project", els.project, "-- Select Project --"],
+      ["salary_type", els.salaryType, "-- Select Salary Type --"]
+    ];
+
+    await Promise.all(
+      categories.map(async ([category, select, placeholder]) => {
+        try {
+          const rows = await fetchJSON(`${API_BASE}/api/system_lists/${category}`);
+          fillSelect(
+            select,
+            rows || [],
+            placeholder,
+            row => row.value,
+            row => row.value
+          );
+        } catch (err) {
+          clearSelect(select, placeholder);
+          console.warn(`Failed loading ${category}:`, err.message);
+        }
+      })
+    );
+  }
+
+  function getSelectedGroupId() {
+    const selectedName = els.payrollGroup?.value || "";
+    const match = payrollMeta.payrollGroups.find(
+      g => String(g.group_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.group_id : null;
+  }
+
+  function getSelectedMonthId() {
+    const selectedName = els.fromMonth?.value || "";
+    const match = payrollMeta.payrollMonths.find(
+      m => String(m.month_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.month_id : null;
+  }
+
+  function getSelectedYearId() {
+    const selectedYear = String(els.fromYear?.value || "").trim();
+    const match = payrollMeta.payrollYears.find(
+      y => String(y.year_value) === selectedYear
+    );
+    return match ? match.year_id : null;
+  }
+
+  function getSelectedPeriodId() {
+    const selectedName = els.fromPeriod?.value || "";
+    const match = payrollMeta.payrollPeriods.find(
+      p => String(p.period_name).toLowerCase() === String(selectedName).toLowerCase()
+    );
+    return match ? match.period_id : null;
+  }
+
+  function getCurrentPeriodLabel() {
+    return `${els.fromPeriod.value} - ${els.fromMonth.value} ${els.fromYear.value}`;
+  }
+
+  async function resolveRunId() {
+    const payroll_group = getSelectedGroupId();
+    const payroll_period = getSelectedPeriodId();
+    const month = getSelectedMonthId();
+    const year = getSelectedYearId();
+
+    if (!payroll_group || !payroll_period || !month || !year) {
+      currentRunId = null;
+      return null;
+    }
+
+    const qs = new URLSearchParams({
+      payroll_group,
+      payroll_period,
+      month,
+      year
+    });
+
+    const data = await fetchJSON(
+      `${API_BASE}/api/get_run_id_payroll_computation?${qs.toString()}`
+    );
+
+    if (!data.success || !data.run_id) {
+      currentRunId = null;
+      return null;
+    }
+
+    currentRunId = data.run_id;
+    return currentRunId;
+  }
+
+  function buildEmployeeQuery() {
+    const qs = new URLSearchParams();
+
+    // use payroll group value as payroll_period filter
+    if (els.payrollGroup?.value) qs.append("payroll_period", els.payrollGroup.value);
+
+    if (els.company?.value) qs.append("company", els.company.value);
+    if (els.location?.value) qs.append("location", els.location.value);
+    if (els.branch?.value) qs.append("branch", els.branch.value);
+    if (els.division?.value) qs.append("division", els.division.value);
+    if (els.department?.value) qs.append("department", els.department.value);
+    if (els.empClass?.value) qs.append("class", els.empClass.value);
+    if (els.position?.value) qs.append("position", els.position.value);
+    if (els.empType?.value) qs.append("empType", els.empType.value);
+    if (els.salaryType?.value) qs.append("salaryType", els.salaryType.value);
+
+    qs.append("option", "active");
+
+    return qs.toString();
+  }
+
+  async function loadEmployees() {
+    try {
+      const data = await fetchJSON(
+        `${API_BASE}/api/employees_for_payroll?${buildEmployeeQuery()}`
+      );
+
+      currentEmployees = data.employees || [];
+
+      if (els.employeeList) {
+        els.employeeList.innerHTML = "";
+
+        currentEmployees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.emp_code;
+          opt.label = `${emp.emp_code} - ${emp.first_name || ""} ${emp.last_name || ""}`.trim();
+          els.employeeList.appendChild(opt);
+        });
+      }
+
+      if (!isAutoFilling) {
+        if (els.employee) els.employee.value = "";
+        if (els.payslipName) els.payslipName.value = "";
+      }
+    } catch (err) {
+      console.error("Load employees error:", err);
+      clearEmployeeInput();
+      currentEmployees = [];
+    }
+  }
+
+  function getSelectedEmployee() {
+    const typed = String(els.employee?.value || "").trim().toLowerCase();
+    if (!typed) return null;
+
+    return currentEmployees.find(emp =>
+      String(emp.emp_code || "").trim().toLowerCase() === typed
+    ) || null;
+  }
+
+  async function autofillEmployeeFieldsFromSelection() {
+    const emp = getSelectedEmployee();
+
+    if (!emp) {
+      if (els.payslipName) els.payslipName.value = "";
+      return;
+    }
+
+    try {
+      isAutoFilling = true;
+
+      const employeeData = await fetchJSON(
+        `${API_BASE}/api/employee/${encodeURIComponent(emp.emp_code)}`
+      );
+
+      if (!employeeData.success || !employeeData.employee) {
+        alert("Employee details not found.");
+        return;
+      }
+
+      const fullEmp = employeeData.employee;
+
+      if (els.payslipName) {
+        els.payslipName.value = `${fullEmp.first_name || ""} ${fullEmp.last_name || ""}`.trim();
+      }
+
+      setSelectValue(els.company, fullEmp.company);
+      setSelectValue(els.location, fullEmp.location);
+      setSelectValue(els.branch, fullEmp.branch);
+      setSelectValue(els.division, fullEmp.division);
+      setSelectValue(els.department, fullEmp.department);
+      setSelectValue(els.empClass, fullEmp.class);
+      setSelectValue(els.position, fullEmp.position);
+      setSelectValue(els.empType, fullEmp.employee_type);
+      setSelectValue(els.empStatus, fullEmp.status);
+      setSelectValue(els.project, fullEmp.projects);
+      setSelectValue(els.salaryType, fullEmp.salary_type);
+    } catch (err) {
+      console.error("Auto-fill employee error:", err);
+      alert("Failed to load employee details.");
+    } finally {
+      isAutoFilling = false;
+    }
+  }
+
+  function buildEarnings(employeePayroll, employeeDetails) {
+    const earnings = [];
+
+    const basicSalary = money(employeePayroll.basic_salary);
+    if (basicSalary > 0) earnings.push({ label: "Basic Salary", amount: basicSalary });
+
+    const taxableAllowances = money(employeePayroll.taxable_allowances);
+    if (taxableAllowances > 0) {
+      earnings.push({ label: "Taxable Allowances", amount: taxableAllowances });
+    }
+
+    const nonTaxableAllowances = money(employeePayroll.non_taxable_allowances);
+    if (nonTaxableAllowances > 0) {
+      earnings.push({ label: "Non-Taxable Allowances", amount: nonTaxableAllowances });
+    }
+
+    const adjComp = money(employeePayroll.adj_comp);
+    if (adjComp > 0) earnings.push({ label: "Adjustment (Compensation)", amount: adjComp });
+
+    const adjNonComp = money(employeePayroll.adj_non_comp);
+    if (adjNonComp > 0) {
+      earnings.push({ label: "Adjustment (Non-Compensation)", amount: adjNonComp });
+    }
+
+    const overtime = money(employeePayroll.overtime);
+    if (overtime > 0) earnings.push({ label: "Overtime", amount: overtime });
+
+    (employeeDetails.allowances || []).forEach(item => {
+      const amount = money(item.amount);
+      if (amount > 0) {
+        earnings.push({
+          label: item.allowance_name || "Allowance",
+          amount
+        });
+      }
+    });
+
+    return earnings;
+  }
+
+  function buildDeductions(employeePayroll, employeeDetails) {
+    const deductions = [];
+
+    const absence = money(employeePayroll.absence_deduction);
+    if (absence > 0) deductions.push({ label: "Absences", amount: absence });
+
+    const late = money(employeePayroll.late_deduction);
+    if (late > 0) deductions.push({ label: "Late", amount: late });
+
+    const undertime = money(employeePayroll.undertime_deduction);
+    if (undertime > 0) deductions.push({ label: "Undertime", amount: undertime });
+
+    const loans = money(employeePayroll.loans);
+    if (loans > 0) deductions.push({ label: "Loans", amount: loans });
+
+    const otherDeductions = money(employeePayroll.other_deductions);
+    if (otherDeductions > 0) deductions.push({ label: "Other Deductions", amount: otherDeductions });
+
+    const premiumAdj = money(employeePayroll.premium_adj);
+    if (premiumAdj > 0) deductions.push({ label: "Premium Adjustment", amount: premiumAdj });
+
+    const sssEmployee = money(employeePayroll.sss_employee);
+    if (sssEmployee > 0) deductions.push({ label: "SSS", amount: sssEmployee });
+
+    const philhealthEmployee = money(employeePayroll.philhealth_employee);
+    if (philhealthEmployee > 0) deductions.push({ label: "PhilHealth", amount: philhealthEmployee });
+
+    const pagibigEmployee = money(employeePayroll.pagibig_employee);
+    if (pagibigEmployee > 0) deductions.push({ label: "Pag-IBIG", amount: pagibigEmployee });
+
+    const gsisEmployee = money(employeePayroll.gsis_employee);
+    if (gsisEmployee > 0) deductions.push({ label: "GSIS", amount: gsisEmployee });
+
+    const taxWithheld = money(employeePayroll.tax_withheld);
+    if (taxWithheld > 0) deductions.push({ label: "Withholding Tax", amount: taxWithheld });
+
+    (employeeDetails.deductions || []).forEach(item => {
+      const amount = money(item.amount);
+      if (amount > 0) {
+        deductions.push({
+          label: item.deduction_name || "Deduction",
+          amount
+        });
+      }
+    });
+
+    return deductions;
+  }
+
+  async function generatePayslipData() {
+  const selectedEmployee = getSelectedEmployee();
+
+  if (!selectedEmployee) {
+    alert("Please enter a valid Employee ID from the suggestions.");
+    return null;
+  }
+
+  const latestPayslip = await fetchJSON(
+    `${API_BASE}/api/payslip_latest/${encodeURIComponent(selectedEmployee.emp_code)}`
+  );
+
+  if (!latestPayslip.success || !latestPayslip.data) {
+    alert("No payroll record found for this employee.");
+    return null;
+  }
+
+  const payroll = latestPayslip.data;
+
+  const earnings = [];
+  const deductions = [];
+
+  earnings.push({
+    label: "Basic Salary",
+    amount: Number(payroll.basic_salary || 0)
+  });
+
+  if (Number(payroll.overtime || 0) > 0) {
+    earnings.push({ label: "Overtime", amount: Number(payroll.overtime || 0) });
+  }
+
+  if (Number(payroll.taxable_allowances || 0) > 0) {
+    earnings.push({ label: "Taxable Allowances", amount: Number(payroll.taxable_allowances || 0) });
+  }
+
+  if (Number(payroll.non_taxable_allowances || 0) > 0) {
+    earnings.push({ label: "Non-Taxable Allowances", amount: Number(payroll.non_taxable_allowances || 0) });
+  }
+
+  if (Number(payroll.adj_comp || 0) > 0) {
+    earnings.push({ label: "Adj. Compensation", amount: Number(payroll.adj_comp || 0) });
+  }
+
+  if (Number(payroll.adj_non_comp || 0) > 0) {
+    earnings.push({ label: "Adj. Non-Compensation", amount: Number(payroll.adj_non_comp || 0) });
+  }
+
+  (payroll.allowances || []).forEach(a => {
+    earnings.push({
+      label: a.allowance_name || "Allowance",
+      amount: Number(a.amount || 0)
+    });
+  });
+
+  if (Number(payroll.sss_employee || 0) > 0) {
+    deductions.push({ label: "SSS", amount: Number(payroll.sss_employee || 0) });
+  }
+  if (Number(payroll.pagibig_employee || 0) > 0) {
+    deductions.push({ label: "Pag-IBIG", amount: Number(payroll.pagibig_employee || 0) });
+  }
+  if (Number(payroll.philhealth_employee || 0) > 0) {
+    deductions.push({ label: "PhilHealth", amount: Number(payroll.philhealth_employee || 0) });
+  }
+  if (Number(payroll.tax_withheld || 0) > 0) {
+    deductions.push({ label: "Withholding Tax", amount: Number(payroll.tax_withheld || 0) });
+  }
+  if (Number(payroll.loans || 0) > 0) {
+    deductions.push({ label: "Loans", amount: Number(payroll.loans || 0) });
+  }
+  if (Number(payroll.other_deductions || 0) > 0) {
+    deductions.push({ label: "Other Deductions", amount: Number(payroll.other_deductions || 0) });
+  }
+
+  (payroll.deductions || []).forEach(d => {
+    deductions.push({
+      label: d.deduction_name || "Deduction",
+      amount: Number(d.amount || 0)
+    });
+  });
+
+  return {
+    orientation: els.orientation?.value || "Vertical",
+    companyName: payroll.company || "Business Set Up & Compliance Inc.",
+    dateOfJoining: payroll.date_hired || "-",
+    payPeriod: payroll.payroll_range || `Run #${payroll.run_id}`,
+    workedDays: payroll.days_in_week || "-",
+    employeeName: [payroll.first_name, payroll.middle_name, payroll.last_name]
+      .filter(Boolean)
+      .join(" "),
+    designation: payroll.position || "-",
+    department: payroll.department || "-",
+    earnings,
+    deductions,
+    totalEarnings: Number(payroll.gross_pay || 0),
+    totalDeductions: Number(payroll.total_deductions || 0),
+    netPay: Number(payroll.net_pay || 0)
+  };
+}
+
+  
+  async function handlePrint() {
+    try {
+      const payload = await generatePayslipData();
+      if (!payload) return;
+
+      localStorage.setItem("payslipData", JSON.stringify(payload));
+      window.open("payslip_print.html", "_blank");
+    } catch (err) {
+      console.error("Payslip print error:", err);
+      alert(`Failed to generate payslip: ${err.message}`);
+    }
+  }
+
+  
+  async function refreshEmployeesAndRun() {
+    try {
+      await resolveRunId();
+    } catch (err) {
+      console.error("Refresh employees error:", err);
+      clearEmployeeInput();
+      currentEmployees = [];
+    }
+  } 
+
+
+  function wireEvents() {
+    [
+      els.company,
+      els.location,
+      els.branch,
+      els.division,
+      els.department,
+      els.empClass,
+      els.position,
+      els.empType,
+      els.empStatus,
+      els.project,
+      els.salaryType,
+      els.payrollGroup,
+      els.fromPeriod,
+      els.fromMonth,
+      els.fromYear
+    ].forEach(el => {
+      if (el) {
+        el.addEventListener("change", async () => {
+          if (!isAutoFilling) {
+            await refreshEmployeesAndRun();
+          }
+        });
+      }
+    });
+
+    if (els.employee) {
+      els.employee.addEventListener("input", async () => {
+        const selected = getSelectedEmployee();
+        if (selected) {
+          await autofillEmployeeFieldsFromSelection();
+        } else if (els.payslipName) {
+          els.payslipName.value = "";
+        }
+      });
+
+      els.employee.addEventListener("change", async () => {
+        const selected = getSelectedEmployee();
+        if (selected) {
+          await autofillEmployeeFieldsFromSelection();
+        }
+      });
+    }
+
+    if (els.printBtn) {
+      els.printBtn.addEventListener("click", handlePrint);
+    }
+  }
+
+  async function init() {
+    try {
+      if (els.payslipName) {
+        els.payslipName.readOnly = true;
+      }
+
+      await loadPayrollMeta();
+      await loadFilterOptions();
+      wireEvents();
+      await refreshEmployeesAndRun();
+      resetEmployeeDetails();
+    } catch (err) {
+      console.error("Payslip init error:", err);
+      alert(`Failed to initialize payslip page: ${err.message}`);
+    }
+  }
+
+  init();
+});
+
+
+// ========== PAYROLL JOURNAL ==========
+if (window.location.pathname.includes('payroll_journal.html')) {
+
+  let currentEmployees = [];
+
+  function findSelectedEmployee(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return null;
+
+    return currentEmployees.find(emp => emp.display === input.value) || null;
+  }
+
+  async function loadEmployeeAutocomplete(inputId, listId, keyword) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:12687/api/employee_autocomplete?q=${encodeURIComponent(keyword)}`);
+      const data = await res.json();
+
+      list.innerHTML = "";
+      currentEmployees = data.success ? data.employees : [];
+
+      currentEmployees.forEach(emp => {
+        const opt = document.createElement("option");
+        opt.value = emp.display;
+        list.appendChild(opt);
+      });
+    } catch (err) {
+      console.error("Autocomplete error:", err);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const employeeInput = document.getElementById("summaryEmployee");
+    const employeeName = document.getElementById("summaryEmployeeName");
+
+    if (!employeeInput) return;
+
+    employeeInput.addEventListener("input", async () => {
+      await loadEmployeeAutocomplete(
+        "summaryEmployee",
+        "summaryEmployeeOptions",
+        employeeInput.value
+      );
+
+      const selected = findSelectedEmployee("summaryEmployee");
+      if (employeeName) {
+        employeeName.value = selected ? selected.full_name : "";
+      }
+    });
+
+    employeeInput.addEventListener("change", () => {
+      const selected = findSelectedEmployee("summaryEmployee");
+
+      if (employeeName) {
+        employeeName.value = selected ? selected.full_name : "";
+      }
+
+      if (selected) {
+        console.log("Selected employee:", selected);
+      }
+    });
+  });
+}
+
+
+// ========== PAYROLL COMPUTATION ==========
+if (window.location.pathname.includes('payroll_computation.html')) {
+
+  let currentEmployees = [];
+  let selectedEmployeeId = null;
+
+  function findSelectedEmployee(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return null;
+
+    return currentEmployees.find(emp => emp.display === input.value) || null;
+  }
+
+  async function loadEmployeeAutocomplete(inputId, listId, keyword) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:12687/api/employee_autocomplete?q=${encodeURIComponent(keyword)}`);
+      const data = await res.json();
+
+      list.innerHTML = "";
+      currentEmployees = data.success ? data.employees : [];
+
+      currentEmployees.forEach(emp => {
+        const opt = document.createElement("option");
+        opt.value = emp.display;
+        list.appendChild(opt);
+      });
+    } catch (err) {
+      console.error("Autocomplete error:", err);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const employeeInput = document.getElementById("employee");
+    const employeeName = document.getElementById("employeeName");
+
+    if (!employeeInput) return;
+
+    // 🔹 Typing
+    employeeInput.addEventListener("input", async () => {
+      await loadEmployeeAutocomplete(
+        "employee",
+        "employeeOptions",
+        employeeInput.value
+      );
+
+      const selected = findSelectedEmployee("employee");
+      if (employeeName) {
+        employeeName.value = selected ? selected.full_name : "";
+      }
+    });
+
+    // 🔹 Selecting
+    employeeInput.addEventListener("change", () => {
+      const selected = findSelectedEmployee("employee");
+
+      if (selected) {
+        selectedEmployeeId = selected.employee_id;
+
+        if (employeeName) {
+          employeeName.value = selected.full_name;
+        }
+
+        console.log("✅ Selected Employee ID:", selectedEmployeeId);
+
+        // 👉 THIS IS IMPORTANT FOR NEXT STEP
+        // you will use selectedEmployeeId to:
+        // - load payroll details
+        // - compute salary
+        // - generate payslip
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const employeeInput = document.getElementById("employee");
+
+  if (!employeeInput) return;
+
+  employeeInput.addEventListener("input", async () => {
+    await loadEmployeeAutocomplete("employee", "employeeOptions", employeeInput.value);
+  });
+
+  employeeInput.addEventListener("change", async () => {
+    const selected = findSelectedEmployee("employee");
+
+    if (!selected) return;
+
+    selectedEmployeeId = selected.employee_id;
+    await loadEmployeeDetails(selectedEmployeeId);
+
+    console.log("Selected Employee ID:", selectedEmployeeId);
+  });
+});
+

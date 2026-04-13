@@ -42,7 +42,8 @@
                     <li><a href="payroll_journal.html" class="sub-active">Payroll Journal</a></li>
                     <li><a href="gross_pay.html">Gross Pay</a></li>
                     <li><a href="net_pay.html">Net Pay</a></li>
-                    <li><a href="gross_pay.html">Reconciliation Details</a></li>
+                    <li><a href="payslip.html">Payslip</a></li>
+                    <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
                 </ul>
             </li>
             <li><a href="utilities.html">Utilities</a></li>
@@ -226,10 +227,29 @@
                 <label>Salary Type:</label>
                 <select id="summarySalaryType"><option value=""></option></select>
               </div>
+
+            
               <div class="filter-row">
                 <label>Employee:</label>
-                <select id="summaryEmployee"><option value=""></option></select>
-              </div>
+                <input
+    type="text"
+    id="summaryEmployee"
+    list="summaryEmployeeOptions"
+    placeholder="Type employee code or name"
+    autocomplete="off"
+  >
+  <datalist id="summaryEmployeeOptions"></datalist>
+</div>
+
+<div class="filter-row">
+  <input
+    type="text"
+    id="summaryEmployeeName"
+    style="text-align: center;"
+    readonly
+    placeholder="Selected employee name"
+  >
+</div>
               <div class="filter-row">
                 <input type="text" id="summaryEmployeeName" style="text-align: center;" disabled>
               </div>

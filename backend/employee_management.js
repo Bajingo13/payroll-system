@@ -113,6 +113,107 @@ module.exports = function (app, pool) {
         }
     });
 
+
+    
+
+
+        // ========== EMPLOYEE AUTOCOMPLETE ==========
+app.get("/api/employee_autocomplete", async (req, res) => {
+    const { q = "" } = req.query;
+
+    let conn;
+    try {
+        conn = await pool.getConnection();
+
+        const keyword = `%${String(q).trim()}%`;
+
+        const [rows] = await conn.query(
+            `SELECT 
+                e.employee_id,
+                e.emp_code,
+                e.first_name,
+                e.last_name,
+                CONCAT(e.first_name, ' ', e.last_name) AS full_name
+             FROM employees e
+             WHERE
+                e.emp_code LIKE ?
+                OR e.first_name LIKE ?
+                OR e.last_name LIKE ?
+                OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?
+             ORDER BY e.first_name ASC, e.last_name ASC
+             LIMIT 50`,
+            [keyword, keyword, keyword, keyword]
+        );
+
+        res.json({
+            success: true,
+            employees: rows.map(emp => ({
+                employee_id: emp.employee_id,
+                emp_code: emp.emp_code,
+                first_name: emp.first_name,
+                last_name: emp.last_name,
+                full_name: emp.full_name,
+                display: `${emp.emp_code} - ${emp.full_name}`
+            }))
+        });
+    } catch (err) {
+        console.error("Error fetching employee autocomplete:", err);
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    } finally {
+        if (conn) conn.release();
+    }
+});
+
+
+
+// ===========employee details===========
+app.get("/api/employee_details/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const conn = await pool.getConnection();
+
+    const [rows] = await conn.query(`
+      SELECT 
+        e.employee_id,
+        e.emp_code,
+        e.first_name,
+        e.last_name,
+        ee.company,
+        ee.department,
+        ee.position,
+        ee.employee_type,
+        ea.salary_type
+      FROM employees e
+      LEFT JOIN employee_employment ee ON e.employee_id = ee.employee_id
+      LEFT JOIN employee_accounts ea ON e.employee_id = ea.employee_id
+      WHERE e.employee_id = ?
+    `, [id]);
+
+    conn.release();
+
+    if (rows.length === 0) {
+      return res.json({ success: false });
+    }
+
+    res.json({
+      success: true,
+      employee: rows[0]
+    });
+
+  } catch (err) {
+    console.error("Error fetching employee details:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+
+
+
     // ========== ADD NEW EMPLOYEE ==========
     app.post("/api/add_employee", async (req, res) => {
         const conn = await pool.getConnection();
@@ -904,34 +1005,33 @@ module.exports = function (app, pool) {
         }
     });
 
-    // ========== DELETE EMPLOYEE DETAILS ==========
+     // ========== DELETE EMPLOYEE DETAILS ==========
     app.delete('/api/employee/:empCode', async (req, res) => {
-    const empCode = req.params.empCode;
+      const empCode = req.params.empCode;
 
-    try {
+      try {
         const conn = await pool.getConnection();
 
-        // 1️⃣ Find the employee_id first
-        const [rows] = await conn.query(`SELECT employee_id FROM employees WHERE emp_code = ?`, [empCode]);
-        
+        const [rows] = await conn.query(
+          `SELECT employee_id FROM employees WHERE emp_code = ?`,
+          [empCode]
+        );
+
         if (rows.length === 0) {
-            conn.release();
-            return res.status(404).json({ success: false, message: 'Employee not found' });
+          conn.release();
+          return res.status(404).json({ success: false, message: 'Employee not found' });
         }
 
         const employeeId = rows[0].employee_id;
 
         await conn.beginTransaction();
 
-        // 2️⃣ Delete related records first (foreign key safe)
         await conn.query(`DELETE FROM employee_contacts WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_employment WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_accounts WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_dependents WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_payroll_settings WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_tax_insurance WHERE employee_id = ?`, [employeeId]);
-
-        // 3️⃣ Finally, delete from main employees table
         await conn.query(`DELETE FROM employees WHERE employee_id = ?`, [employeeId]);
 
         await conn.commit();
@@ -939,9 +1039,36 @@ module.exports = function (app, pool) {
         await logAudit(pool, req.body.user_id, req.body.admin_name, `Deleted Employee ${empCode}`, 'Success');
         res.json({ success: true, message: 'Employee deleted successfully' });
         conn.release();
-    } catch (error) {
+      } catch (error) {
         console.error('❌ Error deleting employee:', error);
         res.status(500).json({ success: false, message: 'Server error while deleting employee' });
-    }
+      }
     });
+
+    /* ====== FOR PAYSLIP PRINTING ====== */
+    app.get("/api/employees", async (req, res) => {
+      try {
+        const [rows] = await pool.query(`
+          SELECT 
+            e.employee_id,
+            e.emp_code,
+            e.first_name,
+            e.last_name,
+            ee.company,
+            ee.department,
+            ee.position,
+            e.status
+          FROM employees e
+          LEFT JOIN employee_employment ee ON ee.employee_id = e.employee_id
+          ORDER BY e.last_name, e.first_name
+        `);
+
+        res.json({ success: true, employees: rows });
+      } catch (err) {
+        console.error("Error fetching employees:", err);
+        res.status(500).json({ success: false, message: "Failed to load employees." });
+      }
+    });
+
 };
+

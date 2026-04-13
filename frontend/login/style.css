@@ -20,7 +20,7 @@ body {
 }
 
 #loginForm h2 {
-    background-color: #7c63ef;
+    background-color: #5ab75a;
     color: white;
     padding: 10px;
     border-radius: 8px;
@@ -40,7 +40,7 @@ body {
 }
 
 #loginForm input:focus {
-    border-color: #7c63ef;
+    border-color: #5ab75a;
     outline: none;
     box-shadow: 0 0 5px rgba(124,99,239,0.3);
 }
@@ -57,7 +57,7 @@ body {
 .btnn {
     width: 100%;
     height: 45px;
-    background-color: #7c63ef;
+    background-color: #5ab75a;
     border: none;
     color: white;
     font-size: 16px;
@@ -68,7 +68,7 @@ body {
 }
 
 .btnn:hover {
-    background-color: #5a47d5;
+    background-color: #72ba72;
 }
 
 /* Base Toast Styles */

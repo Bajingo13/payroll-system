@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payslip Preview</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .toolbar {
+      max-width: 900px;
+      margin: 0 auto 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .toolbar button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 6px;
+      background: #5fb857;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .toolbar button:hover {
+      background: #4ea74a;
+    }
+
+    .payslip-sheet {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #fff;
+      border: 2px solid #9ca3ff;
+      border-radius: 12px;
+      padding: 24px 28px;
+      box-sizing: border-box;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .header p {
+      margin: 4px 0;
+      font-size: 14px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 28px;
+      font-size: 15px;
+    }
+
+    .info-grid table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .info-grid td {
+      padding: 3px 0;
+      vertical-align: top;
+    }
+
+    .info-grid td:nth-child(2) {
+      width: 20px;
+      text-align: center;
+    }
+
+    .pay-box {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 22px;
+      font-size: 15px;
+    }
+
+    .pay-box th,
+    .pay-box td {
+      border: 1px solid #555;
+      padding: 6px 8px;
+    }
+
+    .pay-box th {
+      background: #d9d9d9;
+      font-size: 18px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .pay-box td.amount {
+      width: 120px;
+      text-align: right;
+    }
+
+    .total-row td {
+      font-weight: 700;
+    }
+
+    .amount-words {
+      text-align: center;
+      margin: 34px 0 24px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .signature-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      margin: 28px 0 40px;
+      text-align: center;
+    }
+
+    .signature-label {
+      margin-bottom: 50px;
+      font-size: 15px;
+    }
+
+    .signature-line {
+      border-top: 2px solid #777;
+      margin: 0 auto;
+      width: 80%;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+
+      .toolbar {
+        display: none;
+      }
+
+      .payslip-sheet {
+        border: 2px solid #9ca3ff;
+        border-radius: 12px;
+        box-shadow: none;
+        margin: 0;
+      }
+    }
+
+           
+    /* DEFAULT = VERTICAL */
+    .payslip-sheet {
+     max-width: 800px;
+    }
+
+    /* HORIZONTAL MODE */
+    .payslip-sheet.landscape {
+    max-width: 1100px;
+    }
+
+    /* Landscape layout adjustments */
+    .payslip-sheet.landscape .info-grid {
+    grid-template-columns: 1fr 1fr;
+    }
+
+    .payslip-sheet.landscape .pay-box {
+    font-size: 14px;
+    }
+
+    /* PRINT SETTINGS */
+    @media print {
+    @page {
+    size: A4 portrait;
+    }
+
+    .landscape-print {
+    page: landscape;
+    }   
+    }
+
+    .payslip-sheet {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.payslip-sheet.landscape {
+  max-width: 1150px;
+}
+
+.payslip-sheet.landscape .info-grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.payslip-sheet.landscape .pay-box th,
+.payslip-sheet.landscape .pay-box td {
+  padding: 8px 10px;
+  font-size: 16px;
+}
+
+.payslip-sheet.landscape .signature-row {
+  gap: 120px;
+}
+
+.payslip-sheet.landscape .header h1 {
+  font-size: 28px;
+}
+
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  <div class="payslip-sheet">
+    <div class="header">
+      <h1>Payslip</h1>
+      <p id="companyName">Business Set Up & Compliance Inc.</p>
+      <p>Unit 1011, Philippine AXA Life Centre 1286</p>
+      <p>Senator Gil Puyat (Buendia Ave.), corner Tindalao Street</p>
+      <p>Barangay San Antonio</p>
+      <p>1200 Makati City, Philippines</p>
+    </div>
+
+    <div class="info-grid">
+      <table>
+        <tr><td>Date of Joining</td><td>:</td><td id="dateOfJoining">-</td></tr>
+        <tr><td>Pay Period</td><td>:</td><td id="payPeriod">-</td></tr>
+        <tr><td>Worked Days</td><td>:</td><td id="workedDays">-</td></tr>
+      </table>
+
+      <table>
+        <tr><td>Employee name</td><td>:</td><td id="employeeName">-</td></tr>
+        <tr><td>Position</td><td>:</td><td id="designation">-</td></tr>
+        <tr><td>Department</td><td>:</td><td id="department">-</td></tr>
+      </table>
+    </div>
+
+    <table class="pay-box">
+      <tr>
+        <th>Earnings</th>
+        <th style="width: 120px;">Amount</th>
+      </tr>
+      <tbody id="earningsBody"></tbody>
+      <tr class="total-row">
+        <td style="text-align:right;">Total Earnings</td>
+        <td class="amount" id="totalEarnings">0.00</td>
+      </tr>
+    </table>
+
+    <table class="pay-box">
+      <tr>
+        <th>Deductions</th>
+        <th style="width: 120px;">Amount</th>
+      </tr>
+      <tbody id="deductionsBody"></tbody>
+      <tr class="total-row">
+        <td style="text-align:right;">Total Deductions</td>
+        <td class="amount" id="totalDeductions">0.00</td>
+      </tr>
+      <tr class="total-row">
+        <td style="text-align:right;">Net Pay</td>
+        <td class="amount" id="netPay">0.00</td>
+      </tr>
+    </table>
+
+    <div class="amount-words">
+      <div id="netPayNumber">0.00</div>
+      <div id="netPayWords">Zero</div>
+    </div>
+
+    <div class="signature-row">
+      <div>
+        <div class="signature-label">Employer Signature</div>
+        <div class="signature-line"></div>
+      </div>
+      <div>
+        <div class="signature-label">Employee Signature</div>
+        <div class="signature-line"></div>
+      </div>
+    </div>
+
+    <div class="footer-note">This is system generated payslip</div>
+  </div>
+
+
+<script src="js/payslip_print.js"></script>
+</body>
+</html>

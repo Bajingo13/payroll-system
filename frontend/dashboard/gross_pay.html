@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gross Pay | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="dropdown">
+                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li><a href="employee_management.html">Employee File</a></li>
+                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
+                </ul>
+            </li>
+            <li><a href="payroll_computation.html">Payroll Computation</a></li>
+            <li><a href="auditing.html">Auditing</a></li>
+            <li class="dropdown">
+                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+                <ul class="dropdown-menu">
+                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
+                    <li><a href="gross_pay.html" class="sub-active" >Gross Pay</a></li>
+                    <li><a href="net_pay.html">Net Pay</a></li>
+                    <li><a href="payslip.html">Payslip</a></li>
+                    <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
+                </ul>
+            </li>
+            <li><a href="utilities.html">Utilities</a></li>
+            <li><a href="#" id="logout">Logout</a></li>
+        </ul>
+    </nav>
+  </aside>
+
+  <!-- main content for gross pay -->
+    <main class="section" id="gross-pay-section" role="main">
+        <header class="header">
+        <h2>Gross Pay Report</h2>
+        <p>Comprehensive overview of gross earnings for all employees.</p>
+        </header>
+    
+        <section class="table-section">
+        <h3>Gross Pay Summary</h3>
+        <!-- Gross Pay Table -->
+        <table class="data-table

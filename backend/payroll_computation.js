@@ -21,6 +21,9 @@ module.exports = function (app, pool) {
         }
     }
 
+
+
+
     // === EMPLOYEE PAYROLL === 
     // GET payroll periods selectors from the payroll_periods, payroll_groups, payroll_months, payroll_years
     app.get("/api/payroll_periods", async (req, res) => {
@@ -1850,4 +1853,154 @@ module.exports = function (app, pool) {
             if (conn) conn.release();
         }
     });
-}
+
+//--------------payslip run for employee----------------
+    app.get("/api/payslip_latest/:empCode", async (req, res) => {
+        const { empCode } = req.params;
+        let conn;
+
+        try {
+            conn = await pool.getConnection();
+
+            const [rows] = await conn.query(`
+                SELECT
+                    e.employee_id,
+                    e.emp_code,
+                    e.first_name,
+                    e.last_name,
+                    e.middle_name,
+                    e.status,
+
+                    ee.company,
+                    ee.location,
+                    ee.branch,
+                    ee.division,
+                    ee.department,
+                    ee.class,
+                    ee.position,
+                    ee.employee_type,
+                    ee.date_hired,
+
+                    ea.salary_type,
+
+                    eps.payroll_period,
+                    eps.main_computation,
+                    eps.days_in_year_ot,
+                    eps.days_in_year,
+                    eps.days_in_week,
+                    eps.hours_in_day,
+                    eps.week_in_year,
+
+                    ep.payroll_id,
+                    ep.run_id,
+                    ep.payroll_status,
+                    ep.basic_salary,
+                    ep.absence_time,
+                    ep.absence_deduction,
+                    ep.late_time,
+                    ep.late_deduction,
+                    ep.undertime,
+                    ep.undertime_deduction,
+                    ep.overtime,
+                    ep.taxable_allowances,
+                    ep.non_taxable_allowances,
+                    ep.adj_comp,
+                    ep.adj_non_comp,
+                    ep.total_leaves_used,
+                    ep.gsis_employee,
+                    ep.gsis_employer,
+                    ep.gsis_ecc,
+                    ep.sss_employee,
+                    ep.sss_employer,
+                    ep.sss_ecc,
+                    ep.pagibig_employee,
+                    ep.pagibig_employer,
+                    ep.pagibig_ecc,
+                    ep.philhealth_employee,
+                    ep.philhealth_employer,
+                    ep.philhealth_ecc,
+                    ep.tax_withheld,
+                    ep.deductions,
+                    ep.loans,
+                    ep.other_deductions,
+                    ep.premium_adj,
+                    ep.gross_pay,
+                    ep.total_deductions,
+                    ep.net_pay,
+
+                    pr.group_id,
+                    pr.period_id,
+                    pr.month_id,
+                    pr.year_id,
+                    pr.payroll_range,
+                    pr.status AS run_status
+                FROM employees e
+                LEFT JOIN employee_employment ee
+                    ON ee.employee_id = e.employee_id
+                LEFT JOIN employee_accounts ea
+                    ON ea.employee_id = e.employee_id
+                LEFT JOIN employee_payroll_settings eps
+                    ON eps.employee_id = e.employee_id
+                JOIN employee_payroll ep
+                    ON ep.employee_id = e.employee_id
+                LEFT JOIN payroll_runs pr
+                    ON pr.run_id = ep.run_id
+                WHERE e.emp_code = ?
+                ORDER BY ep.run_id DESC
+                LIMIT 1
+            `, [empCode]);
+
+            if (!rows.length) {
+                conn.release();
+                return res.json({
+                    success: false,
+                    message: "No payroll record found for this employee."
+                });
+            }
+
+            const payroll = rows[0];
+
+            const [allowances] = await conn.query(`
+                SELECT
+                    epa.*,
+                    at.allowance_name,
+                    at.is_taxable
+                FROM employee_payroll_allowances epa
+                LEFT JOIN allowance_types at
+                    ON at.allowance_type_id = epa.allowance_type_id
+                WHERE epa.payroll_id = ?
+                ORDER BY epa.emp_payroll_allowance_id ASC
+            `, [payroll.payroll_id]);
+
+            const [deductions] = await conn.query(`
+                SELECT
+                    epd.*,
+                    dt.deduction_name
+                FROM employee_payroll_deductions epd
+                LEFT JOIN deduction_types dt
+                    ON dt.deduction_type_id = epd.deduction_type_id
+                WHERE epd.payroll_id = ?
+                ORDER BY epd.emp_payroll_deduction_id ASC
+            `, [payroll.payroll_id]);
+
+            payroll.allowances = allowances || [];
+            payroll.deductions = deductions || [];
+
+            conn.release();
+
+            return res.json({
+                success: true,
+                data: payroll
+            });
+        } catch (err) {
+            if (conn) conn.release();
+            console.error("Error fetching latest payslip:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Server error"
+            });
+        }
+    });
+
+};
+
