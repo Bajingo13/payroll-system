@@ -8549,6 +8549,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
  async function generatePayslipData() {
   const selectedEmployee = getSelectedEmployee();
+
   if (!selectedEmployee) {
     alert("Please enter a valid Employee ID from the suggestions.");
     return null;
@@ -8564,23 +8565,26 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  // 1) Resolve payroll run first
-  const runQs = new URLSearchParams({
-    group_id: payroll_group,
-    period_id: payroll_period,
-    month_id: month,
-    year_id: year
+  // 1) Get run_id using the backend route that already exists
+  const runIdQs = new URLSearchParams({
+    payroll_group,
+    payroll_period,
+    month,
+    year
   });
 
-  const runRes = await fetchJSON(`${API_BASE}/api/payroll_runs?${runQs.toString()}`);
+  const runLookup = await fetchJSON(
+    `${API_BASE}/api/get_run_id_payroll_computation?${runIdQs.toString()}`
+  );
 
-  const runId = runRes?.run?.run_id;
-  if (!runId) {
-    alert("No payroll run found for the selected period.");
+  if (!runLookup.success || !runLookup.run_id) {
+    alert("No matching payroll run found for the selected period.");
     return null;
   }
 
-  // 2) Load payroll details for this employee in that run
+  const runId = runLookup.run_id;
+
+  // 2) Load payroll details for this employee and run
   const payrollQs = new URLSearchParams({
     run_id: runId,
     periodOption: els.fromPeriod.value
@@ -8595,7 +8599,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  // 3) Load employee master info
+  // 3) Load employee master details
   const employeeData = await fetchJSON(
     `${API_BASE}/api/employee/${encodeURIComponent(selectedEmployee.emp_code)}`
   );
