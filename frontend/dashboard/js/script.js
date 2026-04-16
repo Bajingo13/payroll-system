@@ -8653,7 +8653,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function refreshEmployeesAndRun() {
     try {
-      await resolveRunId();
       await loadEmployees();
     } catch (err) {
       console.error("Refresh employees error:", err);
