@@ -8098,7 +8098,7 @@ function syncDatabase() {
 //====== payslip ======
 
 document.addEventListener("DOMContentLoaded", () => {
-  const API_BASE = "http://127.0.0.1:12687";
+  const API_BASE = "";
 
   const els = {
     company: document.getElementById("summaryCompany"),
@@ -9369,7 +9369,7 @@ async function generatePayslipData() {
 
 //=======payslip=======
 document.addEventListener("DOMContentLoaded", () => {
-  const API_BASE = "http://127.0.0.1:12687";
+  const API_BASE = "";
 
   const els = {
     company: document.getElementById("summaryCompany"),
