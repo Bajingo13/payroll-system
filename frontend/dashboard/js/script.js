@@ -8564,27 +8564,25 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  const runLookupQs = new URLSearchParams({
-    emp_code: selectedEmployee.emp_code,
-    payroll_group,
-    payroll_period,
-    month,
-    year
+  // 1) Resolve payroll run first
+  const runQs = new URLSearchParams({
+    group_id: payroll_group,
+    period_id: payroll_period,
+    month_id: month,
+    year_id: year
   });
 
-  const runLookup = await fetchJSON(
-    `${API_BASE}/api/payslip_run_for_employee?${runLookupQs.toString()}`
-  );
+  const runRes = await fetchJSON(`${API_BASE}/api/payroll_runs?${runQs.toString()}`);
 
-  if (!runLookup.success || !runLookup.data?.run_id) {
-    alert("No payroll run found for this employee in the selected period.");
+  const runId = runRes?.run?.run_id;
+  if (!runId) {
+    alert("No payroll run found for the selected period.");
     return null;
   }
 
-  const employeeRunId = runLookup.data.run_id;
-
+  // 2) Load payroll details for this employee in that run
   const payrollQs = new URLSearchParams({
-    run_id: employeeRunId,
+    run_id: runId,
     periodOption: els.fromPeriod.value
   });
 
@@ -8597,6 +8595,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
+  // 3) Load employee master info
   const employeeData = await fetchJSON(
     `${API_BASE}/api/employee/${encodeURIComponent(selectedEmployee.emp_code)}`
   );
