@@ -25,11 +25,13 @@ function getAllowedOrigins() {
     .map(v => v.trim())
     .filter(Boolean);
 
+  const port = Number(process.env.PORT || 3000);
+
   const defaults = [
-    'http://127.0.0.1:5500',
-    'http://localhost:5500',
     'http://127.0.0.1:3000',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`
   ];
 
   const railwayOrigins = [];
@@ -102,11 +104,11 @@ async function testPool(pool, label, config) {
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query('SELECT DATABASE() AS db, NOW() AS server_time');
-    console.log(`✅ DATABASE CONNECTED USING ${label}`);
-    console.log('✅ DB HOST:', config.host);
-    console.log('✅ DB PORT:', config.port);
-    console.log('✅ ACTIVE DATABASE:', rows[0].db);
-    console.log('✅ SERVER TIME:', rows[0].server_time);
+    console.log(`OK > DATABASE CONNECTED USING ${label}`);
+    console.log('OK > DB HOST:', config.host);
+    console.log('OK > DB PORT:', config.port);
+    console.log('OK > ACTIVE DATABASE:', rows[0].db);
+    console.log('OK > SERVER TIME:', rows[0].server_time);
     return rows[0];
   } finally {
     conn.release();
@@ -129,7 +131,7 @@ async function createWorkingPool() {
       const localPool = await tryConnect('LOCAL MYSQL', localConfig);
       return { pool: localPool, dbMode: 'local-mysql' };
     } catch (localErr) {
-      console.error('❌ LOCAL MYSQL CONNECTION FAILED:', localErr.message);
+      console.error('LOCAL MYSQL CONNECTION FAILED FULL ERROR:', localErr);
     }
 
     // 2) If local fails, try Railway public DB from local machine
@@ -138,7 +140,7 @@ async function createWorkingPool() {
       const primaryPool = await tryConnect('RAILWAY PUBLIC DB FROM LOCAL', primaryConfig);
       return { pool: primaryPool, dbMode: 'railway-public-from-local' };
     } catch (primaryErr) {
-      console.error('❌ RAILWAY PUBLIC DB FROM LOCAL FAILED:', primaryErr.message);
+      console.error('RAILWAY PUBLIC DB FROM LOCAL FAILED FULL ERROR:', primaryErr);
       throw primaryErr;
     }
   }
@@ -149,7 +151,7 @@ async function createWorkingPool() {
     const primaryPool = await tryConnect('PRIMARY CONFIG', primaryConfig);
     return { pool: primaryPool, dbMode: 'primary' };
   } catch (primaryErr) {
-    console.error('❌ PRIMARY DB CONNECTION FAILED:', primaryErr.message);
+    console.error('PRIMARY DB CONNECTION FAILED FULL ERROR:', primaryErr);
   }
 
   const fallbackConfig = buildRailwayInternalFallbackConfig();
@@ -157,7 +159,7 @@ async function createWorkingPool() {
     const fallbackPool = await tryConnect('RAILWAY INTERNAL FALLBACK', fallbackConfig);
     return { pool: fallbackPool, dbMode: 'railway-internal-fallback' };
   } catch (fallbackErr) {
-    console.error('❌ RAILWAY INTERNAL FALLBACK FAILED:', fallbackErr.message);
+    console.error('RAILWAY INTERNAL FALLBACK FAILED FULL ERROR:', fallbackErr);
     throw fallbackErr;
   }
 }
@@ -173,7 +175,6 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Automatically allow Railway app domains
     if (isRailwayAppOrigin(origin)) {
       return callback(null, true);
     }
@@ -193,7 +194,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isRunningOnRailway(), // true on Railway, false locally
+    secure: isRunningOnRailway(),
     httpOnly: true,
     sameSite: 'lax'
   }
@@ -279,9 +280,9 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     const PORT = Number(process.env.PORT || 3000);
 
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`✅ Active DB mode: ${dbMode}`);
-      console.log('✅ db-test route registered');
+      console.log(`OK > Server running on port ${PORT}`);
+      console.log(`OK > Active DB mode: ${dbMode}`);
+      console.log('OK > db-test route registered');
     });
   } catch (err) {
     console.error('❌ APP START FAILED:', err);

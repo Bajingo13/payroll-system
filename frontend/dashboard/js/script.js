@@ -8555,80 +8555,37 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  const payroll_group = getSelectedGroupId();
-  const payroll_period = getSelectedPeriodId();
-  const month = getSelectedMonthId();
-  const year = getSelectedYearId();
+  const empCode = selectedEmployee.emp_code || selectedEmployee.display || els.employee.value;
 
-  if (!payroll_group || !payroll_period || !month || !year) {
-    alert("Please select a valid payroll period first.");
-    return null;
-  }
-
-  // 1) Get run_id using the backend route that already exists
-  const runIdQs = new URLSearchParams({
-    payroll_group,
-    payroll_period,
-    month,
-    year
-  });
-
-  const runLookup = await fetchJSON(
-    `${API_BASE}/api/get_run_id_payroll_computation?${runIdQs.toString()}`
+  const latest = await fetchJSON(
+    `${API_BASE}/api/payslip_latest/${encodeURIComponent(empCode)}`
   );
 
-  if (!runLookup.success || !runLookup.run_id) {
-    alert("No matching payroll run found for the selected period.");
+  if (!latest.success || !latest.data) {
+    alert(latest.message || "No payroll record found for this employee.");
     return null;
   }
 
-  const runId = runLookup.run_id;
-
-  // 2) Load payroll details for this employee and run
-  const payrollQs = new URLSearchParams({
-    run_id: runId,
-    periodOption: els.fromPeriod.value
-  });
-
-  const payrollData = await fetchJSON(
-    `${API_BASE}/api/employee_payroll_settings/${encodeURIComponent(selectedEmployee.employee_id)}?${payrollQs.toString()}`
-  );
-
-  if (!payrollData.success || !payrollData.data) {
-    alert("Payroll details not found for this employee.");
-    return null;
-  }
-
-  // 3) Load employee master details
-  const employeeData = await fetchJSON(
-    `${API_BASE}/api/employee/${encodeURIComponent(selectedEmployee.emp_code)}`
-  );
-
-  if (!employeeData.success || !employeeData.employee) {
-    alert("Employee details not found.");
-    return null;
-  }
-
-  const payroll = payrollData.data;
-  const employee = employeeData.employee;
+  const payroll = latest.data;
 
   const earnings = buildEarnings(payroll, payroll);
   const deductions = buildDeductions(payroll, payroll);
 
-  const workedDays =
-    payroll.days_in_week ||
-    payroll.days_in_year ||
-    "-";
+  const employeeName = [
+    payroll.first_name,
+    payroll.middle_name,
+    payroll.last_name
+  ].filter(Boolean).join(" ");
 
   return {
     orientation: els.orientation?.value || "Vertical",
-    companyName: safeText(employee.company || "Business Set Up & Compliance Inc."),
-    dateOfJoining: safeText(employee.date_hired),
-    payPeriod: getCurrentPeriodLabel(),
-    workedDays: safeText(workedDays),
-    employeeName: safeText(fullName(employee)),
-    designation: safeText(employee.position),
-    department: safeText(employee.department),
+    companyName: safeText(payroll.company || "Business Set Up & Compliance Inc."),
+    dateOfJoining: safeText(payroll.date_hired),
+    payPeriod: safeText(payroll.payroll_range || getCurrentPeriodLabel()),
+    workedDays: safeText(payroll.days_in_week || payroll.days_in_year || "-"),
+    employeeName: safeText(employeeName),
+    designation: safeText(payroll.position),
+    department: safeText(payroll.department),
     earnings,
     deductions,
     totalEarnings: money(
