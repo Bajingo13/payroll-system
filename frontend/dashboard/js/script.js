@@ -8779,7 +8779,8 @@ if (window.location.pathname.includes('payroll_computation.html')) {
     if (!list) return;
 
     try {
-      const res = await fetch(`http://127.0.0.1:12687/api/employee_autocomplete?q=${encodeURIComponent(keyword)}`);
+     //const res = await fetch(`http://127.0.0.1:12687/api/employee_autocomplete?q=${encodeURIComponent(keyword)}`);
+      const res = await fetch(`/api/employee_autocomplete?q=${encodeURIComponent(keyword)}`);
       const data = await res.json();
 
       list.innerHTML = "";
