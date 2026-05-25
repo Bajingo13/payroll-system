@@ -90,13 +90,11 @@
     const data = await fetchJSON('/api/attendance/employees');
     const employees = data.employees || [];
 
-    const employeeFilterOptions = [`<option value=""></option>`]
-      .concat(
-        employees.map(emp => {
-          const display = `${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}`;
-          return `<option value="${escapeHTML(emp.emp_code)}" label="${display}"></option>`;
-        })
-      )
+    const employeeFilterOptions = employees
+      .map(emp => {
+        const display = `${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}`;
+        return `<option value="${escapeHTML(emp.emp_code)}">${display}</option>`;
+      })
       .join('');
     const employeeIdOptions = employees
       .map(emp => `<option value="${emp.employee_id}">${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}</option>`)

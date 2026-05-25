@@ -56,7 +56,7 @@ module.exports = function (app, pool) {
   }
 
   function escapeLikePattern(value) {
-    return String(value || "").replace(/[\\%_]/g, "\\$&");
+    return String(value || "").replace(/[\\%_]/g, match => `\\${match}`);
   }
 
   function deriveMetrics(record, shift) {
