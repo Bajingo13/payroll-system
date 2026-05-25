@@ -232,6 +232,7 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     require('./backend/profile_sidebar')(app, pool);
     require('./backend/dashboard')(app, pool);
     require('./backend/employee_management')(app, pool);
+    require('./backend/attendance')(app, pool);
     require('./backend/payroll_computation')(app, pool);
     require('./backend/payroll_journal')(app, pool);
     require('./backend/audit_logs')(app, pool);
