@@ -67,7 +67,7 @@
     if (timeMatch) {
       const hour24 = Number(timeMatch[1]);
       const minute = timeMatch[2];
-      const hour12 = ((hour24 + 11) % 12) + 1;
+      const hour12 = hour24 % 12 || 12;
       const suffix = hour24 >= 12 ? 'PM' : 'AM';
       return `${String(hour12).padStart(2, '0')}:${minute} ${suffix}`;
     }
@@ -92,7 +92,10 @@
 
     const employeeFilterOptions = [`<option value=""></option>`]
       .concat(
-        employees.map(emp => `<option value="${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}"></option>`)
+        employees.map(emp => {
+          const display = `${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}`;
+          return `<option value="${display}">${display}</option>`;
+        })
       )
       .join('');
     const employeeIdOptions = employees
