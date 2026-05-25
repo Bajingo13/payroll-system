@@ -128,7 +128,7 @@ module.exports = function (app, pool) {
       if (!PRIVILEGED_REGISTRATION_CODE) {
         return res.status(503).json({ success: false, message: "Privileged role registration is not configured" });
       }
-      if (registrationCode !== PRIVILEGED_REGISTRATION_CODE) {
+      if (!timingSafeEqualText(registrationCode, PRIVILEGED_REGISTRATION_CODE)) {
         return res.status(403).json({ success: false, message: "Invalid registration code for selected role" });
       }
     }
