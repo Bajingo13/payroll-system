@@ -300,13 +300,13 @@ module.exports = function (app, pool) {
 
       if (employeeCode) {
         const employeeCodePattern = `%${escapeLikePattern(employeeCode)}%`;
-        conditions.push("(e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)");
+        conditions.push("(LOWER(e.emp_code) LIKE LOWER(?) OR LOWER(CONCAT(e.first_name, ' ', e.last_name)) LIKE LOWER(?))");
         params.push(employeeCodePattern, employeeCodePattern);
       }
 
       if (search) {
         const searchPattern = `%${escapeLikePattern(search)}%`;
-        conditions.push("(e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)");
+        conditions.push("(LOWER(e.emp_code) LIKE LOWER(?) OR LOWER(CONCAT(e.first_name, ' ', e.last_name)) LIKE LOWER(?))");
         params.push(searchPattern, searchPattern);
       }
 
