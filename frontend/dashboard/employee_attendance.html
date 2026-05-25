@@ -93,9 +93,8 @@
 
                 <div class="filter-row">
                     <label for="employeeFilter">Employee</label>
-                    <select id="employeeFilter">
-                        <option value="">All</option>
-                    </select>
+                    <input id="employeeFilter" type="text" list="employeeFilterList" placeholder="Code or name">
+                    <datalist id="employeeFilterList"></datalist>
                 </div>
 
                 <div class="filter-row">
@@ -190,29 +189,31 @@
                 </div>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>Employee ID</th>
-                        <th>Name</th>
-                        <th>Department</th>
-                        <th>Shift</th>
-                        <th>Time In</th>
-                        <th>Break Out</th>
-                        <th>Break In</th>
-                        <th>Time Out</th>
-                        <th>Total Hours</th>
-                        <th>OT Hours</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
+            <div class="attendance-table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Shift</th>
+                            <th>Time In</th>
+                            <th>Break Out</th>
+                            <th>Break In</th>
+                            <th>Time Out</th>
+                            <th>Total Hours</th>
+                            <th>OT Hours</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
 
-                <tbody id="attendanceTableBody">
-                    <tr>
-                        <td colspan="100">Loading attendance records...</td>
-                    </tr>
-                </tbody>
-            </table>
+                    <tbody id="attendanceTableBody">
+                        <tr>
+                            <td colspan="100">Loading attendance records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
             <div class="table-footer">
                 <div style="font-size:13px;color:#555;" id="attendanceEntryInfo">

@@ -777,6 +777,14 @@ select
   padding-right: 10px;
 }
 
+#attendance-section .attendance-table-scroll {
+  overflow-x: auto;
+}
+
+#attendance-section .attendance-table-scroll table {
+  min-width: 1080px;
+}
+
 .payslip-grid {
   display: flex;
   gap: 20px;

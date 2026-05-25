@@ -274,6 +274,7 @@ module.exports = function (app, pool) {
 
     const department = (req.query.department || "").trim();
     const employeeCode = String(req.query.employee_code || "").trim();
+    const normalizedEmployeeFilter = employeeCode.split(" - ")[0].trim();
     const status = (req.query.status || "All").trim();
     const search = (req.query.search || "").trim();
 
@@ -294,9 +295,9 @@ module.exports = function (app, pool) {
         params.push(department);
       }
 
-      if (employeeCode) {
-        conditions.push("e.emp_code = ?");
-        params.push(employeeCode);
+      if (normalizedEmployeeFilter) {
+        conditions.push("(e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)");
+        params.push(`%${normalizedEmployeeFilter}%`, `%${normalizedEmployeeFilter}%`);
       }
 
       if (search) {

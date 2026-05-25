@@ -62,7 +62,17 @@
 
   function formatDateTime(value) {
     if (!value) return '—';
-    const d = new Date(value);
+    const raw = String(value).trim();
+    const timeMatch = raw.match(/(\d{2}):(\d{2})(?::\d{2})?/);
+    if (timeMatch) {
+      const hour24 = Number(timeMatch[1]);
+      const minute = timeMatch[2];
+      const hour12 = ((hour24 + 11) % 12) + 1;
+      const suffix = hour24 >= 12 ? 'PM' : 'AM';
+      return `${String(hour12).padStart(2, '0')}:${minute} ${suffix}`;
+    }
+
+    const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return '—';
     return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
@@ -80,16 +90,19 @@
     const data = await fetchJSON('/api/attendance/employees');
     const employees = data.employees || [];
 
-    const employeeFilterOptions = [`<option value="">All</option>`]
+    const employeeFilterOptions = [`<option value=""></option>`]
       .concat(
-        employees.map(emp => `<option value="${escapeHTML(emp.emp_code)}">${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}</option>`)
+        employees.map(emp => `<option value="${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}"></option>`)
       )
       .join('');
     const employeeIdOptions = employees
       .map(emp => `<option value="${emp.employee_id}">${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}</option>`)
       .join('');
 
-    el.employee.innerHTML = employeeFilterOptions;
+    const employeeFilterList = document.getElementById('employeeFilterList');
+    if (employeeFilterList) {
+      employeeFilterList.innerHTML = employeeFilterOptions;
+    }
     el.clockEmployeeId.innerHTML = `<option value="">Select employee</option>${employeeIdOptions}`;
     el.shiftEmployeeId.innerHTML = `<option value="">Select employee</option>${employeeIdOptions}`;
 
@@ -275,6 +288,18 @@
   function attachEvents() {
     el.applyFilters.addEventListener('click', refreshAll);
     el.entrySize.addEventListener('change', renderRecords);
+    el.search.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        refreshAll();
+      }
+    });
+    el.employee.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        refreshAll();
+      }
+    });
 
     document.querySelectorAll('.clock-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
