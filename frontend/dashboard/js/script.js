@@ -102,8 +102,9 @@ async function loadRecentLogs() {
       tbody.innerHTML = "";
 
       const phLocale = { timeZone: 'Asia/Manila' };
+      const MS_PER_DAY = 24 * 60 * 60 * 1000;
       const todayStr = new Date().toLocaleDateString('en-US', phLocale);
-      const yesterdayStr = new Date(Date.now() - 86400000).toLocaleDateString('en-US', phLocale);
+      const yesterdayStr = new Date(Date.now() - MS_PER_DAY).toLocaleDateString('en-US', phLocale);
 
       const recentLogs = logs.filter(log => {
         const logDate = new Date(log.log_time + 'Z').toLocaleDateString('en-US', phLocale);
