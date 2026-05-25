@@ -74,15 +74,18 @@
     const data = await fetchJSON('/api/attendance/employees');
     const employees = data.employees || [];
 
-    const employeeOptions = [`<option value="">All</option>`]
+    const employeeFilterOptions = [`<option value="">All</option>`]
       .concat(
-        employees.map(emp => `<option value="${emp.employee_id}">${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}</option>`)
+        employees.map(emp => `<option value="${escapeHTML(emp.emp_code)}">${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}</option>`)
       )
       .join('');
+    const employeeIdOptions = employees
+      .map(emp => `<option value="${emp.employee_id}">${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}</option>`)
+      .join('');
 
-    el.employee.innerHTML = employeeOptions;
-    el.clockEmployeeId.innerHTML = `<option value="">Select employee</option>${employeeOptions.replace('<option value="">All</option>', '')}`;
-    el.shiftEmployeeId.innerHTML = `<option value="">Select employee</option>${employeeOptions.replace('<option value="">All</option>', '')}`;
+    el.employee.innerHTML = employeeFilterOptions;
+    el.clockEmployeeId.innerHTML = `<option value="">Select employee</option>${employeeIdOptions}`;
+    el.shiftEmployeeId.innerHTML = `<option value="">Select employee</option>${employeeIdOptions}`;
 
     const deptOptions = ['<option value="">All</option>']
       .concat((data.departments || []).map(dept => `<option value="${escapeHTML(dept)}">${escapeHTML(dept)}</option>`))
@@ -164,7 +167,7 @@
       date: el.date.value,
       status: el.status.value || 'All',
       department: el.department.value || '',
-      employee_id: el.employee.value || '',
+      employee_code: el.employee.value || '',
       search: el.search.value || ''
     });
 
@@ -200,7 +203,7 @@
 
     const payload = {
       employee_id: Number(el.shiftEmployeeId.value || 0),
-      shift_date: document.getElementById('shiftDate').value,
+      shift_date: el.shiftDate.value,
       shift_name: document.getElementById('shiftName').value,
       start_time: document.getElementById('shiftStartTime').value,
       end_time: document.getElementById('shiftEndTime').value,
@@ -299,7 +302,7 @@
       attachEvents();
 
       setInterval(() => {
-        refreshAll().catch(() => {});
+        refreshAll().catch(err => console.error('Auto-refresh failed:', err));
       }, 30000);
     } catch (err) {
       notify(err.message || 'Failed to initialize attendance page', 'error');

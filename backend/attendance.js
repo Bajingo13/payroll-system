@@ -54,7 +54,7 @@ module.exports = function (app, pool) {
       scheduledMinutes = Math.max(0, scheduledMinutes);
     }
 
-    const overtimeHours = roundHours(workedMinutes - scheduledMinutes);
+    const overtimeHours = roundHours(Math.max(0, workedMinutes - scheduledMinutes));
 
     let status = "Absent";
     if (record.time_in && record.time_out) {
@@ -259,7 +259,7 @@ module.exports = function (app, pool) {
     }
 
     const department = (req.query.department || "").trim();
-    const employeeId = Number(req.query.employee_id || 0);
+    const employeeCode = String(req.query.employee_code || "").trim();
     const status = (req.query.status || "All").trim();
     const search = (req.query.search || "").trim();
 
@@ -272,21 +272,21 @@ module.exports = function (app, pool) {
     try {
       conn = await pool.getConnection();
 
-      const params = [attendanceDate];
-      let whereSql = "WHERE e.status = 'Active'";
+      const params = [attendanceDate, attendanceDate];
+      const conditions = ["e.status = 'Active'"];
 
       if (department) {
-        whereSql += " AND ee.department = ?";
+        conditions.push("ee.department = ?");
         params.push(department);
       }
 
-      if (employeeId > 0) {
-        whereSql += " AND e.employee_id = ?";
-        params.push(employeeId);
+      if (employeeCode) {
+        conditions.push("e.emp_code = ?");
+        params.push(employeeCode);
       }
 
       if (search) {
-        whereSql += " AND (e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)";
+        conditions.push("(e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)");
         params.push(`%${search}%`, `%${search}%`);
       }
 
@@ -317,9 +317,9 @@ module.exports = function (app, pool) {
          LEFT JOIN employee_shift_schedules ss
                 ON ss.employee_id = e.employee_id
                AND ss.shift_date = ?
-         ${whereSql}
+         WHERE ${conditions.join(" AND ")}
          ORDER BY e.first_name ASC, e.last_name ASC`,
-        [attendanceDate, ...params]
+        params
       );
 
       const filtered = status === "All" ? rows : rows.filter(r => r.status === status);
@@ -355,12 +355,35 @@ module.exports = function (app, pool) {
       await getOrCreateAttendanceRecord(conn, employeeId, attendanceDate, source);
 
       const timeValue = new Date().toISOString().slice(0, 19).replace("T", " ");
-      await conn.query(
-        `UPDATE employee_attendance_records
-         SET ${ACTION_TO_COLUMN[action]} = ?, source = ?
-         WHERE employee_id = ? AND attendance_date = ?`,
-        [timeValue, source, employeeId, attendanceDate]
-      );
+      if (action === "time_in") {
+        await conn.query(
+          `UPDATE employee_attendance_records
+           SET time_in = ?, source = ?
+           WHERE employee_id = ? AND attendance_date = ?`,
+          [timeValue, source, employeeId, attendanceDate]
+        );
+      } else if (action === "break_out") {
+        await conn.query(
+          `UPDATE employee_attendance_records
+           SET break_out = ?, source = ?
+           WHERE employee_id = ? AND attendance_date = ?`,
+          [timeValue, source, employeeId, attendanceDate]
+        );
+      } else if (action === "break_in") {
+        await conn.query(
+          `UPDATE employee_attendance_records
+           SET break_in = ?, source = ?
+           WHERE employee_id = ? AND attendance_date = ?`,
+          [timeValue, source, employeeId, attendanceDate]
+        );
+      } else {
+        await conn.query(
+          `UPDATE employee_attendance_records
+           SET time_out = ?, source = ?
+           WHERE employee_id = ? AND attendance_date = ?`,
+          [timeValue, source, employeeId, attendanceDate]
+        );
+      }
 
       const updated = await recalculateAttendance(conn, employeeId, attendanceDate);
       res.json({ success: true, attendance: updated });
@@ -415,7 +438,6 @@ module.exports = function (app, pool) {
   app.get("/api/shifts", async (req, res) => {
     const dateFrom = String(req.query.date_from || "");
     const dateTo = String(req.query.date_to || "");
-    const employeeId = Number(req.query.employee_id || 0);
 
     if (!isValidDate(dateFrom) || !isValidDate(dateTo)) {
       return res.status(400).json({ success: false, message: "date_from and date_to are required (YYYY-MM-DD)" });
@@ -426,11 +448,6 @@ module.exports = function (app, pool) {
       conn = await pool.getConnection();
 
       const params = [dateFrom, dateTo];
-      let whereSql = "WHERE ss.shift_date BETWEEN ? AND ?";
-      if (employeeId > 0) {
-        whereSql += " AND ss.employee_id = ?";
-        params.push(employeeId);
-      }
 
       const [rows] = await conn.query(
         `SELECT ss.shift_id, ss.employee_id, ss.shift_date, ss.shift_name,
@@ -439,7 +456,7 @@ module.exports = function (app, pool) {
                 e.emp_code, CONCAT(e.first_name, ' ', e.last_name) AS full_name
          FROM employee_shift_schedules ss
          JOIN employees e ON e.employee_id = ss.employee_id
-         ${whereSql}
+         WHERE ss.shift_date BETWEEN ? AND ?
          ORDER BY ss.shift_date ASC, e.first_name ASC, e.last_name ASC`,
         params
       );
