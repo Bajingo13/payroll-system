@@ -101,16 +101,12 @@ async function loadRecentLogs() {
       const tbody = document.querySelector(".table-section table tbody");
       tbody.innerHTML = "";
 
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-
-
-      const todayStr= today.toLocaleDateString('en-US');
-      const yesterdayStr= yesterday.toLocaleDateString('en-US');
+      const phLocale = { timeZone: 'Asia/Manila' };
+      const todayStr = new Date().toLocaleDateString('en-US', phLocale);
+      const yesterdayStr = new Date(Date.now() - 86400000).toLocaleDateString('en-US', phLocale);
 
       const recentLogs = logs.filter(log => {
-        const logDate = new Date(log.log_time).toLocaleDateString('en-US');
+        const logDate = new Date(log.log_time + 'Z').toLocaleDateString('en-US', phLocale);
         return logDate === todayStr || logDate === yesterdayStr;
       });
 
@@ -118,9 +114,10 @@ async function loadRecentLogs() {
 
       if (recentLogs.length > 0) { 
         recentLogs.forEach(log => {
-          const formattedDate = new Date(log.log_time).toLocaleString("en-US", {
+          const formattedDate = new Date(log.log_time + 'Z').toLocaleString("en-US", {
             month:  "short", day: "2-digit", year: "numeric",
-            hour: "2-digit", minute: "2-digit", hour12: true  
+            hour: "2-digit", minute: "2-digit", hour12: true,
+            timeZone: 'Asia/Manila'
           });
 
       tbody.innerHTML += `
@@ -604,7 +601,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const sssEEShare = document.getElementById("sssEEShare");
     const sssERShare = document.getElementById("sssERShare");
     const sssECC = document.getElementById("sssECC");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !sss.checked;
 
     sssStartDate.disabled = disabled;
@@ -641,7 +638,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const pagibigEEShare = document.getElementById("pagibigEEShare");
     const pagibigERShare = document.getElementById("pagibigERShare");
     const pagibigECC = document.getElementById("pagibigECC");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !pagibig.checked;
 
     pagibigStartDate.disabled = disabled;
@@ -676,7 +673,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const philhealthComputation = document.getElementById("philhealthComputation");
     const philhealthEEShare = document.getElementById("philhealthEEShare");
     const philhealthERShare = document.getElementById("philhealthERShare");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !philhealth.checked;
 
     philhealthStartDate.disabled = disabled;
@@ -710,7 +707,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const withholdingTaxEEShare = document.getElementById("withholdingTaxEEShare");
     const withholdingTaxECC = document.getElementById("withholdingTaxECC");
     const annualize = document.getElementById("annualize");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !withholdingTax.checked;
 
     withholdingTaxStartDate.disabled = disabled;
@@ -1698,7 +1695,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     payrollPeriodSelect?.addEventListener("change", populatePeriodSelects);
     
     // Setting default values for some input fields
-    const currentDate = new Date().toISOString().split("T")[0];
+    const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     document.getElementById("country").value = "Philippines";
 
     document.getElementById("trainingDate").value = currentDate;
@@ -8011,9 +8008,10 @@ if (window.location.pathname === '/dashboard/auditing.html') {
 
           // Render the logs
           data.logs.forEach(log => {
-              const formattedDate = new Date(log.log_time).toLocaleString("en-US", {
+              const formattedDate = new Date(log.log_time + 'Z').toLocaleString("en-US", {
                   month: "short", day: "2-digit", year: "numeric",
-                  hour: "2-digit", minute: "2-digit", hour12: true
+                  hour: "2-digit", minute: "2-digit", hour12: true,
+                  timeZone: 'Asia/Manila'
               });
 
               tbody.innerHTML += `

@@ -18,10 +18,7 @@ module.exports = function (app, pool) {
                     admin_name,
                     action,
                     status,
-                    DATE_FORMAT(
-                        DATE_ADD(log_time, INTERVAL 8 HOUR),
-                        '%Y-%m-%d %H:%i:%s'
-                    ) AS log_time
+                    log_time
                  FROM audit_logs
                  ORDER BY log_time DESC
                  LIMIT ? OFFSET ?`,
