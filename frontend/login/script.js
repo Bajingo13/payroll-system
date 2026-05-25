@@ -16,6 +16,17 @@ function showToast(msg, type = "success") {
   setTimeout(() => toast.classList.remove("show"), 3000);
 }
 
+// ========== TAB SWITCHER ==========
+function showTab(tab) {
+  const isLogin = tab === "login";
+  document.getElementById("loginForm").classList.toggle("hidden", !isLogin);
+  document.getElementById("registerForm").classList.toggle("hidden", isLogin);
+  document.getElementById("tabLogin").classList.toggle("active", isLogin);
+  document.getElementById("tabRegister").classList.toggle("active", !isLogin);
+  document.getElementById("loginMessage").textContent = "";
+  document.getElementById("registerMessage").textContent = "";
+}
+
 // ========== LOGIN ==========
 async function login() {
   const username = document.getElementById("username").value.trim();
@@ -78,4 +89,64 @@ async function login() {
 document.getElementById("loginForm").addEventListener("submit", function (e) {
   e.preventDefault();
   login();
+});
+
+// ========== REGISTER ==========
+async function register() {
+  const fullName = document.getElementById("reg_fullname").value.trim();
+  const username = document.getElementById("reg_username").value.trim();
+  const password = document.getElementById("reg_password").value;
+  const confirm = document.getElementById("reg_confirm").value;
+  const msgDiv = document.getElementById("registerMessage");
+
+  msgDiv.textContent = "";
+  msgDiv.style.color = "red";
+
+  if (!fullName || !username || !password || !confirm) {
+    msgDiv.textContent = "Please fill in all fields.";
+    return;
+  }
+
+  if (password.length < 8) {
+    msgDiv.textContent = "Password must be at least 8 characters.";
+    return;
+  }
+
+  if (password !== confirm) {
+    msgDiv.textContent = "Passwords do not match.";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, full_name: fullName })
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (data.success) {
+      showToast("Account created! You can now log in.", "success");
+      msgDiv.style.color = "green";
+      msgDiv.textContent = "Registration successful! Switching to login...";
+      document.getElementById("registerForm").reset();
+      setTimeout(() => showTab("login"), 1500);
+    } else {
+      msgDiv.textContent = data.message || "Registration failed. Please try again.";
+    }
+  } catch (err) {
+    console.error("Register fetch error:", err);
+    msgDiv.textContent = "Unable to connect to the server. Please try again later.";
+  }
+}
+
+document.getElementById("registerForm").addEventListener("submit", function (e) {
+  e.preventDefault();
+  register();
 });
