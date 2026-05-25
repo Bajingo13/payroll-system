@@ -26,7 +26,10 @@ if (logout) {
   logout.addEventListener('click', (event) => {
     event.preventDefault();
     showToast('You have been logged out!');
-    window.location.href = "../../login/login.html";
+    fetch('/api/logout', { method: 'POST', credentials: 'include' })
+      .finally(() => {
+        window.location.href = '/login/login.html';
+      });
   });
 }
 

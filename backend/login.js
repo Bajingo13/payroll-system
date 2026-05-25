@@ -23,6 +23,8 @@ module.exports = function (app, pool) {
                 [user.user_id, user.full_name, 'Admin Login', 'Success']
             );
 
+            req.session.user = { user_id: user.user_id, full_name: user.full_name };
+
             res.json({ success: true, user_id: user.user_id, full_name: user.full_name });
         } else {
             res.json({ success: false, message: "Invalid username or password" });
