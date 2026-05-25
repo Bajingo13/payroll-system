@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const { promisify } = require('util');
 
 const scryptAsync = promisify(crypto.scrypt);
@@ -8,32 +9,37 @@ module.exports = function (app, pool) {
   const ALLOWED_ROLES = ['System Administrator', 'HR', 'Employee'];
   const PRIVILEGED_ROLES = ['System Administrator', 'HR'];
   const PRIVILEGED_REGISTRATION_CODE = String(process.env.PRIVILEGED_REGISTRATION_CODE || '').trim();
-  const rateLimitStore = new Map();
+  const loginRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: req => req.ip,
+    message: { success: false, message: 'Too many login attempts. Please try again later.' }
+  });
+  const registerRateLimit = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: req => req.ip,
+    message: { success: false, message: 'Too many registration attempts. Please try again later.' }
+  });
 
-  function createRateLimiter(windowMs, maxRequests) {
-    return (req, res, next) => {
-      const key = `${req.ip || req.headers['x-forwarded-for'] || 'unknown'}:${req.path}`;
-      const now = Date.now();
-      const bucket = rateLimitStore.get(key);
-
-      if (!bucket || (now - bucket.windowStart) >= windowMs) {
-        rateLimitStore.set(key, { windowStart: now, count: 1 });
-        return next();
-      }
-
-      if (bucket.count >= maxRequests) {
-        return res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
-      }
-
-      bucket.count += 1;
-      return next();
-    };
+  function timingSafeEqualText(left, right) {
+    const a = Buffer.from(String(left || ''), 'utf8');
+    const b = Buffer.from(String(right || ''), 'utf8');
+    const length = Math.max(a.length, b.length);
+    const paddedA = Buffer.alloc(length);
+    const paddedB = Buffer.alloc(length);
+    a.copy(paddedA);
+    b.copy(paddedB);
+    const isSame = crypto.timingSafeEqual(paddedA, paddedB);
+    return isSame && a.length === b.length;
   }
 
-  const loginRateLimit = createRateLimiter(15 * 60 * 1000, 20);
-  const registerRateLimit = createRateLimiter(60 * 60 * 1000, 10);
-
   async function hashPassword(password) {
+    // Stored format: scrypt$salt$hash (salt = 16 random bytes, derived key = 64 bytes).
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = await scryptAsync(password, salt, 64);
     return `scrypt$${salt}$${hash.toString('hex')}`;
@@ -44,7 +50,7 @@ module.exports = function (app, pool) {
     if (!stored) return false;
 
     if (!stored.startsWith('scrypt$')) {
-        return inputPassword === stored;
+        return timingSafeEqualText(inputPassword, stored);
     }
 
     const parts = stored.split('$');
@@ -119,7 +125,10 @@ module.exports = function (app, pool) {
     }
 
     if (PRIVILEGED_ROLES.includes(role)) {
-      if (!PRIVILEGED_REGISTRATION_CODE || registrationCode !== PRIVILEGED_REGISTRATION_CODE) {
+      if (!PRIVILEGED_REGISTRATION_CODE) {
+        return res.status(503).json({ success: false, message: "Privileged role registration is not configured" });
+      }
+      if (registrationCode !== PRIVILEGED_REGISTRATION_CODE) {
         return res.status(403).json({ success: false, message: "Invalid registration code for selected role" });
       }
     }

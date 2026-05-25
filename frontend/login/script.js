@@ -95,6 +95,10 @@ async function register() {
     msgDiv.textContent = "Password must be at least 8 characters.";
     return;
   }
+  if (!/(?=.*[A-Za-z])(?=.*\d).{8,}/.test(password)) {
+    msgDiv.textContent = "Password must contain at least one letter and one number.";
+    return;
+  }
 
   try {
     const res = await fetch("/api/register", {
