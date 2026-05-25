@@ -51,10 +51,15 @@ module.exports = function (app, pool) {
 
     // REGISTER
     app.post('/api/register', async (req, res) => {
-        const { username, password, full_name } = req.body;
+        const { username, password, full_name, role } = req.body;
 
-        if (!username || !password || !full_name) {
+        if (!username || !password || !full_name || !role) {
             return res.status(400).json({ success: false, message: "All fields are required." });
+        }
+
+        const ALLOWED_ROLES = ['Employee', 'HR', 'Admin'];
+        if (!ALLOWED_ROLES.includes(role)) {
+            return res.status(400).json({ success: false, message: "Invalid role selected." });
         }
 
         if (password.length < 8) {
@@ -78,8 +83,8 @@ module.exports = function (app, pool) {
                 const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
                 await conn.execute(
-                    'INSERT INTO users (username, password, full_name) VALUES (?, ?, ?)',
-                    [username, hashedPassword, full_name]
+                    'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)',
+                    [username, hashedPassword, full_name, role]
                 );
 
                 res.json({ success: true });

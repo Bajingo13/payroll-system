@@ -97,12 +97,13 @@ async function register() {
   const username = document.getElementById("reg_username").value.trim();
   const password = document.getElementById("reg_password").value;
   const confirm = document.getElementById("reg_confirm").value;
+  const role = document.getElementById("reg_role").value;
   const msgDiv = document.getElementById("registerMessage");
 
   msgDiv.textContent = "";
   msgDiv.style.color = "red";
 
-  if (!fullName || !username || !password || !confirm) {
+  if (!fullName || !username || !password || !confirm || !role) {
     msgDiv.textContent = "Please fill in all fields.";
     return;
   }
@@ -121,7 +122,7 @@ async function register() {
     const res = await fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, full_name: fullName })
+      body: JSON.stringify({ username, password, full_name: fullName, role })
     });
 
     let data = {};
