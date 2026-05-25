@@ -27,6 +27,7 @@ const registerMessage = document.getElementById("registerMessage");
 const showRegisterBtn = document.getElementById("showRegisterBtn");
 const showLoginBtn = document.getElementById("showLoginBtn");
 const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+const MIN_PASSWORD_LENGTH = 6;
 
 function setPanel(mode) {
   const showLogin = mode === "login";
@@ -129,8 +130,8 @@ async function register() {
     return;
   }
 
-  if (password.length < 6) {
-    setMessage(registerMessage, "Password must be at least 6 characters long.");
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    setMessage(registerMessage, `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`);
     return;
   }
 
@@ -162,11 +163,10 @@ async function register() {
       setMessage(registerMessage, data.message || "Unable to register right now.");
       return;
     }
-
     showToast("Registration successful! Please log in.", "success");
     registerForm.reset();
-    document.getElementById("username").value = username;
-    document.getElementById("password").value = "";
+    registerForm.reset();
+    loginForm.reset();
     setPanel("login");
     setMessage(loginMessage, "Registration successful! Please log in.", "#1f7a1f");
   } catch (err) {

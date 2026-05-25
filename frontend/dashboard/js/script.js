@@ -39,7 +39,7 @@ if (logout) {
       sessionStorage.removeItem("role");
       showToast('You have been logged out!');
       setTimeout(() => {
-        window.location.href = "../../login/login.html";
+        window.location.href = "/login/login.html";
       }, 400);
     }
   });

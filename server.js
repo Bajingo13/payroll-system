@@ -196,9 +196,42 @@ app.use(session({
   cookie: {
     secure: isRunningOnRailway(),
     httpOnly: true,
-    sameSite: 'lax'
+    sameSite: 'strict'
   }
 }));
+
+app.use((req, res, next) => {
+  const protectedMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+  if (!protectedMethods.has(req.method) || !req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  const sourceHeader = req.get('origin') || req.get('referer');
+  if (!sourceHeader) {
+    return res.status(403).json({
+      success: false,
+      message: 'Blocked cross-site request.'
+    });
+  }
+
+  try {
+    const sourceUrl = new URL(sourceHeader);
+    if (sourceUrl.host !== req.get('host')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Blocked cross-site request.'
+      });
+    }
+  } catch {
+    return res.status(403).json({
+      success: false,
+      message: 'Blocked cross-site request.'
+    });
+  }
+
+  return next();
+});
 
 // ----------- AUTH MIDDLEWARE -----------
 function isAuthenticated(req, res, next) {

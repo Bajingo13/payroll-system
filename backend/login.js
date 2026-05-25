@@ -3,6 +3,51 @@ const { promisify } = require("util");
 
 const scryptAsync = promisify(crypto.scrypt);
 const ALLOWED_ROLES = new Set(["Employee", "Admin", "HR"]);
+const MIN_USERNAME_LENGTH = 3;
+const MIN_PASSWORD_LENGTH = 6;
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 5;
+const loginAttemptStore = new Map();
+
+function getRateLimitKey(req, identifier) {
+  const forwardedFor = String(req.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  const ipAddress = forwardedFor || req.ip || req.socket?.remoteAddress || "unknown";
+  return `${ipAddress}:${String(identifier || "").trim().toLowerCase()}`;
+}
+
+function clearExpiredLoginAttempts(now = Date.now()) {
+  for (const [key, value] of loginAttemptStore.entries()) {
+    if (value.expiresAt <= now) {
+      loginAttemptStore.delete(key);
+    }
+  }
+}
+
+function isRateLimited(key, now = Date.now()) {
+  clearExpiredLoginAttempts(now);
+  const entry = loginAttemptStore.get(key);
+  return !!entry && entry.count >= MAX_LOGIN_ATTEMPTS && entry.expiresAt > now;
+}
+
+function recordFailedAttempt(key, now = Date.now()) {
+  const entry = loginAttemptStore.get(key);
+
+  if (!entry || entry.expiresAt <= now) {
+    loginAttemptStore.set(key, {
+      count: 1,
+      expiresAt: now + LOGIN_RATE_LIMIT_WINDOW_MS
+    });
+    return;
+  }
+
+  entry.count += 1;
+}
+
+function clearFailedAttempts(key) {
+  loginAttemptStore.delete(key);
+}
 
 function normalizeRole(role) {
   const value = String(role || "").trim().toLowerCase();
@@ -25,7 +70,16 @@ async function verifyPassword(password, storedPassword) {
   if (!storedPassword) return false;
 
   if (!storedPassword.includes(":")) {
-    return storedPassword === password;
+    // Backward compatibility: support legacy plaintext passwords until those
+    // records are migrated to hashed values.
+    const storedBuffer = Buffer.from(String(storedPassword), "utf8");
+    const passwordBuffer = Buffer.from(String(password), "utf8");
+
+    if (storedBuffer.length !== passwordBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(storedBuffer, passwordBuffer);
   }
 
   const [salt, storedHash] = storedPassword.split(":");
@@ -46,11 +100,19 @@ module.exports = function (app, pool) {
   app.post("/api/login", async (req, res) => {
     const identifier = String(req.body.username || req.body.identifier || "").trim();
     const password = String(req.body.password || "");
+    const rateLimitKey = getRateLimitKey(req, identifier);
 
     if (!identifier || !password) {
       return res.status(400).json({
         success: false,
         message: "Please enter both username and password."
+      });
+    }
+
+    if (isRateLimited(rateLimitKey)) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed login attempts. Please try again later."
       });
     }
 
@@ -64,14 +126,27 @@ module.exports = function (app, pool) {
       );
 
       if (rows.length === 0) {
+        recordFailedAttempt(rateLimitKey);
         return res.json({ success: false, message: "Invalid username or password." });
       }
 
       const user = rows[0];
+      const isLegacyPassword = !String(user.password || "").includes(":");
       const isValidPassword = await verifyPassword(password, user.password);
 
       if (!isValidPassword) {
+        recordFailedAttempt(rateLimitKey);
         return res.json({ success: false, message: "Invalid username or password." });
+      }
+
+      clearFailedAttempts(rateLimitKey);
+
+      if (isLegacyPassword) {
+        const upgradedPassword = await hashPassword(password);
+        await conn.execute(
+          "UPDATE users SET password = ? WHERE user_id = ?",
+          [upgradedPassword, user.user_id]
+        );
       }
 
       req.session.user = {
@@ -112,17 +187,17 @@ module.exports = function (app, pool) {
       });
     }
 
-    if (username.length < 3) {
+    if (username.length < MIN_USERNAME_LENGTH) {
       return res.status(400).json({
         success: false,
-        message: "Username must be at least 3 characters long."
+        message: `Username must be at least ${MIN_USERNAME_LENGTH} characters long.`
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < MIN_PASSWORD_LENGTH) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 6 characters long."
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`
       });
     }
 

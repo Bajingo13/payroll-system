@@ -27,7 +27,7 @@ body {
     border-radius: 30px;
     box-shadow: 0 30px 80px rgba(15, 23, 42, 0.12);
     display: grid;
-    grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1fr);
+    grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
     overflow: hidden;
 }
 
