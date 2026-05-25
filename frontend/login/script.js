@@ -80,6 +80,7 @@ async function register() {
   const username = document.getElementById("registerUsername").value.trim();
   const password = document.getElementById("registerPassword").value;
   const role = document.getElementById("registerRole").value;
+  const registration_code = document.getElementById("registrationCode").value;
   const msgDiv = document.getElementById("registerMessage");
 
   msgDiv.textContent = "";
@@ -90,6 +91,11 @@ async function register() {
     return;
   }
 
+  if (password.length < 8) {
+    msgDiv.textContent = "Password must be at least 8 characters.";
+    return;
+  }
+
   try {
     const res = await fetch("/api/register", {
       method: "POST",
@@ -97,7 +103,7 @@ async function register() {
         "Content-Type": "application/json"
       },
       credentials: "include",
-      body: JSON.stringify({ full_name, username, password, role })
+      body: JSON.stringify({ full_name, username, password, role, registration_code })
     });
 
     let data = {};

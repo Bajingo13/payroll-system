@@ -1,10 +1,45 @@
+const crypto = require('crypto');
+const { promisify } = require('util');
+
+const scryptAsync = promisify(crypto.scrypt);
+
 // ----------- USER AUTHENTICATION -----------
 module.exports = function (app, pool) {
     const ALLOWED_ROLES = ['System Administrator', 'HR', 'Employee'];
+    const PRIVILEGED_ROLES = ['System Administrator', 'HR'];
+    const PRIVILEGED_REGISTRATION_CODE = String(process.env.PRIVILEGED_REGISTRATION_CODE || '').trim();
+
+    async function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = await scryptAsync(password, salt, 64);
+    return `scrypt$${salt}$${hash.toString('hex')}`;
+    }
+
+    async function verifyPassword(inputPassword, storedPassword) {
+    const stored = String(storedPassword || '');
+    if (!stored) return false;
+
+    if (!stored.startsWith('scrypt$')) {
+        return inputPassword === stored;
+    }
+
+    const parts = stored.split('$');
+    if (parts.length !== 3) return false;
+
+    const [, salt, storedHashHex] = parts;
+    if (!salt || !storedHashHex) return false;
+
+    const inputHash = await scryptAsync(inputPassword, salt, 64);
+    const storedHash = Buffer.from(storedHashHex, 'hex');
+    if (storedHash.length !== inputHash.length) return false;
+
+    return crypto.timingSafeEqual(inputHash, storedHash);
+    }
 
     // LOGIN
     app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
     if (!username || !password)
         return res.json({ success: false });
 
@@ -12,12 +47,13 @@ module.exports = function (app, pool) {
         const conn = await pool.getConnection();
         try {
         const [rows] = await conn.execute(
-            'SELECT * FROM users WHERE username = ? AND password = ?',
-            [username, password]
+            'SELECT * FROM users WHERE username = ? LIMIT 1',
+            [username]
         );
-        
-        if (rows.length > 0) {
-            const user = rows[0];
+        const user = rows[0];
+        const isValidPassword = user ? await verifyPassword(password, user.password) : false;
+
+        if (isValidPassword) {
 
             // Insert login event in audit_logs
             await conn.execute(
@@ -43,6 +79,7 @@ module.exports = function (app, pool) {
     const password = String(req.body.password || '');
     const fullName = String(req.body.full_name || '').trim();
     const role = String(req.body.role || '').trim();
+    const registrationCode = String(req.body.registration_code || '').trim();
 
     if (!username || !password || !fullName || !role) {
         return res.status(400).json({ success: false, message: "All fields are required" });
@@ -52,8 +89,14 @@ module.exports = function (app, pool) {
         return res.status(400).json({ success: false, message: "Invalid role selected" });
     }
 
-    if (password.length < 4) {
-        return res.status(400).json({ success: false, message: "Password must be at least 4 characters" });
+    if (password.length < 8) {
+        return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+    }
+
+    if (PRIVILEGED_ROLES.includes(role)) {
+        if (!PRIVILEGED_REGISTRATION_CODE || registrationCode !== PRIVILEGED_REGISTRATION_CODE) {
+        return res.status(403).json({ success: false, message: "Invalid registration code for selected role" });
+        }
     }
 
     let conn;
@@ -69,9 +112,10 @@ module.exports = function (app, pool) {
         return res.status(409).json({ success: false, message: "Username already exists" });
         }
 
+        const hashedPassword = await hashPassword(password);
         const [result] = await conn.execute(
         'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)',
-        [username, password, fullName, role]
+        [username, hashedPassword, fullName, role]
         );
 
         await conn.execute(
