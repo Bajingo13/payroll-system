@@ -1,27 +1,110 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Form Login</title>
+    <title>Payroll System | Authentication</title>
     <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
+    <main class="auth-shell">
+        <section class="auth-card" aria-label="Authentication">
+            <div class="auth-brand">
+                <span class="brand-badge">PS</span>
+                <p class="eyebrow">Secure access</p>
+                <h1>Payroll System</h1>
+                <p class="brand-copy">Sign in to manage payroll operations, employee records, and HR workflows in one place.</p>
+            </div>
 
-<!-- Login Form -->
-<form id="loginForm">
-    <h2>Login Here</h2>
-    <input type="text" id="username" placeholder="Enter Email Here" required>
-    <input type="password" id="password" placeholder="Enter password Here" required>
-    <button type="submit" class="btnn" id="loginBtn">Login</button>
-    <div id="loginMessage"></div>
-</form>
+            <div class="auth-panel" id="loginPanel">
+                <div class="panel-header">
+                    <p class="panel-kicker">Welcome back</p>
+                    <h2>Login to your account</h2>
+                    <p>Use your username and password to continue.</p>
+                </div>
 
-<!-- Toast Containers -->
-<div id="toastSuccess" class="toastSuccess"></div>
-<div id="toastWarning" class="toastWarning"></div>
-<div id="toastError" class="toastError"></div>
+                <form id="loginForm" novalidate>
+                    <label class="field-label" for="username">Email or Username</label>
+                    <div class="input-shell">
+                        <input type="text" id="username" placeholder="Enter your username" autocomplete="username" required>
+                    </div>
 
-<script src="script.js"></script>
+                    <label class="field-label" for="password">Password</label>
+                    <div class="input-shell password-shell">
+                        <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password" required>
+                        <button type="button" class="password-toggle" data-toggle-password="password">Show</button>
+                    </div>
+
+                    <div class="utility-row">
+                        <button type="button" class="link-button" id="forgotPasswordBtn">Forgot Password?</button>
+                    </div>
+
+                    <button type="submit" class="btnn" id="loginBtn">Login</button>
+                    <div id="loginMessage" class="form-message" aria-live="polite"></div>
+                </form>
+
+                <div class="panel-footer">
+                    <span>Don’t have an account?</span>
+                    <button type="button" class="footer-action" id="showRegisterBtn">Create an Account</button>
+                </div>
+            </div>
+
+            <div class="auth-panel is-hidden" id="registerPanel">
+                <div class="panel-header">
+                    <p class="panel-kicker">Get started</p>
+                    <h2>Create your account</h2>
+                    <p>Register as Employee, Admin, or HR to access the payroll system.</p>
+                </div>
+
+                <form id="registerForm" novalidate>
+                    <label class="field-label" for="registerFullName">Full Name</label>
+                    <div class="input-shell">
+                        <input type="text" id="registerFullName" placeholder="Enter your full name" autocomplete="name" required>
+                    </div>
+
+                    <label class="field-label" for="registerUsername">Username</label>
+                    <div class="input-shell">
+                        <input type="text" id="registerUsername" placeholder="Choose a username" autocomplete="username" required>
+                    </div>
+
+                    <label class="field-label" for="registerRole">Role</label>
+                    <div class="input-shell">
+                        <select id="registerRole" required>
+                            <option value="">Select your role</option>
+                            <option value="Employee">Employee</option>
+                            <option value="Admin">Admin</option>
+                            <option value="HR">HR</option>
+                        </select>
+                    </div>
+
+                    <label class="field-label" for="registerPassword">Password</label>
+                    <div class="input-shell password-shell">
+                        <input type="password" id="registerPassword" placeholder="Create a password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-toggle-password="registerPassword">Show</button>
+                    </div>
+
+                    <label class="field-label" for="registerConfirmPassword">Confirm Password</label>
+                    <div class="input-shell password-shell">
+                        <input type="password" id="registerConfirmPassword" placeholder="Confirm your password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-toggle-password="registerConfirmPassword">Show</button>
+                    </div>
+
+                    <button type="submit" class="btnn" id="registerBtn">Create Account</button>
+                    <div id="registerMessage" class="form-message" aria-live="polite"></div>
+                </form>
+
+                <div class="panel-footer">
+                    <span>Already have an account?</span>
+                    <button type="button" class="footer-action" id="showLoginBtn">Back to Login</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toastSuccess" class="toastSuccess"></div>
+    <div id="toastWarning" class="toastWarning"></div>
+    <div id="toastError" class="toastError"></div>
+
+    <script src="script.js"></script>
 </body>
 </html>

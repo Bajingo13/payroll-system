@@ -23,10 +23,25 @@ function showToast(msg, type = "success") {
 // ========== LOGOUT ==========
 const logout = document.getElementById('logout');
 if (logout) {
-  logout.addEventListener('click', (event) => {
+  logout.addEventListener('click', async (event) => {
     event.preventDefault();
-    showToast('You have been logged out!');
-    window.location.href = "../../login/login.html";
+
+    try {
+      await fetch("/api/logout", {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      sessionStorage.removeItem("user_id");
+      sessionStorage.removeItem("admin_name");
+      sessionStorage.removeItem("role");
+      showToast('You have been logged out!');
+      setTimeout(() => {
+        window.location.href = "../../login/login.html";
+      }, 400);
+    }
   });
 }
 
@@ -8859,4 +8874,3 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Selected Employee ID:", selectedEmployeeId);
   });
 });
-
