@@ -208,6 +208,9 @@ function isAuthenticated(req, res, next) {
   return res.redirect('/login/login.html');
 }
 
+// Protect all dashboard pages
+app.use('/dashboard', isAuthenticated);
+
 // ----------- STATIC ASSETS -----------
 app.use(express.static(path.join(__dirname, 'frontend')));
 
@@ -236,6 +239,17 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     require('./backend/payroll_journal')(app, pool);
     require('./backend/audit_logs')(app, pool);
     require('./backend/utilities')(app, pool);
+
+    // ----------- LOGOUT -----------
+    app.post('/api/logout', (req, res) => {
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('Session destroy error:', err);
+          return res.status(500).json({ success: false, message: 'Logout failed' });
+        }
+        res.json({ success: true });
+      });
+    });
 
     app.get('/api/db-test', async (req, res) => {
       let conn;
