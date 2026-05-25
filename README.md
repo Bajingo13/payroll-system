@@ -16,5 +16,5 @@ New tables used by this feature:
 
 Reference SQL definitions are available in:
 
-- `/home/runner/work/payroll-system/payroll-system/Database/payroll_system_employee_shift_schedules.sql`
-- `/home/runner/work/payroll-system/payroll-system/Database/payroll_system_employee_attendance_records.sql`
+- `Database/payroll_system_employee_shift_schedules.sql`
+- `Database/payroll_system_employee_attendance_records.sql`

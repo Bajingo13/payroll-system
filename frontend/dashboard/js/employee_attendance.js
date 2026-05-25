@@ -26,6 +26,12 @@
   };
 
   let allRecords = [];
+  const statusClassMap = {
+    Present: 'present',
+    Late: 'pending',
+    Incomplete: 'pending',
+    Absent: 'rest'
+  };
 
   function notify(message, type = 'info') {
     if (typeof window.showToast === 'function') {
@@ -110,7 +116,7 @@
 
     const limit = Number(el.entrySize.value || 10);
     const rows = allRecords.slice(0, limit).map(row => {
-      const statusClass = row.status === 'Present' ? 'present' : row.status === 'Late' ? 'pending' : row.status === 'Incomplete' ? 'pending' : 'rest';
+      const statusClass = statusClassMap[row.status] || 'rest';
       return `
         <tr>
           <td>${escapeHTML(row.emp_code)}</td>

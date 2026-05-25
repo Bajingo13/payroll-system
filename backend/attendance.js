@@ -5,6 +5,20 @@ module.exports = function (app, pool) {
     break_in: "break_in",
     time_out: "time_out"
   };
+  const ACTION_UPDATE_QUERY = {
+    time_in: `UPDATE employee_attendance_records
+              SET time_in = ?, source = ?
+              WHERE employee_id = ? AND attendance_date = ?`,
+    break_out: `UPDATE employee_attendance_records
+                SET break_out = ?, source = ?
+                WHERE employee_id = ? AND attendance_date = ?`,
+    break_in: `UPDATE employee_attendance_records
+               SET break_in = ?, source = ?
+               WHERE employee_id = ? AND attendance_date = ?`,
+    time_out: `UPDATE employee_attendance_records
+               SET time_out = ?, source = ?
+               WHERE employee_id = ? AND attendance_date = ?`
+  };
 
   function isValidDate(dateStr) {
     return /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ""));
@@ -355,35 +369,7 @@ module.exports = function (app, pool) {
       await getOrCreateAttendanceRecord(conn, employeeId, attendanceDate, source);
 
       const timeValue = new Date().toISOString().slice(0, 19).replace("T", " ");
-      if (action === "time_in") {
-        await conn.query(
-          `UPDATE employee_attendance_records
-           SET time_in = ?, source = ?
-           WHERE employee_id = ? AND attendance_date = ?`,
-          [timeValue, source, employeeId, attendanceDate]
-        );
-      } else if (action === "break_out") {
-        await conn.query(
-          `UPDATE employee_attendance_records
-           SET break_out = ?, source = ?
-           WHERE employee_id = ? AND attendance_date = ?`,
-          [timeValue, source, employeeId, attendanceDate]
-        );
-      } else if (action === "break_in") {
-        await conn.query(
-          `UPDATE employee_attendance_records
-           SET break_in = ?, source = ?
-           WHERE employee_id = ? AND attendance_date = ?`,
-          [timeValue, source, employeeId, attendanceDate]
-        );
-      } else {
-        await conn.query(
-          `UPDATE employee_attendance_records
-           SET time_out = ?, source = ?
-           WHERE employee_id = ? AND attendance_date = ?`,
-          [timeValue, source, employeeId, attendanceDate]
-        );
-      }
+      await conn.query(ACTION_UPDATE_QUERY[action], [timeValue, source, employeeId, attendanceDate]);
 
       const updated = await recalculateAttendance(conn, employeeId, attendanceDate);
       res.json({ success: true, attendance: updated });
