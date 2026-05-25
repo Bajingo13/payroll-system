@@ -14,7 +14,6 @@
 <body>
 <div class="container">
 
-    <!-- SIDEBAR -->
     <aside class="sidebar">
         <div class="profile">
             <div class="logo">Business Set Up & Compliance Inc.</div>
@@ -50,161 +49,200 @@
     </nav>
     </aside>
 
-    <!-- MAIN CONTENT -->
-    <section class="section">
-
-        <!-- Header -->
+    <section class="section" id="attendance-section">
         <header class="header">
             <h2>Employee Attendance</h2>
-            <p>Timekeeping and attendance monitoring for payroll processing.</p>
+            <p>Real-time attendance with overtime tracking and shift scheduling.</p>
         </header>
 
-        <!-- Summary Cards -->
         <section class="summary">
             <div class="card">
                 <span>Date</span>
-                <strong>—</strong>
+                <strong id="summaryDate">—</strong>
                 <small>Selected Day</small>
             </div>
             <div class="card">
                 <span>Total Employees</span>
-                <strong>—</strong>
+                <strong id="summaryTotalEmployees">0</strong>
             </div>
             <div class="card">
                 <span>Present</span>
-                <strong>—</strong>
+                <strong id="summaryPresent">0</strong>
             </div>
             <div class="card">
                 <span>Late / Incomplete</span>
-                <strong>—</strong>
+                <strong id="summaryLateIncomplete">0</strong>
             </div>
         </section>
 
-        <!-- Attendance Filters -->
         <div class="setup-container">
-
             <div class="filter-panel">
                 <h4>Attendance Filters</h4>
 
                 <div class="filter-row">
-                    <label>Date</label>
-                    <select>
-                        <option selected>Today</option>
-                        <option>Yesterday</option>
-                        <option>This Week</option>
-                        <option>This Month</option>
+                    <label for="attendanceDateFilter">Date</label>
+                    <input id="attendanceDateFilter" type="date">
+                </div>
+
+                <div class="filter-row">
+                    <label for="departmentFilter">Department</label>
+                    <select id="departmentFilter">
+                        <option value="">All</option>
                     </select>
                 </div>
 
                 <div class="filter-row">
-                    <label>Department</label>
-                    <select>
-                        <option selected>All</option>
+                    <label for="employeeFilter">Employee</label>
+                    <input id="employeeFilter" type="text" list="employeeFilterList" placeholder="Code or name">
+                    <datalist id="employeeFilterList"></datalist>
+                </div>
+
+                <div class="filter-row">
+                    <label for="statusFilter">Status</label>
+                    <select id="statusFilter">
+                        <option value="All" selected>All</option>
+                        <option value="Present">Present</option>
+                        <option value="Late">Late</option>
+                        <option value="Absent">Absent</option>
+                        <option value="Incomplete">Incomplete</option>
                     </select>
                 </div>
 
                 <div class="filter-row">
-                    <label>Employee</label>
-                    <select>
-                        <option selected>All</option>
-                    </select>
+                    <label for="attendanceSearch">Search</label>
+                    <input type="text" id="attendanceSearch" placeholder="Employee code or name">
                 </div>
 
-                <div class="filter-row">
-                    <label>Status</label>
-                    <select>
-                        <option selected>All</option>
-                        <option>Present</option>
-                        <option>Late</option>
-                        <option>Absent</option>
-                        <option>Incomplete</option>
-                    </select>
-                </div>
+                <button type="button" class="btn" id="applyAttendanceFilters">Apply Filters</button>
             </div>
 
+            <div class="filter-panel">
+                <h4>Real-Time Clock</h4>
+
+                <div class="filter-row">
+                    <label for="clockEmployeeId">Employee</label>
+                    <select id="clockEmployeeId"></select>
+                </div>
+
+                <div class="attendance-actions">
+                    <button type="button" class="btn clock-btn" data-clock-action="time_in">Clock In</button>
+                    <button type="button" class="btn clock-btn" data-clock-action="break_out">Break Out</button>
+                    <button type="button" class="btn clock-btn" data-clock-action="break_in">Break In</button>
+                    <button type="button" class="btn clock-btn" data-clock-action="time_out">Clock Out</button>
+                </div>
+
+                <small id="clockStatusMessage" style="margin-top:8px;display:block;color:#666;">Select an employee to log attendance.</small>
+            </div>
+
+            <div class="filter-panel">
+                <h4>Shift Scheduling</h4>
+                <form id="shiftForm">
+                    <div class="filter-row">
+                        <label for="shiftEmployeeId">Employee</label>
+                        <select id="shiftEmployeeId" required></select>
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftDate">Shift Date</label>
+                        <input id="shiftDate" type="date" required>
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftName">Shift Name</label>
+                        <input id="shiftName" type="text" value="Regular Shift">
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftStartTime">Start Time</label>
+                        <input id="shiftStartTime" type="time" value="08:00">
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftEndTime">End Time</label>
+                        <input id="shiftEndTime" type="time" value="17:00">
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftBreakStart">Break Start</label>
+                        <input id="shiftBreakStart" type="time" value="12:00">
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftBreakEnd">Break End</label>
+                        <input id="shiftBreakEnd" type="time" value="13:00">
+                    </div>
+                    <div class="filter-row">
+                        <label for="shiftRestDay">Rest Day</label>
+                        <input id="shiftRestDay" type="checkbox">
+                    </div>
+                    <button type="submit" class="btn">Save Shift</button>
+                </form>
+            </div>
         </div>
 
-        <!-- Attendance Table -->
         <section class="table-section" style="margin-top:20px;">
             <h3>Attendance Records</h3>
 
             <div class="table-header">
                 <div class="dropdown-container">
                     <label>Show</label>
-                    <select>
+                    <select id="attendanceEntrySize">
                         <option>10</option>
                         <option>25</option>
                         <option>50</option>
                     </select>
                     <label>entries</label>
-
-                    <div class="right-actions">
-                        <label>Search:
-                            <input type="text" placeholder="Search employee...">
-                        </label>
-                    </div>
                 </div>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>Employee ID</th>
-                        <th>Name</th>
-                        <th>Department</th>
-                        <th>Time In</th>
-                        <th>Break Out</th>
-                        <th>Break In</th>
-                        <th>Time Out</th>
-                        <th>Total Hours</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
+            <div class="attendance-table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Shift</th>
+                            <th>Time In</th>
+                            <th>Break Out</th>
+                            <th>Break In</th>
+                            <th>Time Out</th>
+                            <th>Total Hours</th>
+                            <th>OT Hours</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
 
-                <tbody>
-                    <tr>
-                        <td>EMP-001</td>
-                        <td>Juan Dela Cruz</td>
-                        <td>Accounting</td>
-                        <td>08:03 AM</td>
-                        <td>12:00 PM</td>
-                        <td>01:00 PM</td>
-                        <td>05:05 PM</td>
-                        <td>8.0</td>
-                        <td class="status present">Present</td>
-                        <td><button class="btn small-btn">View</button></td>
-                    </tr>
-
-                    <tr>
-                        <td>EMP-002</td>
-                        <td>Maria Santos</td>
-                        <td>HR</td>
-                        <td>08:25 AM</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td class="status pending">Incomplete</td>
-                        <td><button class="btn small-btn">View</button></td>
-                    </tr>
-                </tbody>
-            </table>
+                    <tbody id="attendanceTableBody">
+                        <tr>
+                            <td colspan="100">Loading attendance records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
             <div class="table-footer">
-                <div style="font-size:13px;color:#555;">
-                    Showing X to Y of Z entries
-                </div>
-
-                <div class="pagination">
-                    <button>Previous</button>
-                    <div class="activepage">1</div>
-                    <button>Next</button>
+                <div style="font-size:13px;color:#555;" id="attendanceEntryInfo">
+                    Showing 0 entries
                 </div>
             </div>
         </section>
 
+        <section class="table-section" style="margin-top:20px;">
+            <h3>Scheduled Shifts (7-Day View)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Employee</th>
+                        <th>Shift</th>
+                        <th>Schedule</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="shiftTableBody">
+                    <tr><td colspan="5">No shift records yet.</td></tr>
+                </tbody>
+            </table>
+        </section>
     </section>
 </div>
+
+<script src="js/script.js"></script>
+<script src="js/employee_attendance.js"></script>
 </body>
 </html>

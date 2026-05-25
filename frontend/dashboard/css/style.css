@@ -418,6 +418,13 @@ body {
   font-size: 12px;
 }
 
+.attendance-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* Profile Header */
 .profile-header {
   position: relative;
@@ -732,6 +739,50 @@ select
 
 .setup-container {
     display: flex; gap: 30px; flex-wrap: wrap;
+}
+
+/* Employee Attendance page readability/layout refinements */
+#attendance-section .setup-container {
+  gap: 20px;
+}
+
+#attendance-section .filter-panel {
+  min-width: 380px;
+  padding: 18px;
+}
+
+#attendance-section .filter-panel .filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+#attendance-section .filter-panel .filter-row label {
+  flex: 0 0 120px;
+  margin-top: 0;
+}
+
+#attendance-section .filter-panel .filter-row input,
+#attendance-section .filter-panel .filter-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+#attendance-section .filter-panel select {
+  margin-left: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+#attendance-section .attendance-table-scroll {
+  overflow-x: auto;
+}
+
+#attendance-section .attendance-table-scroll table {
+  min-width: 1080px;
 }
 
 .payslip-grid {
