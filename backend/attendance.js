@@ -401,7 +401,7 @@ module.exports = function (app, pool) {
 
       await conn.query(
         `UPDATE employee_attendance_records
-         SET overtime_hours = ?, status = CASE WHEN status = 'Absent' THEN 'Present' ELSE status END
+         SET overtime_hours = ?
          WHERE employee_id = ? AND attendance_date = ?`,
         [overtimeHours, employeeId, attendanceDate]
       );
@@ -499,6 +499,7 @@ module.exports = function (app, pool) {
           employeeId,
           shiftDate,
           shiftName,
+          // Use 00:00:00 as sentinel for rest days because start_time/end_time are NOT NULL columns.
           isRestDay ? "00:00:00" : (startTime.length === 5 ? `${startTime}:00` : startTime),
           isRestDay ? "00:00:00" : (endTime.length === 5 ? `${endTime}:00` : endTime),
           breakStart ? (breakStart.length === 5 ? `${breakStart}:00` : breakStart) : null,

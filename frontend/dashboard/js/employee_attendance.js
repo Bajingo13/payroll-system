@@ -109,7 +109,7 @@
 
   function renderRecords() {
     if (!Array.isArray(allRecords) || allRecords.length === 0) {
-      el.tbody.innerHTML = '<tr><td colspan="11">No attendance records found.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="100">No attendance records found.</td></tr>';
       el.entryInfo.textContent = 'Showing 0 entries';
       return;
     }
@@ -199,7 +199,7 @@
       })
     });
 
-    el.clockStatusMessage.textContent = `${action.replace('_', ' ')} logged at ${new Date().toLocaleTimeString()}`;
+    el.clockStatusMessage.textContent = `${action.replace(/_/g, ' ')} logged at ${new Date().toLocaleTimeString()}`;
     await loadRecords();
     await loadSummary();
   }
