@@ -94,7 +94,7 @@
       .concat(
         employees.map(emp => {
           const display = `${escapeHTML(emp.emp_code)} - ${escapeHTML(emp.full_name)}`;
-          return `<option value="${display}">${display}</option>`;
+          return `<option value="${escapeHTML(emp.emp_code)}" label="${display}"></option>`;
         })
       )
       .join('');

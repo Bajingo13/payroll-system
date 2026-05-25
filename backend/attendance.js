@@ -55,6 +55,10 @@ module.exports = function (app, pool) {
     return Math.round((Math.max(0, minutes) / 60) * 100) / 100;
   }
 
+  function escapeLikePattern(value) {
+    return String(value || "").replace(/[\\%_]/g, "\\$&");
+  }
+
   function deriveMetrics(record, shift) {
     const workedMinutes = minutesBetween(record.time_in, record.time_out) - minutesBetween(record.break_out, record.break_in);
     const workedHours = roundHours(workedMinutes);
@@ -274,7 +278,6 @@ module.exports = function (app, pool) {
 
     const department = (req.query.department || "").trim();
     const employeeCode = String(req.query.employee_code || "").trim();
-    const extractedEmployeeFilter = employeeCode.split(" - ")[0].trim();
     const status = (req.query.status || "All").trim();
     const search = (req.query.search || "").trim();
 
@@ -295,14 +298,16 @@ module.exports = function (app, pool) {
         params.push(department);
       }
 
-      if (extractedEmployeeFilter) {
+      if (employeeCode) {
+        const employeeCodePattern = `%${escapeLikePattern(employeeCode)}%`;
         conditions.push("(e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)");
-        params.push(`%${extractedEmployeeFilter}%`, `%${extractedEmployeeFilter}%`);
+        params.push(employeeCodePattern, employeeCodePattern);
       }
 
       if (search) {
+        const searchPattern = `%${escapeLikePattern(search)}%`;
         conditions.push("(e.emp_code LIKE ? OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?)");
-        params.push(`%${search}%`, `%${search}%`);
+        params.push(searchPattern, searchPattern);
       }
 
       const [rows] = await conn.query(
