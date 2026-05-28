@@ -3,59 +3,97 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utilities | Payroll System</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <title>Net Pay | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
-
-<body>
+<body data-report-type="net-pay">
 <div class="container">
-  <!-- Sidebar -->
   <aside class="sidebar">
     <div class="profile">
-      <div class="logo">Business Set Up & Compliance Inc.</div>
+      <div class="logo">Astreablue Intelligence Inc.</div>
       <h3></h3>
       <p></p>
     </div>
-
     <nav>
-        <ul>
-            <li><a href="dashboard.html">Dashboard</a></li>
-            <li class="dropdown">
-                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
-                <ul class="dropdown-menu">
-                    <li><a href="employee_management.html">Employee File</a></li>
-                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
-                </ul>
-            </li>
-            <li><a href="payroll_computation.html">Payroll Computation</a></li>
-            <li><a href="auditing.html">Auditing</a></li>
-            <li class="dropdown">
-                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
-                <ul class="dropdown-menu">
-                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
-                    <li><a href="gross_pay.html">Gross Pay</a></li>
-                    <li><a href="net_pay.html" class="sub-active">Net Pay</a></li>
-                    <li><a href="payslip.html">Payslip</a></li>
-                    <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
-                </ul>
-            </li>
-            <li><a href="utilities.html">Utilities</a></li>
-            <li><a href="#" id="logout">Logout</a></li>
-        </ul>
+      <ul>
+        <li><a href="dashboard.html">Dashboard</a></li>
+        <li class="dropdown">
+          <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+          <ul class="dropdown-menu">
+            <li><a href="employee_management.html">Employee File</a></li>
+            <li><a href="employee_attendance.html">Employee Attendance</a></li>
+          </ul>
+        </li>
+        <li><a href="payroll_computation.html">Payroll Computation</a></li>
+        <li><a href="auditing.html">Auditing</a></li>
+        <li class="dropdown open">
+          <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+          <ul class="dropdown-menu">
+            <li><a href="payroll_journal.html">Payroll Journal</a></li>
+            <li><a href="gross_pay.html">Gross Pay</a></li>
+            <li><a href="net_pay.html" class="sub-active">Net Pay</a></li>
+            <li><a href="payslip.html">Payslip</a></li>
+            <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
+          </ul>
+        </li>
+        <li><a href="utilities.html">Utilities</a></li>
+        <li><a href="#" id="logout">Logout</a></li>
+      </ul>
     </nav>
   </aside>
 
-  <!-- main content for net pay-->
-    <main class="section" id="net-pay-section" role="main">
-        <header class="header">
-        <h2>Net Pay Report</h2>
-        <p>Detailed breakdown of net earnings after deductions for all employees.</p>
-        </header>
-    
-        <section class="table-section">
-        <h3>Net Pay Summary</h3>
-        <!-- Net Pay Table -->  
-        <h1> PAGE NOT AVAILABLE </h1>
+  <main class="section">
+    <header class="header">
+      <h2 id="reportTitle">Net Pay Report</h2>
+      <p id="reportSubtitle">Review net earnings after deductions for all employees.</p>
+    </header>
+
+    <section class="table-section">
+      <h3>Filters</h3>
+      <div class="report-filter-grid">
+        <label>Payroll Group <select id="payroll_group"></select></label>
+        <label>Period <select id="payroll_period"></select></label>
+        <label>Month <select id="month"></select></label>
+        <label>Year <select id="year"></select></label>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="btn" id="generateReportBtn">Generate</button>
+      </div>
+      <p class="message" id="reportMessage"></p>
+    </section>
+
+    <section class="summary react-summary">
+      <div class="card"><span>Run ID</span><strong id="runIdValue">-</strong></div>
+      <div class="card"><span>Employees</span><strong id="rowCountValue">0</strong></div>
+      <div class="card"><span id="totalLabel">Total Net</span><strong id="totalValue">0.00</strong></div>
+    </section>
+
+    <section class="table-section">
+      <h3 id="tableTitle">Net Pay Rows</h3>
+      <div class="table-scroll">
+        <table id="reportTable">
+          <thead>
+            <tr>
+              <th>Employee ID</th>
+              <th>Name</th>
+              <th>Company</th>
+              <th>Department</th>
+              <th id="valueColumnTitle">Net Pay</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="5">No report rows yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/script.js?v=nav-20260528"></script>
+<script src="js/gross_net_reports.js?v=nav-20260528"></script>
+</body>
+</html>

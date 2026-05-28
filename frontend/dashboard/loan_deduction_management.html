@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loan Deduction Module | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+  <link rel="stylesheet" href="css/employee_dashboard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Astreablue Intelligence Inc.</div>
+      <h3 id="empName">Employee</h3>
+      <p id="empRole">Employee</p>
+    </div>
+    <nav>
+      <ul>
+        <li><a href="dashboard.html">Dashboard</a></li>
+        <li><a href="loan_deduction_management.html">Loan Deduction Module</a></li>
+        <li><a href="employee_management.html">Employee File</a></li>
+        <li><a href="payroll_computation.html">Payroll Computation</a></li>
+        <li><a href="auditing.html">Auditing</a></li>
+        <li><a href="#" id="logout">Logout</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="section">
+    <header class="header">
+      <h2>Loan Deduction Module</h2>
+      <p>Track company loans, SSS loans, Pag-IBIG loans, balances, amortization, and payroll deductions.</p>
+    </header>
+
+    <section class="summary">
+      <div class="card"><span>Total Loans</span><strong id="loanTotalLoans">0</strong></div>
+      <div class="card"><span>Active Loans</span><strong id="loanActiveLoans">0</strong></div>
+      <div class="card"><span>Total Balance</span><strong id="loanTotalBalance">PHP 0.00</strong></div>
+      <div class="card"><span>Estimated Amortization</span><strong id="loanTotalAmortization">PHP 0.00</strong></div>
+    </section>
+
+    <section class="table-section">
+      <h3>Loan Filters</h3>
+      <div class="report-filter-grid">
+        <label>Employee ID<input type="number" id="loanEmployeeFilter" placeholder="Optional"></label>
+        <label>Category
+          <select id="loanCategoryFilter">
+            <option value="">All Categories</option>
+            <option value="Company Loan">Company Loan</option>
+            <option value="SSS Loan">SSS Loan</option>
+            <option value="Pag-IBIG Loan">Pag-IBIG Loan</option>
+          </select>
+        </label>
+        <label>Status
+          <select id="loanStatusFilter">
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Paid">Paid</option>
+            <option value="Closed">Closed</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </label>
+        <div class="toolbar"><button type="button" class="btn" id="refreshLoanBtn">Refresh</button></div>
+      </div>
+    </section>
+
+    <section class="table-section">
+      <h3>Create Loan</h3>
+      <div class="report-filter-grid">
+        <label>Employee ID<input type="number" id="loanEmployeeId"></label>
+        <label>Category
+          <select id="loanCategory">
+            <option>Company Loan</option>
+            <option>SSS Loan</option>
+            <option>Pag-IBIG Loan</option>
+          </select>
+        </label>
+        <label>Reference<input type="text" id="loanReference" placeholder="Loan number or memo"></label>
+        <label>Principal Amount<input type="number" id="loanPrincipal" step="0.01" min="0"></label>
+        <label>Terms<input type="number" id="loanTerms" value="12" min="1"></label>
+        <label>Amortization<input type="number" id="loanAmortization" step="0.01" min="0" placeholder="Optional"></label>
+        <label>Frequency
+          <select id="loanFrequency">
+            <option>Monthly</option>
+            <option>Weekly</option>
+            <option>First Half</option>
+            <option>Second Half</option>
+            <option>Both</option>
+          </select>
+        </label>
+        <label>Start Date<input type="date" id="loanStartDate"></label>
+        <label>End Date<input type="date" id="loanEndDate"></label>
+        <label style="grid-column: 1 / -1;">Notes<textarea id="loanNotes" rows="3" placeholder="Optional notes"></textarea></label>
+        <div class="toolbar" style="grid-column: 1 / -1;"><button type="button" class="btn" id="createLoanBtn">Create Loan</button></div>
+      </div>
+      <p id="loanMessage" class="time-message"></p>
+    </section>
+
+    <section class="table-section">
+      <div class="table-header"><h3>Loan Records</h3><p>Apply amortization payments per payroll run or review current balances.</p></div>
+      <div class="table-scroll">
+        <table id="loanTable">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Category</th>
+              <th>Principal</th>
+              <th>Balance</th>
+              <th>Amortization</th>
+              <th>Terms</th>
+              <th>Paid</th>
+              <th>Frequency</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="loanTableBody">
+            <tr><td colspan="10">Loading loan records...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/profile_avatar.js"></script>
+<script src="js/script.js?v=nav-20260528"></script>
+<script src="js/loan_deduction_management.js?v=nav-20260528"></script>
+</body>
+</html>

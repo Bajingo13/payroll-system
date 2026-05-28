@@ -72,9 +72,17 @@ async function login() {
 
       sessionStorage.setItem("user_id", data.user_id);
       sessionStorage.setItem("admin_name", data.full_name);
+      sessionStorage.setItem("role", data.role || "");
 
       setTimeout(() => {
-        window.location.href = "../dashboard/dashboard.html";
+        const role = String(data.role || "").toLowerCase();
+        if (role === "employee") {
+          window.location.href = "../dashboard/employee_dashboard.html";
+        } else if (role === "hr") {
+          window.location.href = "../dashboard/hr_dashboard.html";
+        } else {
+          window.location.href = "../dashboard/dashboard.html";
+        }
       }, 1000);
     } else {
       msgDiv.textContent = data.message || "Invalid username or password.";

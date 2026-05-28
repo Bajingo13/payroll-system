@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payroll Information | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+  <link rel="stylesheet" href="css/employee_dashboard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Astreablue Intelligence Inc.</div>
+      <h3 id="empName">Employee</h3>
+      <p id="empRole">Employee</p>
+    </div>
+
+    <nav>
+      <ul>
+        <li><a href="employee_dashboard.html">Employee Dashboard</a></li>
+        <li><a href="employee_profile_edit.html">Profile Management</a></li>
+        <li class="active"><a href="employee_payroll_information.html">Payroll Information</a></li>
+        <li><a href="employee_schedule.html">Schedule</a></li>
+        <li><a href="employee_leave_management.html">Leave Management</a></li>
+        <li><a href="#" id="logout">Logout</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="section">
+    <header class="header">
+      <h2 id="welcomeHeader">Payroll Information</h2>
+      <p>View your latest payroll details and your payroll history.</p>
+    </header>
+
+    <section class="dashboard-content-layout">
+      <div class="dashboard-main-column">
+        <section class="table-section">
+          <h3>Payroll History</h3>
+          <table id="payrollTable">
+            <thead>
+              <tr>
+                <th>Generated On</th>
+                <th>Payroll Range</th>
+                <th>Gross Pay</th>
+                <th>Deductions</th>
+                <th>Net Pay</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6">Loading payroll history...</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <aside class="dashboard-payroll-sidebar table-section">
+        <h3>Payroll Information</h3>
+        <div class="payroll-info-grid">
+          <div><span>Payroll Period</span><strong id="payInfoRange">N/A</strong></div>
+          <div><span>Date Generated</span><strong id="payInfoGenerated">N/A</strong></div>
+          <div><span>Gross Pay</span><strong id="payInfoGross">PHP 0.00</strong></div>
+          <div><span>Total Deductions</span><strong id="payInfoDeductions">PHP 0.00</strong></div>
+          <div><span>Net Pay</span><strong id="payInfoNet">PHP 0.00</strong></div>
+          <div><span>Status</span><strong id="payInfoStatus">No Record</strong></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+</div>
+
+<script src="js/profile_avatar.js"></script>
+<script src="js/employee_payroll_information.js"></script>
+</body>
+</html>

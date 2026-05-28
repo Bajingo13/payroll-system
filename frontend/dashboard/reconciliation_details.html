@@ -3,59 +3,141 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utilities | Payroll System</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <title>Reconciliation Details | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
-
 <body>
-<div class="container">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="profile">
-      <div class="logo">Business Set Up & Compliance Inc.</div>
-      <h3></h3>
-      <p></p>
-    </div>
-
-    <nav>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="profile">
+        <div class="logo">Astreablue Intelligence Inc.</div>
+        <h3></h3>
+        <p></p>
+      </div>
+      <nav>
         <ul>
-            <li><a href="dashboard.html">Dashboard</a></li>
-            <li class="dropdown">
-                <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
-                <ul class="dropdown-menu">
-                    <li><a href="employee_management.html">Employee File</a></li>
-                    <li><a href="employee_attendance.html">Employee Attendance</a></li>
-                </ul>
-            </li>
-            <li><a href="payroll_computation.html">Payroll Computation</a></li>
-            <li><a href="auditing.html">Auditing</a></li>
-            <li class="dropdown">
-                <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
-                <ul class="dropdown-menu">
-                    <li><a href="payroll_journal.html">Payroll Journal</a></li>
-                    <li><a href="gross_pay.html">Gross Pay</a></li>
-                    <li><a href="net_pay.html">Net Pay</a></li>
-                    <li><a href="payslip.html">Payslip</a></li>
-                    <li><a href="reconciliation_details.html" class="sub-active">Reconciliation Details</a></li>
-                </ul>
-            </li>
-            <li><a href="utilities.html">Utilities</a></li>
-            <li><a href="#" id="logout">Logout</a></li>
+          <li><a href="dashboard.html">Dashboard</a></li>
+          <li class="dropdown">
+            <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+            <ul class="dropdown-menu">
+              <li><a href="employee_management.html">Employee File</a></li>
+              <li><a href="employee_attendance.html">Employee Attendance</a></li>
+            </ul>
+          </li>
+          <li><a href="payroll_computation.html">Payroll Computation</a></li>
+          <li><a href="auditing.html">Auditing</a></li>
+          <li class="dropdown">
+            <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+            <ul class="dropdown-menu">
+              <li><a href="payroll_journal.html">Payroll Journal</a></li>
+              <li><a href="gross_pay.html">Gross Pay</a></li>
+              <li><a href="net_pay.html">Net Pay</a></li>
+              <li><a href="payslip.html">Payslip</a></li>
+              <li><a href="reconciliation_details.html" class="sub-active">Reconciliation Details</a></li>
+            </ul>
+          </li>
+          <li><a href="utilities.html">Utilities</a></li>
         </ul>
-    </nav>
-  </aside>
+      </nav>
+    </aside>
 
-  <!-- main content for reconciliation details -->
     <main class="section" id="reconciliation-details-section" role="main">
-        <header class="header">
+      <header class="header">
         <h2>Reconciliation Details Report</h2>
         <p>Comprehensive overview of reconciliation details for all employees.</p>
-        </header>
-    
-        <section class="table-section">
-        <h3>Reconciliation Details Summary</h3>
-        <!-- Reconciliation Details Table -->
-        <h1> PAGE NOT AVAILABLE </h1>
+      </header>
+
+      <section class="table-section">
+        <h3>Filters</h3>
+        <div class="report-filter-grid">
+          <label>
+            Payroll Group
+            <select id="reconPayrollGroup">
+              <option value="">Select</option>
+            </select>
+          </label>
+          <label>
+            Period
+            <select id="reconPayrollPeriod">
+              <option value="">Select</option>
+            </select>
+          </label>
+          <label>
+            Month
+            <select id="reconMonth">
+              <option value="">Select</option>
+            </select>
+          </label>
+          <label>
+            Year
+            <select id="reconYear">
+              <option value="">Select</option>
+            </select>
+          </label>
+          <label>
+            Employee Status
+            <select id="reconStatus">
+              <option value="active">Active</option>
+              <option value="hold">Hold</option>
+            </select>
+          </label>
+          <label>
+            Order By
+            <select id="reconOrderBy">
+              <option value="department_surname">Department / Surname</option>
+              <option value="department_employeeid">Department / Employee ID</option>
+              <option value="division_surname">Division / Surname</option>
+              <option value="division_employeeid">Division / Employee ID</option>
+              <option value="branch_department_surname">Branch + Department / Surname</option>
+              <option value="branch_department_employeeid">Branch + Department / Employee ID</option>
+              <option value="project_salary-type_surname">Project + Salary Type / Surname</option>
+              <option value="project_salary-type_employeeid">Project + Salary Type / Employee ID</option>
+              <option value="surname">Surname</option>
+              <option value="employeeid">Employee ID</option>
+            </select>
+          </label>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="btn" id="generateReconReport">Generate</button>
+        </div>
+        <p class="message" id="reconMessage"></p>
+      </section>
+
+      <section class="summary">
+        <div class="card"><span>Run ID</span><strong id="reconRunId">-</strong></div>
+        <div class="card"><span>Employees</span><strong id="reconEmployeeCount">0</strong></div>
+        <div class="card"><span>Total Gross</span><strong id="reconTotalGross">0.00</strong></div>
+        <div class="card"><span>Total Deductions</span><strong id="reconTotalDeductions">0.00</strong></div>
+        <div class="card"><span>Total Net</span><strong id="reconTotalNet">0.00</strong></div>
+        <div class="card"><span>Gross - Deductions - Net</span><strong id="reconTotalDelta">0.00</strong></div>
+      </section>
+
+      <section class="table-section">
+        <h3>Reconciliation Rows</h3>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee ID</th>
+                <th>Name</th>
+                <th>Gross</th>
+                <th>Deductions</th>
+                <th>Net</th>
+                <th>Delta</th>
+              </tr>
+            </thead>
+            <tbody id="reconTableBody">
+              <tr><td colspan="6">No report rows yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/script.js?v=nav-20260528"></script>
+</body>
+</html>

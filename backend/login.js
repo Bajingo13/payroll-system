@@ -31,13 +31,24 @@ module.exports = function (app, pool) {
                 return res.json({ success: false, message: "Invalid username or password" });
             }
 
+            req.session.user = {
+                user_id: user.user_id,
+                full_name: user.full_name,
+                role: user.role
+            };
+
             // Insert login event in audit_logs
             await conn.execute(
                 "INSERT INTO audit_logs (user_id, admin_name, action, status) VALUES (?, ?, ?, ?)",
                 [user.user_id, user.full_name, 'Admin Login', 'Success']
             );
 
-            res.json({ success: true, user_id: user.user_id, full_name: user.full_name });
+            res.json({
+                success: true,
+                user_id: user.user_id,
+                full_name: user.full_name,
+                role: user.role
+            });
         } else {
             res.json({ success: false, message: "Invalid username or password" });
         }} finally {

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leave Calendar | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+</head>
+<body>
+  <div class="container">
+<aside class="sidebar">
+  <div class="profile"><div class="logo">Astreablue Intelligence Inc.</div><h3></h3><p></p></div>
+  <nav>
+    <ul>
+      <li><a href="dashboard.html">Dashboard</a></li>
+      <li class="dropdown">
+        <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+        <ul class="dropdown-menu">
+          <li><a href="employee_management.html">Employee File</a></li>
+          <li><a href="employee_documents.html">201 Files</a></li>
+          <li><a href="organization_setup.html">Departments & Salary Grades</a></li>
+          <li><a href="employee_attendance.html">Employee Attendance</a></li>
+          <li><a href="admin_leave_management.html">Leave Management</a></li>
+          <li><a href="leave_calendar.html">Leave Calendar</a></li>
+          <li><a href="performance_management.html">Performance</a></li>
+        </ul>
+      </li>
+      <li><a href="year_end_payroll.html">Year-End Payroll</a></li>
+      <li><a href="payroll_computation.html">Payroll Computation</a></li>
+      <li><a href="auditing.html">Auditing</a></li>
+      <li class="dropdown">
+        <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+        <ul class="dropdown-menu">
+          <li><a href="payroll_journal.html">Payroll Journal</a></li>
+          <li><a href="gross_pay.html">Gross Pay</a></li>
+          <li><a href="net_pay.html">Net Pay</a></li>
+          <li><a href="payslip.html">Payslip</a></li>
+          <li><a href="government_reports.html">Government Reports</a></li>
+          <li><a href="report_builder.html">Report Builder</a></li>
+          <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
+        </ul>
+      </li>
+      <li><a href="security_backup.html">Security & Backup</a></li>
+      <li><a href="analytics_dashboard.html">AI Analytics</a></li>
+      <li><a href="utilities.html">Utilities</a></li>
+      <li><a href="#" id="logout">Logout</a></li>
+    </ul>
+  </nav>
+</aside>
+    <main class="section">
+      <header class="header advanced-header"><div><h2>Leave Calendar and Balance Rules</h2><p>Team calendar for HR and managers, plus accrual, carry-over, credit adjustment, and year-end reset rules.</p></div><button type="button" class="advanced-export-btn" onclick="window.location.href='admin_leave_management.html'">Open Leave Management</button></header>
+      <section class="advanced-summary"><div><span>Pending Leave</span><strong id="calendarPendingCount">0</strong></div><div><span>Approved Leave</span><strong id="calendarApprovedCount">0</strong></div><div><span>Visible Requests</span><strong id="calendarVisibleCount">0</strong></div><div><span>Active Rules</span><strong id="leaveRuleActiveCount">0</strong></div></section>
+      <section class="advanced-panel active"><div class="table-header"><div><h3>Team Leave Calendar</h3><p>Approved leave is green. Pending leave is yellow. Filter by month and department.</p></div><div class="leave-toolbar"><input type="month" id="leaveCalendarMonth"><select id="leaveCalendarDepartment"><option value="">All Departments</option></select></div></div><p class="message" id="leaveCalendarMessage"></p><div class="advanced-calendar leave-calendar-connected" id="featureLeaveCalendar"></div></section>
+      <section class="advanced-panel active"><div class="advanced-panel-title"><h3>Requests in Selected Month</h3><p>This list uses the same leave requests shown in Leave Management.</p></div><div class="advanced-table-wrap"><table><thead><tr><th>Employee</th><th>Department</th><th>Leave Type</th><th>Date Range</th><th>Days</th><th>Status</th><th>Reason</th></tr></thead><tbody id="leaveCalendarRows"><tr><td colspan="7">Loading leave requests...</td></tr></tbody></table></div></section>
+      <section class="advanced-panel active">
+        <div class="advanced-panel-title"><h3>Leave Balance Rules</h3><p>Configure how leave credits are earned, carried over, adjusted, and reset at year-end.</p></div>
+        <div class="advanced-form-grid">
+          <input type="hidden" id="leaveRuleId">
+          <label>Rule Name<input type="text" id="leaveRuleName" placeholder="Vacation monthly accrual"></label>
+          <label>Leave Type<select id="leaveRuleType"><option value="">Select leave type</option></select></label>
+          <label>Accrual Days<input type="number" id="leaveRuleAccrual" min="0" step="0.25" value="1.25"></label>
+          <label>Accrual Frequency<select id="leaveRuleFrequency"><option>Monthly</option><option>Quarterly</option><option>Yearly</option><option>Manual</option></select></label>
+          <label>Carry-over Limit<input type="number" id="leaveRuleCarryOver" min="0" step="0.25" value="5"></label>
+          <label>Credit Adjustment<input type="number" id="leaveRuleAdjustment" step="0.25" value="0"></label>
+          <label>Reset Month<input type="number" id="leaveRuleResetMonth" min="1" max="12" value="12"></label>
+          <label>Reset Day<input type="number" id="leaveRuleResetDay" min="1" max="31" value="31"></label>
+          <label>Status<select id="leaveRuleActive"><option value="1">Active</option><option value="0">Inactive</option></select></label>
+        </div>
+        <div class="org-actions"><button type="button" class="btn" id="saveLeaveRule">Save Rule</button><button type="button" class="btn secondary-action" id="resetLeaveRule">Clear</button></div>
+        <p class="message" id="leaveRuleMessage"></p>
+      </section>
+      <section class="advanced-panel active"><div class="advanced-panel-title"><h3>Configured Rules</h3><p>Rules are used as the HR policy setup for leave balances and annual resets.</p></div><div class="advanced-table-wrap"><table><thead><tr><th>Rule</th><th>Leave Type</th><th>Accrual</th><th>Carry-over</th><th>Adjustment</th><th>Year-End Reset</th><th>Status</th><th>Action</th></tr></thead><tbody id="leaveRuleRows"><tr><td colspan="8">Loading leave balance rules...</td></tr></tbody></table></div></section>
+    </main>
+  </div>
+  <script src="js/script.js?v=nav-20260528"></script>
+  <script src="js/feature_pages.js"></script>
+</body>
+</html>
