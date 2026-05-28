@@ -4,6 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const path = require('path');
+const fs = require('fs');
 const session = require('express-session');
 const cors = require('cors');
 
@@ -184,7 +185,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.set('trust proxy', 1);
 
@@ -205,20 +206,151 @@ function isAuthenticated(req, res, next) {
   if (req.session && req.session.user) {
     return next();
   }
-  return res.redirect('/login/login.html');
+  return res.redirect('/login');
 }
 
 // ----------- STATIC ASSETS -----------
-app.use(express.static(path.join(__dirname, 'frontend')));
+const reactDistPath = path.join(__dirname, 'frontend-react', 'dist');
+const reactIndexPath = path.join(reactDistPath, 'index.html');
+const reactFrontendSetting = String(process.env.USE_REACT_FRONTEND || 'auto').trim().toLowerCase();
+const useReactFrontend =
+  fs.existsSync(reactIndexPath) &&
+  reactFrontendSetting !== 'false';
+
+const legacyReactRedirects = {
+  '/login/login.html': '/login',
+  '/dashboard/dashboard.html': '/dashboard',
+  '/dashboard/hr_dashboard.html': '/dashboard',
+  '/dashboard/employee_dashboard.html': '/dashboard',
+  '/dashboard/employee_attendance.html': '/employee-attendance',
+  '/dashboard/admin_leave_management.html': '/leave-management',
+  '/dashboard/employee_leave_management.html': '/employee-leave-request',
+  '/dashboard/employee_management.html': '/employee-management',
+  '/dashboard/employee_payroll_information.html': '/employee-payroll-information',
+  '/dashboard/employee_profile_edit.html': '/personal-management',
+  '/dashboard/employee_schedule.html': '/employee-schedule',
+  '/dashboard/payroll_computation.html': '/payroll-computation',
+  '/dashboard/auditing.html': '/auditing',
+  '/dashboard/payroll_journal.html': '/reports/payroll-journal',
+  '/dashboard/gross_pay.html': '/reports/gross-pay',
+  '/dashboard/net_pay.html': '/reports/net-pay',
+  '/dashboard/payslip.html': '/reports/payslip',
+  '/dashboard/payslip_print.html': '/reports/payslip',
+  '/dashboard/reconciliation_details.html': '/reports/reconciliation-details',
+  '/dashboard/utilities.html': '/utilities',
+  '/dashboard/utilities/system_settings.html': '/utilities',
+  '/dashboard/utilities/list_manager.html': '/utilities',
+  '/dashboard/utilities/employee_benefits.html': '/utilities',
+  '/dashboard/employee_documents.html': '/advanced-modules?module=documents',
+  '/dashboard/organization_setup.html': '/advanced-modules?module=organization',
+  '/dashboard/loan_deduction_management.html': '/advanced-modules?module=loan',
+  '/dashboard/government_reports.html': '/advanced-modules?module=compliance',
+  '/dashboard/leave_calendar.html': '/advanced-modules?module=leave',
+  '/dashboard/performance_management.html': '/advanced-modules?module=performance',
+  '/dashboard/report_builder.html': '/advanced-modules?module=reports',
+  '/dashboard/security_backup.html': '/advanced-modules?module=security',
+  '/dashboard/analytics_dashboard.html': '/advanced-modules?module=analytics',
+  '/dashboard/year_end_payroll.html': '/advanced-modules?module=payroll'
+};
+
+if (fs.existsSync(reactDistPath)) {
+  app.use('/assets', express.static(path.join(reactDistPath, 'assets')));
+}
+
+if (useReactFrontend) {
+  app.use(express.static(reactDistPath));
+
+  Object.entries(legacyReactRedirects).forEach(([legacyPath, reactPath]) => {
+    app.get(legacyPath, (req, res) => {
+      res.redirect(302, reactPath);
+    });
+  });
+
+  [
+    '/',
+    '/login',
+    '/dashboard',
+    '/employee-dashboard',
+    '/personal-management',
+    '/employee-leave-request',
+    '/employee-payroll-information',
+    '/employee-schedule',
+    '/profile-management',
+    '/employee-management',
+    '/schedule-management',
+    '/employee-attendance',
+    '/leave-management',
+    '/payroll-computation',
+    '/auditing',
+    '/advanced-modules',
+    '/reports',
+    '/reports/:reportType',
+    '/utilities'
+  ].forEach((route) => {
+    app.get(route, (req, res) => {
+      res.sendFile(path.join(reactDistPath, 'index.html'));
+    });
+  });
+
+  app.get(/^\/(employee-dashboard|personal-management|employee-leave-request|employee-payroll-information|employee-schedule|schedule-management)\/?$/, (req, res) => {
+    res.sendFile(path.join(reactDistPath, 'index.html'));
+  });
+
+  app.get(/^\/reports\/.+$/, (req, res) => {
+    res.sendFile(path.join(reactDistPath, 'index.html'));
+  });
+}
+
+app.use('/dashboard', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
+app.use(express.static(path.join(__dirname, 'frontend'), {
+  setHeaders(res, filePath) {
+    if (filePath.includes(`${path.sep}frontend${path.sep}dashboard${path.sep}`)) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
+
+function sendReactIndex(res) {
+  if (fs.existsSync(reactIndexPath)) {
+    return res.sendFile(reactIndexPath);
+  }
+  return res.status(404).send('React build not found. Please run npm run build.');
+}
 
 // ----------- HTML ROUTES -----------
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
-});
+if (useReactFrontend) {
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(reactIndexPath);
+  });
+} else {
+  app.get('/advanced-modules', isAuthenticated, (req, res) => {
+    res.redirect('/dashboard/employee_documents.html');
+  });
 
-app.get('/dashboard', isAuthenticated, (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'dashboard', 'dashboard.html'));
-});
+  app.get('/', (req, res) => {
+    res.redirect('/login/login.html');
+  });
+
+  app.get('/login', (req, res) => {
+    res.redirect('/login/login.html');
+  });
+
+  app.get('/login/', (req, res) => {
+    res.redirect('/login/login.html');
+  });
+
+  app.get('/dashboard', isAuthenticated, (req, res) => {
+    res.sendFile(path.join(__dirname, 'frontend', 'dashboard', 'dashboard.html'));
+  });
+}
 
 // ----------- START APP AFTER DB CONNECTS -----------
 (async () => {
@@ -231,11 +363,16 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     require('./backend/login')(app, pool);
     require('./backend/profile_sidebar')(app, pool);
     require('./backend/dashboard')(app, pool);
+    require('./backend/employee_profile_edit')(app, pool);
+    require('./backend/employee_leave')(app, pool);
     require('./backend/employee_management')(app, pool);
+    require('./backend/loan_deductions')(app, pool);
     require('./backend/payroll_computation')(app, pool);
     require('./backend/payroll_journal')(app, pool);
     require('./backend/audit_logs')(app, pool);
     require('./backend/utilities')(app, pool);
+    require('./backend/employee_documents')(app, pool);
+    require('./backend/thirteenth_month')(app, pool);
 
     app.get('/api/db-test', async (req, res) => {
       let conn;

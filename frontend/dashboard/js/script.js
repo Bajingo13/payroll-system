@@ -20,13 +20,505 @@ function showToast(msg, type = "success") {
   setTimeout(() => toast.classList.remove("show"), 3000);
 }
 
+async function parseApiJson(res, fallbackMessage) {
+  const raw = await res.text();
+  let data;
+
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error(fallbackMessage || "Invalid server response. Please refresh and try again.");
+  }
+
+  if (!res.ok) {
+    throw new Error((data && data.message) || fallbackMessage || "Request failed.");
+  }
+
+  return data;
+}
+
+function setupSidebarProfileAvatar() {
+  const profileEl = document.querySelector(".sidebar .profile");
+  if (!profileEl || profileEl.querySelector(".profile-avatar-button")) return;
+
+  const userId = sessionStorage.getItem("user_id") || "guest";
+  const storageKey = `profile_avatar_${userId}`;
+  const savedAvatar = localStorage.getItem(storageKey);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "profile-avatar-button";
+  button.title = "Change profile picture";
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.className = "profile-avatar-input";
+
+  function renderAvatar(src) {
+    button.innerHTML = "";
+
+    if (src) {
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "Profile picture";
+      button.appendChild(img);
+      return;
+    }
+
+    const placeholder = document.createElement("span");
+    placeholder.className = "profile-avatar-placeholder";
+    placeholder.textContent = "Upload your picture here";
+    button.appendChild(placeholder);
+  }
+
+  button.addEventListener("click", () => input.click());
+  input.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file || !file.type.startsWith("image/")) {
+      input.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      localStorage.setItem(storageKey, result);
+      renderAvatar(result);
+      window.dispatchEvent(new CustomEvent("profile-avatar-updated", { detail: result }));
+    };
+    reader.readAsDataURL(file);
+    input.value = "";
+  });
+
+  renderAvatar(savedAvatar);
+
+  const nameNode = profileEl.querySelector("h3");
+  profileEl.insertBefore(input, nameNode || null);
+  profileEl.insertBefore(button, input);
+}
+
+function removeSidebarLogoutLinks() {
+  document.querySelectorAll(".sidebar #logout").forEach((logout) => {
+    logout.closest("li")?.remove();
+  });
+}
+
+function getProfileAvatarStorageKey() {
+  const userId = sessionStorage.getItem("user_id") || "guest";
+  return `profile_avatar_${userId}`;
+}
+
+function getAccountSettingsHref() {
+  const path = String(window.location.pathname || "");
+  const role = String(sessionStorage.getItem("role") || "").toLowerCase();
+
+  if (role === "employee") {
+    return path.includes("/dashboard/utilities/") ? "../employee_profile_edit.html" : "employee_profile_edit.html";
+  }
+
+  return path.includes("/dashboard/utilities/") ? "system_settings.html" : "utilities/system_settings.html";
+}
+
+function getLogoutHref() {
+  return String(window.location.pathname || "").includes("/dashboard/utilities/")
+    ? "../../login/login.html"
+    : "../../login/login.html";
+}
+
+function updateTopAccountProfile(user = {}) {
+  const menu = document.querySelector(".page-account-menu");
+  if (!menu) return;
+
+  const name = user.full_name || sessionStorage.getItem("admin_name") || "Admin";
+  const role = user.role || sessionStorage.getItem("role") || "Administrator";
+  const initials = String(name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "A";
+
+  menu.querySelectorAll("[data-account-name]").forEach((node) => {
+    node.textContent = name;
+  });
+  menu.querySelectorAll("[data-account-role]").forEach((node) => {
+    node.textContent = role;
+  });
+  menu.querySelectorAll("[data-account-initials]").forEach((node) => {
+    node.textContent = initials;
+  });
+}
+
+function renderTopAccountAvatar(src) {
+  document.querySelectorAll(".page-account-avatar").forEach((avatar) => {
+    avatar.innerHTML = "";
+    if (src) {
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "Account profile picture";
+      avatar.appendChild(img);
+      return;
+    }
+
+    const fallback = document.createElement("span");
+    fallback.dataset.accountInitials = "";
+    avatar.appendChild(fallback);
+  });
+  updateTopAccountProfile();
+}
+
+function setupTopAccountMenu() {
+  const section = document.querySelector(".section");
+  if (!section || section.querySelector(".page-account-menu")) return;
+
+  const menu = document.createElement("details");
+  menu.className = "page-account-menu";
+  menu.innerHTML = `
+    <summary aria-label="Open account menu">
+      <span class="page-account-avatar"></span>
+      <span class="page-account-text">
+        <strong data-account-name>Admin</strong>
+        <small data-account-role>Administrator</small>
+      </span>
+    </summary>
+    <div class="page-account-dropdown">
+      <div class="page-account-card">
+        <span class="page-account-avatar page-account-avatar-large"></span>
+        <div>
+          <strong data-account-name>Admin</strong>
+          <small data-account-role>Administrator</small>
+        </div>
+      </div>
+      <input type="file" accept="image/*" class="page-account-file" aria-label="Change account picture">
+      <button type="button" class="page-account-action page-account-change">Change Picture</button>
+      <a class="page-account-action" href="${getAccountSettingsHref()}">Account Settings</a>
+      <button type="button" class="page-account-action danger account-menu-logout">Sign Out</button>
+    </div>
+  `;
+
+  section.insertBefore(menu, section.firstChild);
+  renderTopAccountAvatar(localStorage.getItem(getProfileAvatarStorageKey()));
+
+  const input = menu.querySelector(".page-account-file");
+  const changeButton = menu.querySelector(".page-account-change");
+
+  changeButton.addEventListener("click", () => input.click());
+  input.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file || !file.type.startsWith("image/")) {
+      input.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      localStorage.setItem(getProfileAvatarStorageKey(), result);
+      renderTopAccountAvatar(result);
+
+      document.querySelectorAll(".sidebar .profile .profile-avatar-button").forEach((button) => {
+        button.innerHTML = `<img src="${result}" alt="Profile picture">`;
+      });
+    };
+    reader.readAsDataURL(file);
+    input.value = "";
+  });
+
+  window.addEventListener("profile-avatar-updated", (event) => {
+    renderTopAccountAvatar(String(event.detail || localStorage.getItem(getProfileAvatarStorageKey()) || ""));
+  });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatDashboardDate(value) {
+  if (!value) return "N/A";
+
+  const date = new Date(String(value).replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return date.toLocaleString("en-PH", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
+function applyRoleNavigation() {
+  const role = String(sessionStorage.getItem("role") || "").toLowerCase();
+  const path = String(window.location.pathname || "");
+
+  if (!role) return;
+
+  if (role === "hr") {
+    document.querySelectorAll('.sidebar nav a[href="dashboard.html"]').forEach((anchor) => {
+      anchor.setAttribute("href", "hr_dashboard.html");
+      if (anchor.textContent.trim().toLowerCase() === "dashboard") {
+        anchor.textContent = "HR Dashboard";
+      }
+    });
+
+    const restrictedLinks = [
+      'a[href="payroll_computation.html"]',
+      'a[href="payroll_journal.html"]',
+      'a[href="gross_pay.html"]',
+      'a[href="net_pay.html"]',
+      'a[href="payslip.html"]',
+      'a[href="reconciliation_details.html"]'
+    ];
+
+    restrictedLinks.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((anchor) => {
+        const li = anchor.closest("li");
+        if (li) li.style.display = "none";
+      });
+    });
+
+    document.querySelectorAll(".sidebar li.dropdown").forEach((dropdown) => {
+      const visibleItems = [...dropdown.querySelectorAll(":scope > ul > li")].filter((item) => item.style.display !== "none");
+      if (visibleItems.length === 0) {
+        dropdown.style.display = "none";
+      }
+    });
+
+    if (path.endsWith("/dashboard/dashboard.html")) {
+      window.location.href = "hr_dashboard.html";
+    }
+  }
+}
+
+function setupFeatureNavigation() {
+  const role = String(sessionStorage.getItem("role") || "").toLowerCase();
+  const currentPage = String(window.location.pathname || "").split("/").pop();
+  const navList = document.querySelector(".sidebar nav > ul");
+  if (!navList) return;
+
+  const hasAdminPayrollNav = Boolean(
+    navList.querySelector('a[href="payroll_computation.html"]') ||
+    navList.querySelector('a[href="payroll_journal.html"]')
+  );
+  const hasHrWorkforceNav = [...navList.querySelectorAll("a")]
+    .some((anchor) => anchor.textContent.trim().toLowerCase().includes("workforce"));
+  const adminFeaturePages = new Set([
+    "employee_documents.html",
+    "organization_setup.html",
+    "leave_calendar.html",
+    "performance_management.html",
+    "loan_deduction_management.html",
+    "year_end_payroll.html",
+    "government_reports.html",
+    "report_builder.html",
+    "security_backup.html",
+    "analytics_dashboard.html",
+    "reconciliation_details.html"
+  ]);
+
+  const isAdmin = role === "admin" || role.includes("admin") || (!role && (hasAdminPayrollNav || adminFeaturePages.has(currentPage)));
+  const isHr = role === "hr" || role.includes("human resource") || (!role && hasHrWorkforceNav);
+  if (!isAdmin && !isHr) return;
+
+  function linkHtml(href, label, className = "") {
+    const activeClass = currentPage === href ? className || "active" : className;
+    return `<a href="${href}"${activeClass ? ` class="${activeClass}"` : ""}>${label}</a>`;
+  }
+
+  function dropdownHtml(labelHref, label, links) {
+    const hasActiveChild = links.some((link) => link.href === currentPage);
+    const items = links.map((link) => {
+      const childClass = link.href === currentPage ? "sub-active" : "";
+      return `<li>${linkHtml(link.href, link.label, childClass)}</li>`;
+    }).join("");
+
+    return `
+      <li class="dropdown${hasActiveChild ? " open" : ""}">
+        <a href="${labelHref}" class="dropdown-toggle">${label}</a>
+        <ul class="dropdown-menu">${items}</ul>
+      </li>
+    `;
+  }
+
+  function normalizeAdminNavigation() {
+    navList.innerHTML = `
+      <li class="nav-section-label">Overview</li>
+      <li${currentPage === "dashboard.html" ? ' class="active"' : ""}>${linkHtml("dashboard.html", "Dashboard")}</li>
+
+      <li class="nav-section-label">Workforce Management</li>
+      ${dropdownHtml("employee_management.html", "Employee Management", [
+        { href: "employee_management.html", label: "Employee File" },
+        { href: "employee_documents.html", label: "201 Files" },
+        { href: "organization_setup.html", label: "Departments & Salary Grades" },
+        { href: "employee_attendance.html", label: "Employee Attendance" },
+        { href: "admin_leave_management.html", label: "Leave Management" },
+        { href: "leave_calendar.html", label: "Leave Calendar" },
+        { href: "performance_management.html", label: "Performance" }
+      ])}
+
+      <li class="nav-section-label">Payroll & Reports</li>
+      <li${currentPage === "year_end_payroll.html" ? ' class="active"' : ""}>${linkHtml("year_end_payroll.html", "Year-End Payroll")}</li>
+      <li${currentPage === "payroll_computation.html" ? ' class="active"' : ""}>${linkHtml("payroll_computation.html", "Payroll Computation")}</li>
+      <li${currentPage === "loan_deduction_management.html" ? ' class="active"' : ""}>${linkHtml("loan_deduction_management.html", "Loan Deduction Module")}</li>
+      <li${currentPage === "auditing.html" ? ' class="active"' : ""}>${linkHtml("auditing.html", "Auditing")}</li>
+      ${dropdownHtml("payroll_journal.html", "Payroll Summary Report", [
+        { href: "payroll_journal.html", label: "Payroll Journal" },
+        { href: "gross_pay.html", label: "Gross Pay" },
+        { href: "net_pay.html", label: "Net Pay" },
+        { href: "payslip.html", label: "Payslip" },
+        { href: "government_reports.html", label: "Government Reports" },
+        { href: "report_builder.html", label: "Report Builder" },
+        { href: "reconciliation_details.html", label: "Reconciliation Details" }
+      ])}
+
+      <li class="nav-section-label">System Tools</li>
+      <li${currentPage === "security_backup.html" ? ' class="active"' : ""}>${linkHtml("security_backup.html", "Security & Backup")}</li>
+      <li${currentPage === "analytics_dashboard.html" ? ' class="active"' : ""}>${linkHtml("analytics_dashboard.html", "AI Analytics")}</li>
+      <li${currentPage === "utilities.html" ? ' class="active"' : ""}>${linkHtml("utilities.html", "Utilities")}</li>
+    `;
+  }
+
+  function normalizeHrNavigation() {
+    navList.innerHTML = `
+      <li class="nav-section-label">Overview</li>
+      <li${currentPage === "hr_dashboard.html" || currentPage === "dashboard.html" ? ' class="active"' : ""}>${linkHtml("hr_dashboard.html", "HR Dashboard")}</li>
+
+      <li class="nav-section-label">Workforce Management</li>
+      ${dropdownHtml("employee_management.html", "Employee Management", [
+        { href: "employee_management.html", label: "Employee File" },
+        { href: "employee_documents.html", label: "201 Files" },
+        { href: "organization_setup.html", label: "Departments & Salary Grades" },
+        { href: "employee_attendance.html", label: "Employee Attendance" },
+        { href: "admin_leave_management.html", label: "Leave Management" },
+        { href: "leave_calendar.html", label: "Leave Calendar" },
+        { href: "performance_management.html", label: "Performance" }
+      ])}
+
+      <li class="nav-section-label">HR Tools</li>
+      <li${currentPage === "loan_deduction_management.html" ? ' class="active"' : ""}>${linkHtml("loan_deduction_management.html", "Loan Deduction Module")}</li>
+      <li${currentPage === "analytics_dashboard.html" ? ' class="active"' : ""}>${linkHtml("analytics_dashboard.html", "Workforce Analytics")}</li>
+      <li${currentPage === "utilities.html" ? ' class="active"' : ""}>${linkHtml("utilities.html", "Utilities")}</li>
+    `;
+  }
+
+  if (isAdmin) {
+    normalizeAdminNavigation();
+    return;
+  }
+
+  if (isHr) {
+    normalizeHrNavigation();
+    return;
+  }
+
+  function upsertDropdownLinks(dropdownSelector, links) {
+    const dropdownMenu = navList.querySelector(dropdownSelector);
+    if (!dropdownMenu) return;
+
+    links.forEach(({ href }) => {
+      dropdownMenu.querySelectorAll(`a[href="${href}"]`).forEach((anchor) => {
+        anchor.closest("li")?.remove();
+      });
+    });
+
+    links.forEach(({ href, label, afterHref }) => {
+      const item = document.createElement("li");
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.textContent = label;
+      if (window.location.pathname.endsWith(`/${href}`)) {
+        anchor.className = "sub-active";
+      }
+      item.appendChild(anchor);
+
+      const afterNode = afterHref ? dropdownMenu.querySelector(`a[href="${afterHref}"]`)?.closest("li") : null;
+      if (afterNode && afterNode.nextSibling) {
+        dropdownMenu.insertBefore(item, afterNode.nextSibling);
+      } else if (afterNode) {
+        dropdownMenu.appendChild(item);
+      } else {
+        dropdownMenu.appendChild(item);
+      }
+    });
+  }
+
+  function upsertTopLevelLink(beforeHref, href, label, adminOnly = false) {
+    if (adminOnly && !isAdmin) return;
+    navList.querySelectorAll(`:scope > li > a[href="${href}"]`).forEach((anchor) => {
+      anchor.closest("li")?.remove();
+    });
+
+    const item = document.createElement("li");
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.textContent = label;
+    if (window.location.pathname.endsWith(`/${href}`)) {
+      item.className = "active";
+    }
+    item.appendChild(anchor);
+
+    const beforeNode = navList.querySelector(`a[href="${beforeHref}"]`)?.closest("li") || navList.querySelector("#logout")?.closest("li") || null;
+    navList.insertBefore(item, beforeNode);
+  }
+
+  const employeeMenuSelector = 'a[href="employee_management.html"] + .dropdown-menu';
+  upsertDropdownLinks(employeeMenuSelector, [
+    { href: "employee_documents.html", label: "201 Files", afterHref: "employee_management.html" },
+    { href: "organization_setup.html", label: "Departments & Salary Grades", afterHref: "employee_documents.html" },
+    { href: "leave_calendar.html", label: "Leave Calendar", afterHref: "admin_leave_management.html" },
+    { href: "performance_management.html", label: "Performance", afterHref: "leave_calendar.html" }
+  ]);
+
+  if (isAdmin) {
+    upsertTopLevelLink("payroll_computation.html", "year_end_payroll.html", "Year-End Payroll", true);
+    upsertDropdownLinks('a[href="payroll_journal.html"] + .dropdown-menu', [
+      { href: "government_reports.html", label: "Government Reports", afterHref: "payslip.html" },
+      { href: "report_builder.html", label: "Report Builder", afterHref: "government_reports.html" }
+    ]);
+    upsertTopLevelLink("utilities.html", "security_backup.html", "Security & Backup", true);
+  }
+
+  upsertTopLevelLink("utilities.html", "analytics_dashboard.html", isAdmin ? "AI Analytics" : "Workforce Analytics");
+}
+
+function setupSidebarDropdownClicks() {
+  document.querySelectorAll(".sidebar .dropdown > .dropdown-toggle").forEach((toggle) => {
+    const dropdown = toggle.closest(".dropdown");
+    if (!dropdown || toggle.dataset.clickToggleReady === "true") return;
+
+    toggle.dataset.clickToggleReady = "true";
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      document.querySelectorAll(".sidebar .dropdown.open").forEach((openDropdown) => {
+        if (openDropdown !== dropdown) {
+          openDropdown.classList.remove("open");
+        }
+      });
+      dropdown.classList.toggle("open");
+    });
+  });
+}
+
 // ========== LOGOUT ==========
-const logout = document.getElementById('logout');
-if (logout) {
-  logout.addEventListener('click', (event) => {
+function setupLogoutHandler() {
+  document.querySelectorAll('#logout, .account-menu-logout').forEach((logout) => {
+    if (logout.dataset.logoutReady === "true") return;
+
+    logout.dataset.logoutReady = "true";
+    logout.addEventListener('click', (event) => {
     event.preventDefault();
     showToast('You have been logged out!');
-    window.location.href = "../../login/login.html";
+    window.location.href = getLogoutHref();
+    });
   });
 }
 
@@ -40,7 +532,7 @@ async function loadProfile() {
     }
 
     const res = await fetch(`/api/profile?user_id=${userId}`);
-    const data = await res.json();
+    const data = await parseApiJson(res, "Unable to load profile data.");
 
     if (!data.success) {
       console.warn("Failed to load user profile:", data.message);
@@ -56,6 +548,8 @@ async function loadProfile() {
       profileEl.querySelector("p").textContent = user.role;
     }
 
+    updateTopAccountProfile(user);
+
     // Update the existing h2 inside the dashboard
     if (window.location.pathname === '/dashboard/dashboard.html') {
       const welcomeMessage = document.querySelector(".section .header");
@@ -69,20 +563,123 @@ async function loadProfile() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  applyRoleNavigation();
+  setupFeatureNavigation();
+  removeSidebarLogoutLinks();
+  setupSidebarDropdownClicks();
+  setupSidebarProfileAvatar();
+  setupTopAccountMenu();
+  setupLogoutHandler();
   loadProfile();
 });
+
+function createDashboardPalette(index) {
+  return ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0f766e'][index % 6];
+}
+
+function normalizeChartRows(rows, labelKey = 'status') {
+  return (rows || [])
+    .map((row) => ({
+      label: String(row[labelKey] || row.label || 'Unspecified'),
+      value: Number(row.total || row.value || 0)
+    }))
+    .filter((row) => row.value > 0);
+}
+
+function renderDonutChart(chartId, legendId, rows) {
+  const chart = document.getElementById(chartId);
+  const legend = document.getElementById(legendId);
+  if (!chart || !legend) return;
+
+  const items = normalizeChartRows(rows);
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+
+  if (!items.length || total <= 0) {
+    chart.style.background = '#eef2f7';
+    chart.innerHTML = '<span>0</span>';
+    legend.innerHTML = '<p class="empty-note">No data available.</p>';
+    return;
+  }
+
+  let cursor = 0;
+  const stops = items.map((item, index) => {
+    const start = cursor;
+    const end = cursor + (item.value / total) * 100;
+    cursor = end;
+    const color = createDashboardPalette(index);
+    return `${color} ${start}% ${end}%`;
+  });
+
+  chart.style.background = `conic-gradient(${stops.join(', ')})`;
+  chart.innerHTML = `<span>${total}</span>`;
+  legend.innerHTML = items.map((item, index) => `
+    <div class="legend-row">
+      <i style="background:${createDashboardPalette(index)}"></i>
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </div>
+  `).join('');
+}
+
+function renderBarChart(chartId, rows, labelKey = 'status') {
+  const chart = document.getElementById(chartId);
+  if (!chart) return;
+
+  const items = normalizeChartRows(rows, labelKey);
+  const max = Math.max(...items.map((item) => item.value), 1);
+
+  if (!items.length) {
+    chart.innerHTML = '<p class="empty-note">No data available.</p>';
+    return;
+  }
+
+  chart.innerHTML = items.map((item, index) => `
+    <div class="bar-row">
+      <span>${item.label}</span>
+      <div class="bar-track"><i style="width:${Math.max((item.value / max) * 100, 4)}%; background:${createDashboardPalette(index)}"></i></div>
+      <strong>${item.value}</strong>
+    </div>
+  `).join('');
+}
+
+function renderTrendChart(chartId, rows) {
+  const chart = document.getElementById(chartId);
+  if (!chart) return;
+
+  const items = (rows || []).map((row) => ({
+    label: row.activity_date ? new Date(row.activity_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit' }) : String(row.label || ''),
+    value: Number(row.total || row.value || 0)
+  }));
+  const max = Math.max(...items.map((item) => item.value), 1);
+
+  if (!items.length) {
+    chart.innerHTML = '<p class="empty-note">No data available.</p>';
+    return;
+  }
+
+  chart.innerHTML = items.map((item, index) => `
+    <div class="trend-column">
+      <div class="trend-bar-wrap"><i style="height:${Math.max((item.value / max) * 100, 6)}%; background:${createDashboardPalette(index)}"></i></div>
+      <strong>${item.value}</strong>
+      <span>${item.label}</span>
+    </div>
+  `).join('');
+}
 
 // ========== DASHBOARD PAGE ==========
 if (window.location.pathname === '/dashboard/dashboard.html') {
   document.addEventListener("DOMContentLoaded", async () => {
     try {
       const res = await fetch("/api/dashboard");
-      const data = await res.json();
+      const data = await parseApiJson(res, "Unable to load dashboard data.");
 
       if (data) {
         document.querySelector(".summary .card:nth-child(1) strong").textContent = data.totalEmployees || 0;
         document.querySelector(".summary .card:nth-child(2) strong").textContent = data.processedPayrolls || 0;
         document.querySelector(".summary .card:nth-child(3) strong").textContent = data.systemLogs || 0;
+        renderDonutChart('employeeStatusDonut', 'employeeStatusLegend', data.employeeStatuses);
+        renderBarChart('payrollStatusChart', data.payrollStatuses);
+        renderBarChart('leaveStatusChart', data.leaveStatuses);
       }
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -95,22 +692,22 @@ async function loadRecentLogs() {
   if (window.location.pathname === '/dashboard/dashboard.html') {
     try {
       const res = await fetch('/api/audit_logs?limit=20&page=1');
-      const data = await res.json();
+      const data = await parseApiJson(res, "Unable to load recent logs.");
       const logs = data.logs || []; 
 
-      const tbody = document.querySelector(".table-section table tbody");
+      const tbody = document.querySelector(".table-section:not(.leave-admin-section) table tbody");
+      if (!tbody) return;
       tbody.innerHTML = "";
 
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
+      const phLocale = { timeZone: 'Asia/Manila' };
+      const MS_PER_DAY = 24 * 60 * 60 * 1000;
+      const todayStr = new Date().toLocaleDateString('en-US', phLocale);
+      const yesterdayStr = new Date(Date.now() - MS_PER_DAY).toLocaleDateString('en-US', phLocale);
 
-
-      const todayStr= today.toLocaleDateString('en-US');
-      const yesterdayStr= yesterday.toLocaleDateString('en-US');
+      const parseServerDate = (value) => new Date(String(value || '').replace(' ', 'T'));
 
       const recentLogs = logs.filter(log => {
-        const logDate = new Date(log.log_time).toLocaleDateString('en-US');
+        const logDate = parseServerDate(log.log_time).toLocaleDateString('en-US', phLocale);
         return logDate === todayStr || logDate === yesterdayStr;
       });
 
@@ -118,9 +715,10 @@ async function loadRecentLogs() {
 
       if (recentLogs.length > 0) { 
         recentLogs.forEach(log => {
-          const formattedDate = new Date(log.log_time).toLocaleString("en-US", {
+          const formattedDate = parseServerDate(log.log_time).toLocaleString("en-US", {
             month:  "short", day: "2-digit", year: "numeric",
-            hour: "2-digit", minute: "2-digit", hour12: true  
+            hour: "2-digit", minute: "2-digit", hour12: true,
+            timeZone: 'Asia/Manila'
           });
 
       tbody.innerHTML += `
@@ -144,6 +742,416 @@ async function loadRecentLogs() {
 
 // Run when the dashboard page loads
 document.addEventListener("DOMContentLoaded", loadRecentLogs);
+if (window.location.pathname === '/dashboard/dashboard.html') {
+  window.setInterval(loadRecentLogs, 10000);
+}
+
+// ========== ADMIN LEAVE MANAGEMENT ==========
+function getAdminLeaveMessageNode() {
+  return document.getElementById("adminLeaveMessage");
+}
+
+function getAdminLeaveRequestBody() {
+  return document.querySelector("#adminLeaveRequestTable tbody") || document.getElementById("adminLeaveRequestsBody");
+}
+
+function getPreviousLeaveRequestBody() {
+  return document.querySelector("#previousLeaveRequestTable tbody") || document.getElementById("previousLeaveRequestsBody");
+}
+
+function getAdminLeavePendingCountNode() {
+  return document.getElementById("pendingLeaveCount") || document.getElementById("adminLeavePendingCount");
+}
+
+function getAdminLeaveApprovedCountNode() {
+  return document.getElementById("approvedLeaveCount") || document.getElementById("adminLeaveApprovedCount");
+}
+
+function getAdminLeaveRejectedCountNode() {
+  return document.getElementById("rejectedLeaveCount") || document.getElementById("adminLeaveRejectedCount");
+}
+
+function getAdminLeaveCancelledCountNode() {
+  return document.getElementById("cancelledLeaveCount") || document.getElementById("adminLeaveCancelledCount");
+}
+
+function getAdminLeaveFilterNode() {
+  return document.getElementById("leaveStatusFilter");
+}
+
+function getAdminLeaveExportButton() {
+  return document.getElementById("exportLeaveExcelBtn") || document.getElementById("exportLeaveRequests");
+}
+
+function setAdminLeaveMessage(message, type = "info") {
+  const node = getAdminLeaveMessageNode();
+  if (!node) return;
+  node.textContent = message || "";
+  node.className = `admin-leave-message ${type}`;
+}
+
+function leaveStatusClass(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "approved") return "approved";
+  if (normalized === "rejected") return "rejected";
+  if (normalized === "cancelled") return "cancelled";
+  return "pending";
+}
+
+function downloadTextFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function excelText(value) {
+  const text = String(value ?? "");
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function renderAdminLeaveRequests(requests) {
+  const tbody = getAdminLeaveRequestBody();
+  if (!tbody) return;
+
+  if (!requests || requests.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8">No leave requests found.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = requests.map((request) => {
+    const status = request.status || "Pending";
+    const statusClass = leaveStatusClass(status);
+    const employeeName = request.employee_name || request.emp_code || "Employee";
+    const actionButtons = status === "Pending"
+      ? `<div class="leave-admin-actions">
+          <button type="button" class="btn leave-approve-btn" data-request-id="${request.request_id}">Approve</button>
+          <button type="button" class="btn leave-reject-btn" data-request-id="${request.request_id}">Reject</button>
+        </div>`
+      : '<span class="leave-action-note">No action</span>';
+
+    return `
+      <tr>
+        <td>${escapeHtml(formatDashboardDate(request.created_at))}</td>
+        <td>
+          <strong>${escapeHtml(employeeName)}</strong>
+          <small>${escapeHtml(request.emp_code || "")}</small>
+        </td>
+        <td>${escapeHtml(request.leave_name || "N/A")}</td>
+        <td>${escapeHtml(request.start_date || "N/A")} to ${escapeHtml(request.end_date || "N/A")}</td>
+        <td>${Number(request.total_days || 0).toFixed(2)}</td>
+        <td class="leave-reason-cell">${escapeHtml(request.reason || "N/A")}</td>
+        <td><span class="status ${statusClass}">${escapeHtml(status)}</span></td>
+        <td>${actionButtons}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderPreviousLeaveRequests(requests) {
+  const tbody = getPreviousLeaveRequestBody();
+  if (!tbody) return;
+
+  const previousRequests = (requests || []).filter((request) => {
+    const status = String(request.status || "").toLowerCase();
+    return status === "approved" || status === "rejected";
+  });
+
+  if (previousRequests.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8">No approved or rejected leave requests yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = previousRequests.map((request) => {
+    const status = request.status || "N/A";
+    const employeeName = request.employee_name || request.emp_code || "Employee";
+
+    return `
+      <tr>
+        <td>${escapeHtml(formatDashboardDate(request.created_at))}</td>
+        <td>
+          <strong>${escapeHtml(employeeName)}</strong>
+          <small>${escapeHtml(request.emp_code || "")}</small>
+        </td>
+        <td>${escapeHtml(request.leave_name || "N/A")}</td>
+        <td>${escapeHtml(request.start_date || "N/A")} to ${escapeHtml(request.end_date || "N/A")}</td>
+        <td>${Number(request.total_days || 0).toFixed(2)}</td>
+        <td class="leave-reason-cell">${escapeHtml(request.reason || "N/A")}</td>
+        <td><span class="status ${leaveStatusClass(status)}">${escapeHtml(status)}</span></td>
+        <td>${escapeHtml(formatDashboardDate(request.updated_at))}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function loadAdminLeaveRequests() {
+  if (!window.location.pathname.includes("/dashboard/admin_leave_management.html")) return;
+
+  const userId = sessionStorage.getItem("user_id");
+  const tbody = getAdminLeaveRequestBody();
+  const filter = getAdminLeaveFilterNode();
+
+  if (!userId || !tbody) return;
+
+  try {
+    setAdminLeaveMessage("");
+    tbody.innerHTML = '<tr><td colspan="8">Loading leave requests...</td></tr>';
+
+    const params = new URLSearchParams({ user_id: userId });
+    if (filter && filter.value) {
+      params.set("status", filter.value);
+    }
+
+    const res = await fetch(`/api/admin/leave-requests?${params.toString()}&_ts=${Date.now()}`, {
+      cache: 'no-store'
+    });
+    const data = await parseApiJson(res, "Unable to load leave requests.");
+
+    if (!data.success) {
+      throw new Error(data.message || "Unable to load leave requests.");
+    }
+
+    renderAdminLeaveRequests(data.requests || []);
+
+    const pendingCount = getAdminLeavePendingCountNode();
+    if (pendingCount) {
+      pendingCount.textContent = String((data.summary && data.summary.Pending) || 0);
+    }
+
+    const approvedCount = getAdminLeaveApprovedCountNode();
+    if (approvedCount) {
+      approvedCount.textContent = String((data.summary && data.summary.Approved) || 0);
+    }
+
+    const rejectedCount = getAdminLeaveRejectedCountNode();
+    if (rejectedCount) {
+      rejectedCount.textContent = String((data.summary && data.summary.Rejected) || 0);
+    }
+
+    const cancelledCount = getAdminLeaveCancelledCountNode();
+    if (cancelledCount) {
+      cancelledCount.textContent = String((data.summary && data.summary.Cancelled) || 0);
+    }
+  } catch (err) {
+    console.error("Admin leave load error:", err);
+    tbody.innerHTML = '<tr><td colspan="8">Unable to load leave requests.</td></tr>';
+    setAdminLeaveMessage(err.message || "Unable to load leave requests.", "error");
+  }
+}
+
+async function loadPreviousLeaveRequests() {
+  if (!window.location.pathname.includes("/dashboard/admin_leave_management.html")) return;
+
+  const userId = sessionStorage.getItem("user_id");
+  const tbody = getPreviousLeaveRequestBody();
+  if (!userId || !tbody) return;
+
+  try {
+    tbody.innerHTML = '<tr><td colspan="8">Loading previous leave requests...</td></tr>';
+
+    const params = new URLSearchParams({ user_id: userId });
+    const res = await fetch(`/api/admin/leave-requests?${params.toString()}&_ts=${Date.now()}`, {
+      cache: 'no-store'
+    });
+    const data = await parseApiJson(res, "Unable to load previous leave requests.");
+
+    if (!data.success) {
+      throw new Error(data.message || "Unable to load previous leave requests.");
+    }
+
+    renderPreviousLeaveRequests(data.requests || []);
+  } catch (err) {
+    console.error("Previous leave load error:", err);
+    tbody.innerHTML = '<tr><td colspan="8">Unable to load previous leave requests.</td></tr>';
+  }
+}
+
+let adminLeaveRefreshTimer = null;
+const ADMIN_LEAVE_REFRESH_INTERVAL_MS = 10000;
+
+async function exportLeaveRequestsForExcel() {
+  if (!window.location.pathname.includes("/dashboard/admin_leave_management.html")) return;
+
+  const userId = sessionStorage.getItem("user_id");
+  if (!userId) {
+    window.location.href = "../login/login.html";
+    return;
+  }
+
+  try {
+    setAdminLeaveMessage("Preparing leave request export...");
+
+    const params = new URLSearchParams({ user_id: userId });
+    const res = await fetch(`/api/admin/leave-requests?${params.toString()}`);
+    const data = await parseApiJson(res, "Unable to export leave requests.");
+
+    if (!data.success) {
+      throw new Error(data.message || "Unable to export leave requests.");
+    }
+
+    const rows = data.requests || [];
+    if (rows.length === 0) {
+      setAdminLeaveMessage("No leave requests available to export.", "error");
+      return;
+    }
+
+    const headers = [
+      "Request ID",
+      "Submitted",
+      "Employee ID",
+      "Employee Name",
+      "Leave Type",
+      "Start Date",
+      "End Date",
+      "Total Days",
+      "Reason",
+      "Status",
+      "Last Updated"
+    ];
+
+    const tableRows = rows.map((request) => [
+      request.request_id,
+      formatDashboardDate(request.created_at),
+      request.emp_code || "",
+      request.employee_name || "",
+      request.leave_name || "",
+      request.start_date || "",
+      request.end_date || "",
+      Number(request.total_days || 0).toFixed(2),
+      request.reason || "",
+      request.status || "",
+      formatDashboardDate(request.updated_at)
+    ]);
+
+    const htmlTable = `
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          table { border-collapse: collapse; }
+          th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
+          th { background: #e8f5e8; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${tableRows.map((row) => `
+              <tr>${row.map((cell) => `<td>${escapeHtml(excelText(cell))}</td>`).join("")}</tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const today = new Date().toISOString().slice(0, 10);
+    downloadTextFile(
+      `leave-management-${today}.xls`,
+      htmlTable,
+      "application/vnd.ms-excel;charset=utf-8;"
+    );
+
+    setAdminLeaveMessage("Leave requests exported successfully.", "success");
+    showToast("Leave requests exported successfully.", "success");
+  } catch (err) {
+    console.error("Leave export error:", err);
+    setAdminLeaveMessage(err.message || "Unable to export leave requests.", "error");
+    showToast(err.message || "Unable to export leave requests.", "error");
+  }
+}
+
+async function updateAdminLeaveStatus(requestId, status) {
+  const userId = sessionStorage.getItem("user_id");
+  if (!userId) {
+    window.location.href = "../login/login.html";
+    return;
+  }
+
+  try {
+    setAdminLeaveMessage(`${status === "Approved" ? "Approving" : "Rejecting"} leave request...`);
+
+    const res = await fetch(`/api/admin/leave-requests/${encodeURIComponent(requestId)}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, status })
+    });
+
+    const data = await parseApiJson(res, "Unable to update leave request.");
+    if (!data.success) {
+      throw new Error(data.message || "Unable to update leave request.");
+    }
+
+    setAdminLeaveMessage(data.message || "Leave request updated.", "success");
+    showToast(data.message || "Leave request updated.", "success");
+    await loadAdminLeaveRequests();
+    await loadPreviousLeaveRequests();
+  } catch (err) {
+    console.error("Admin leave update error:", err);
+    setAdminLeaveMessage(err.message || "Unable to update leave request.", "error");
+    showToast(err.message || "Unable to update leave request.", "error");
+  }
+}
+
+if (window.location.pathname.includes("/dashboard/admin_leave_management.html")) {
+  document.addEventListener("DOMContentLoaded", () => {
+    loadAdminLeaveRequests();
+    loadPreviousLeaveRequests();
+
+    if (!adminLeaveRefreshTimer) {
+      adminLeaveRefreshTimer = window.setInterval(() => {
+        loadAdminLeaveRequests().catch((err) => console.error('Admin leave refresh failed:', err));
+        loadPreviousLeaveRequests().catch((err) => console.error('Admin leave history refresh failed:', err));
+      }, ADMIN_LEAVE_REFRESH_INTERVAL_MS);
+    }
+
+    const filter = document.getElementById("leaveStatusFilter");
+    if (filter) {
+      filter.addEventListener("change", loadAdminLeaveRequests);
+    }
+
+    const exportBtn = getAdminLeaveExportButton();
+    if (exportBtn) {
+      exportBtn.addEventListener("click", exportLeaveRequestsForExcel);
+    }
+
+    const table = document.getElementById("adminLeaveRequestTable") || document.getElementById("adminLeaveRequestsBody");
+    if (table) {
+      table.addEventListener("click", (event) => {
+        const approveBtn = event.target.closest(".leave-approve-btn");
+        const rejectBtn = event.target.closest(".leave-reject-btn");
+
+        if (approveBtn) {
+          updateAdminLeaveStatus(approveBtn.dataset.requestId, "Approved");
+        }
+
+        if (rejectBtn) {
+          updateAdminLeaveStatus(rejectBtn.dataset.requestId, "Rejected");
+        }
+      });
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (adminLeaveRefreshTimer) {
+        clearInterval(adminLeaveRefreshTimer);
+        adminLeaveRefreshTimer = null;
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      loadAdminLeaveRequests().catch((err) => console.error('Admin leave focus refresh failed:', err));
+      loadPreviousLeaveRequests().catch((err) => console.error('Admin leave focus history refresh failed:', err));
+    });
+  });
+}
 
 // ========== EMPLOYEE MANAGEMENT PAGE ==========
 if (window.location.pathname.includes('employee_management.html')) {
@@ -190,6 +1198,7 @@ if (window.location.pathname.includes('employee_management.html')) {
   let currentEmployeePage = 1;
   let totalEmployeePages = 1;
   let totalEmployees = 0; // Track the total number of employees
+  let employeeRealtimeRefreshTimer = null;
 
   // === Employee List ===
   async function loadEmployeeList() {
@@ -279,11 +1288,174 @@ if (window.location.pathname.includes('employee_management.html')) {
     const activePage = document.querySelector(".activepage");
     if (activePage) activePage.textContent = currentEmployeePage;
   }
+
+  async function refreshEmployeeManagementRealtime() {
+    const employeeFileSection = document.getElementById('employeeFile');
+    if (!employeeFileSection || employeeFileSection.classList.contains('hidden')) {
+      return;
+    }
+
+    await loadEmployeeSummary();
+    await loadEmployeeList();
+  }
+
+  function startEmployeeManagementRealtimeRefresh() {
+    if (employeeRealtimeRefreshTimer) return;
+
+    employeeRealtimeRefreshTimer = setInterval(() => {
+      refreshEmployeeManagementRealtime().catch((err) => {
+        console.error('Realtime employee refresh failed:', err);
+      });
+    }, 5000);
+  }
+
+  function stopEmployeeManagementRealtimeRefresh() {
+    if (!employeeRealtimeRefreshTimer) return;
+    clearInterval(employeeRealtimeRefreshTimer);
+    employeeRealtimeRefreshTimer = null;
+  }
+
+  function escapePrintHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  async function resolveEmployeeForExport(query) {
+    const trimmed = String(query || '').trim();
+    if (!trimmed) return null;
+
+    const res = await fetch(`/api/employee_autocomplete?q=${encodeURIComponent(trimmed)}`);
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.employees) || !data.employees.length) {
+      return null;
+    }
+
+    const normalized = trimmed.toLowerCase();
+    return data.employees.find((employee) => {
+      return [employee.emp_code, employee.full_name, employee.display]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase() === normalized || String(value).toLowerCase().includes(normalized));
+    }) || data.employees[0];
+  }
+
+  async function fetchEmployeeFileRecord(employeeId) {
+    const [detailsRes, listRes] = await Promise.all([
+      fetch(`/api/employee_details/${encodeURIComponent(employeeId)}`),
+      fetch('/api/employee_list?limit=1000&page=1&sortBy=ID')
+    ]);
+
+    const detailsData = await detailsRes.json();
+    const listData = await listRes.json();
+
+    if (!detailsData.success) {
+      throw new Error('Unable to load employee details.');
+    }
+
+    const detailed = detailsData.employee || {};
+    const listEmployee = Array.isArray(listData.employees)
+      ? listData.employees.find((employee) => String(employee.emp_code || '').toLowerCase() === String(detailed.emp_code || '').toLowerCase())
+      : null;
+
+    return {
+      employee_id: detailed.employee_id,
+      emp_code: detailed.emp_code,
+      full_name: `${detailed.first_name || ''} ${detailed.last_name || ''}`.trim(),
+      company: detailed.company || listEmployee?.company || 'N/A',
+      department: detailed.department || listEmployee?.department || 'N/A',
+      position: detailed.position || listEmployee?.position || 'N/A',
+      employee_type: detailed.employee_type || 'N/A',
+      salary_type: detailed.salary_type || 'N/A',
+      email: listEmployee?.email || 'N/A',
+      mobile_no: listEmployee?.mobile_no || 'N/A',
+      status: listEmployee?.status || 'N/A'
+    };
+  }
+
+  function openEmployeeFilePrintWindow(employee) {
+    const printWindow = window.open('', '_blank', 'width=980,height=760');
+    if (!printWindow) {
+      throw new Error('Please allow pop-ups to print employee files.');
+    }
+
+    const rows = [
+      ['Employee ID', employee.employee_id],
+      ['Employee Code', employee.emp_code],
+      ['Full Name', employee.full_name],
+      ['Company', employee.company],
+      ['Department', employee.department],
+      ['Position', employee.position],
+      ['Employee Type', employee.employee_type],
+      ['Salary Type', employee.salary_type],
+      ['Email', employee.email],
+      ['Mobile No.', employee.mobile_no],
+      ['Status', employee.status]
+    ];
+
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>Employee File - ${escapePrintHtml(employee.full_name || employee.emp_code || 'Employee')}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 28px; color: #1f2937; }
+          h1 { margin: 0 0 6px; font-size: 24px; }
+          p { margin: 0 0 18px; color: #6b7280; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #d1d5db; padding: 10px 12px; text-align: left; vertical-align: top; }
+          th { width: 220px; background: #f9fafb; }
+          .meta { margin-bottom: 18px; }
+          .print-actions { margin-top: 18px; }
+          .print-actions button { padding: 10px 14px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+          @media print { .print-actions { display: none; } body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>Employee File</h1>
+        <p class="meta">Printable employee file information generated from the payroll system.</p>
+        <table>
+          <tbody>
+            ${rows.map(([label, value]) => `<tr><th>${escapePrintHtml(label)}</th><td>${escapePrintHtml(value)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="print-actions">
+          <button type="button" onclick="window.print()">Print</button>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
+  }
+
+  async function exportEmployeeFile() {
+    const input = window.prompt('Enter the employee name or employee code to export:');
+    if (!input || !input.trim()) return;
+
+    try {
+      const employee = await resolveEmployeeForExport(input);
+      if (!employee) {
+        showToast('Employee not found.', 'warning');
+        return;
+      }
+
+      const fileRecord = await fetchEmployeeFileRecord(employee.employee_id);
+      openEmployeeFilePrintWindow(fileRecord);
+      showToast('Employee file is ready to print.', 'success');
+    } catch (err) {
+      console.error('Employee export error:', err);
+      showToast(err.message || 'Unable to export employee file.', 'error');
+    }
+  }
   
   // === Load Employee Dashboard Page Content ===
   document.addEventListener("DOMContentLoaded", () => {
     loadEmployeeSummary();
     loadEmployeeList();
+    startEmployeeManagementRealtimeRefresh();
 
     // Attach entries dropdown listener
     const entriesSelect = document.getElementById("entriesSelect");
@@ -318,6 +1490,25 @@ if (window.location.pathname.includes('employee_management.html')) {
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
     const viewBtn = document.getElementById("viewBtn");
+    let exportEmployeeBtn = document.getElementById("exportEmployeeBtn");
+
+    if (!exportEmployeeBtn) {
+      const addNewEmployeeBtn = document.getElementById("addNewEmployee");
+      if (addNewEmployeeBtn && addNewEmployeeBtn.parentElement) {
+        exportEmployeeBtn = document.createElement('button');
+        exportEmployeeBtn.type = 'button';
+        exportEmployeeBtn.id = 'exportEmployeeBtn';
+        exportEmployeeBtn.className = 'add-employee-btn';
+        exportEmployeeBtn.style.marginLeft = '10px';
+        exportEmployeeBtn.style.background = '#007bff';
+        exportEmployeeBtn.textContent = 'Export Employee File';
+        addNewEmployeeBtn.insertAdjacentElement('afterend', exportEmployeeBtn);
+      }
+    }
+
+    if (exportEmployeeBtn) {
+      exportEmployeeBtn.addEventListener('click', exportEmployeeFile);
+    }
 
     if (prevBtn) {
       prevBtn.addEventListener("click", () => {
@@ -336,6 +1527,16 @@ if (window.location.pathname.includes('employee_management.html')) {
         }
       });
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        refreshEmployeeManagementRealtime().catch((err) => {
+          console.error('Employee refresh on tab focus failed:', err);
+        });
+      }
+    });
+
+    window.addEventListener('beforeunload', stopEmployeeManagementRealtimeRefresh);
   });
   
   // ===============================
@@ -604,7 +1805,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const sssEEShare = document.getElementById("sssEEShare");
     const sssERShare = document.getElementById("sssERShare");
     const sssECC = document.getElementById("sssECC");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !sss.checked;
 
     sssStartDate.disabled = disabled;
@@ -641,7 +1842,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const pagibigEEShare = document.getElementById("pagibigEEShare");
     const pagibigERShare = document.getElementById("pagibigERShare");
     const pagibigECC = document.getElementById("pagibigECC");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !pagibig.checked;
 
     pagibigStartDate.disabled = disabled;
@@ -676,7 +1877,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const philhealthComputation = document.getElementById("philhealthComputation");
     const philhealthEEShare = document.getElementById("philhealthEEShare");
     const philhealthERShare = document.getElementById("philhealthERShare");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !philhealth.checked;
 
     philhealthStartDate.disabled = disabled;
@@ -710,7 +1911,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     const withholdingTaxEEShare = document.getElementById("withholdingTaxEEShare");
     const withholdingTaxECC = document.getElementById("withholdingTaxECC");
     const annualize = document.getElementById("annualize");
-    const DEFAULT_DATE = new Date().toISOString().split("T")[0];
+    const DEFAULT_DATE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     const disabled = !withholdingTax.checked;
 
     withholdingTaxStartDate.disabled = disabled;
@@ -1698,7 +2899,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     payrollPeriodSelect?.addEventListener("change", populatePeriodSelects);
     
     // Setting default values for some input fields
-    const currentDate = new Date().toISOString().split("T")[0];
+    const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     document.getElementById("country").value = "Philippines";
 
     document.getElementById("trainingDate").value = currentDate;
@@ -8011,9 +9212,10 @@ if (window.location.pathname === '/dashboard/auditing.html') {
 
           // Render the logs
           data.logs.forEach(log => {
-              const formattedDate = new Date(log.log_time).toLocaleString("en-US", {
+              const formattedDate = new Date(log.log_time + 'Z').toLocaleString("en-US", {
                   month: "short", day: "2-digit", year: "numeric",
-                  hour: "2-digit", minute: "2-digit", hour12: true
+                  hour: "2-digit", minute: "2-digit", hour12: true,
+                  timeZone: 'Asia/Manila'
               });
 
               tbody.innerHTML += `
@@ -8579,7 +9781,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   return {
     orientation: els.orientation?.value || "Vertical",
-    companyName: safeText(payroll.company || "Business Set Up & Compliance Inc."),
+    companyName: safeText(payroll.company || "Astreablue Intelligence Inc."),
     dateOfJoining: safeText(payroll.date_hired),
     payPeriod: safeText(payroll.payroll_range || getCurrentPeriodLabel()),
     workedDays: safeText(payroll.days_in_week || payroll.days_in_year || "-"),
@@ -8692,6 +9894,193 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
+
+// ========== RECONCILIATION DETAILS ==========
+if (window.location.pathname.includes('reconciliation_details.html')) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const els = {
+      payrollGroup: document.getElementById('reconPayrollGroup'),
+      payrollPeriod: document.getElementById('reconPayrollPeriod'),
+      month: document.getElementById('reconMonth'),
+      year: document.getElementById('reconYear'),
+      status: document.getElementById('reconStatus'),
+      orderBy: document.getElementById('reconOrderBy'),
+      generate: document.getElementById('generateReconReport'),
+      message: document.getElementById('reconMessage'),
+      runId: document.getElementById('reconRunId'),
+      employeeCount: document.getElementById('reconEmployeeCount'),
+      totalGross: document.getElementById('reconTotalGross'),
+      totalDeductions: document.getElementById('reconTotalDeductions'),
+      totalNet: document.getElementById('reconTotalNet'),
+      totalDelta: document.getElementById('reconTotalDelta'),
+      tableBody: document.getElementById('reconTableBody')
+    };
+
+    function money(value) {
+      return Number(value || 0).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function setMessage(message, type = '') {
+      if (!els.message) return;
+      els.message.textContent = message || '';
+      els.message.className = `message ${type}`.trim();
+    }
+
+    function fillSelect(select, rows, valueKey, labelKey) {
+      if (!select) return;
+      select.innerHTML = '<option value="">Select</option>';
+      (rows || []).forEach((row) => {
+        const option = document.createElement('option');
+        option.value = row[valueKey];
+        option.textContent = row[labelKey];
+        select.appendChild(option);
+      });
+    }
+
+    function resetSummary() {
+      if (els.runId) els.runId.textContent = '-';
+      if (els.employeeCount) els.employeeCount.textContent = '0';
+      if (els.totalGross) els.totalGross.textContent = '0.00';
+      if (els.totalDeductions) els.totalDeductions.textContent = '0.00';
+      if (els.totalNet) els.totalNet.textContent = '0.00';
+      if (els.totalDelta) els.totalDelta.textContent = '0.00';
+      if (els.tableBody) els.tableBody.innerHTML = '<tr><td colspan="6">No report rows yet.</td></tr>';
+    }
+
+    async function fetchReconJson(url, options) {
+      const res = await fetch(url, options);
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error('Invalid server response.');
+      }
+      if (!res.ok) {
+        throw new Error(data.message || 'Request failed.');
+      }
+      return data;
+    }
+
+    async function loadMeta() {
+      try {
+        const data = await fetchReconJson('/api/payroll_periods');
+        const payload = data.data || {};
+        fillSelect(els.payrollGroup, payload.payrollGroups, 'group_id', 'group_name');
+        fillSelect(els.payrollPeriod, payload.payrollPeriods, 'period_id', 'period_name');
+        fillSelect(els.month, payload.payrollMonths, 'month_id', 'month_name');
+        fillSelect(els.year, payload.payrollYears, 'year_id', 'year_value');
+      } catch (err) {
+        setMessage(err.message || 'Unable to load report setup.', 'error');
+      }
+    }
+
+    function renderRows(rows) {
+      if (!els.tableBody) return;
+      if (!rows.length) {
+        els.tableBody.innerHTML = '<tr><td colspan="6">No records returned for the selected filters.</td></tr>';
+        return;
+      }
+
+      els.tableBody.innerHTML = rows.map((row) => {
+        const gross = Number(row.gross_pay || 0);
+        const deductions = Number(row.total_deductions || 0);
+        const net = Number(row.net_pay || 0);
+        const delta = gross - deductions - net;
+        const name = `${row.first_name || ''} ${row.last_name || ''}`.trim() || '-';
+
+        return `
+          <tr>
+            <td>${escapeHtml(row.emp_code || row.employee_id || '-')}</td>
+            <td>${escapeHtml(name)}</td>
+            <td>${money(gross)}</td>
+            <td>${money(deductions)}</td>
+            <td>${money(net)}</td>
+            <td>${money(delta)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderSummary(runId, rows) {
+      const totals = rows.reduce((acc, row) => {
+        const gross = Number(row.gross_pay || 0);
+        const deductions = Number(row.total_deductions || 0);
+        const net = Number(row.net_pay || 0);
+        acc.gross += gross;
+        acc.deductions += deductions;
+        acc.net += net;
+        acc.delta += gross - deductions - net;
+        return acc;
+      }, { gross: 0, deductions: 0, net: 0, delta: 0 });
+
+      if (els.runId) els.runId.textContent = runId || '-';
+      if (els.employeeCount) els.employeeCount.textContent = String(rows.length);
+      if (els.totalGross) els.totalGross.textContent = money(totals.gross);
+      if (els.totalDeductions) els.totalDeductions.textContent = money(totals.deductions);
+      if (els.totalNet) els.totalNet.textContent = money(totals.net);
+      if (els.totalDelta) els.totalDelta.textContent = money(totals.delta);
+    }
+
+    async function generateReport() {
+      setMessage('');
+      const payroll_group = els.payrollGroup?.value;
+      const payroll_period = els.payrollPeriod?.value;
+      const month = els.month?.value;
+      const year = els.year?.value;
+
+      if (!payroll_group || !payroll_period || !month || !year) {
+        setMessage('Please select payroll group, period, month, and year.', 'error');
+        return;
+      }
+
+      try {
+        if (els.generate) {
+          els.generate.disabled = true;
+          els.generate.textContent = 'Generating...';
+        }
+
+        const runParams = new URLSearchParams({ payroll_group, payroll_period, month, year });
+        const runData = await fetchReconJson(`/api/get_run_id_payroll_journal?${runParams.toString()}`);
+        if (!runData.success || !runData.run_id) {
+          throw new Error(runData.message || 'No matching payroll run found.');
+        }
+
+        const rowParams = new URLSearchParams({
+          run_ids: runData.run_id,
+          status: els.status?.value || 'active',
+          orderBy: els.orderBy?.value || 'department_surname'
+        });
+        const rowData = await fetchReconJson(`/api/payroll_journal_employees?${rowParams.toString()}`);
+        if (!rowData.success) {
+          throw new Error(rowData.message || 'Unable to load reconciliation rows.');
+        }
+
+        const rows = rowData.employees || [];
+        renderSummary(runData.run_id, rows);
+        renderRows(rows);
+        if (!rows.length) {
+          setMessage('No records returned for the selected filters.', 'info');
+        }
+      } catch (err) {
+        resetSummary();
+        setMessage(err.message || 'Unable to generate reconciliation details.', 'error');
+      } finally {
+        if (els.generate) {
+          els.generate.disabled = false;
+          els.generate.textContent = 'Generate';
+        }
+      }
+    }
+
+    resetSummary();
+    loadMeta();
+    els.generate?.addEventListener('click', generateReport);
+  });
+}
 
 // ========== PAYROLL JOURNAL ==========
 if (window.location.pathname.includes('payroll_journal.html')) {

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR Dashboard | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Astreablue Intelligence Inc.</div>
+      <h3></h3>
+      <p></p>
+    </div>
+
+    <nav>
+      <ul>
+        <li class="active"><a href="hr_dashboard.html">HR Dashboard</a></li>
+        <li class="dropdown">
+          <a href="employee_management.html" class="dropdown-toggle">Workforce Management</a>
+          <ul class="dropdown-menu">
+            <li><a href="employee_management.html">Employee File</a></li>
+            <li><a href="employee_attendance.html">Employee Attendance</a></li>
+            <li><a href="admin_leave_management.html">Leave Management</a></li>
+          </ul>
+        </li>
+        <li><a href="auditing.html">Auditing</a></li>
+        <li><a href="utilities.html">Utilities</a></li>
+        <li><a href="#" id="logout">Logout</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="section" id="hr-dashboard-section">
+    <header class="header">
+      <h2 id="hrWelcomeHeader">Welcome, HR</h2>
+      <p>Manage employee data, attendance, leave requests, and compliance activity from one workspace.</p>
+    </header>
+
+    <section class="summary" id="hrSummaryCards">
+      <div class="card">
+        <span>Total Employees</span>
+        <strong id="hrTotalEmployees">0</strong>
+      </div>
+      <div class="card">
+        <span>Pending Leave Requests</span>
+        <strong id="hrPendingLeaves">0</strong>
+      </div>
+      <div class="card">
+        <span>Attendance Recorded Today</span>
+        <strong id="hrAttendanceToday">0</strong>
+      </div>
+      <div class="card">
+        <span>System Logs Today</span>
+        <strong id="hrSystemLogs">0</strong>
+      </div>
+    </section>
+
+    <section class="dashboard-grid">
+      <article class="modern-panel">
+        <div class="panel-title">
+          <div>
+            <h3>Employee Status</h3>
+            <p>Workforce status breakdown</p>
+          </div>
+        </div>
+        <div class="donut-dashboard">
+          <div class="donut-chart" id="hrEmployeeStatusDonut"></div>
+          <div class="chart-legend" id="hrEmployeeStatusLegend"></div>
+        </div>
+      </article>
+
+      <article class="modern-panel">
+        <div class="panel-title">
+          <div>
+            <h3>Leave Requests</h3>
+            <p>Current request distribution</p>
+          </div>
+        </div>
+        <div class="bar-chart" id="hrLeaveStatusChart"></div>
+      </article>
+
+      <article class="modern-panel wide-panel">
+        <div class="panel-title">
+          <div>
+            <h3>Quick HR Actions</h3>
+            <p>Go directly to daily HR operations</p>
+          </div>
+        </div>
+        <div class="bar-chart" id="hrQuickActions" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px;">
+          <a class="btn" href="employee_management.html" style="text-align:center; text-decoration:none;">Open Employee File</a>
+          <a class="btn" href="employee_attendance.html" style="text-align:center; text-decoration:none;">Open Attendance</a>
+          <a class="btn" href="admin_leave_management.html" style="text-align:center; text-decoration:none;">Review Leave Requests</a>
+          <a class="btn" href="auditing.html" style="text-align:center; text-decoration:none;">View Audit Logs</a>
+        </div>
+      </article>
+    </section>
+
+    <section class="table-section" style="margin-top: 20px;">
+      <h3>Recent HR Activities</h3>
+      <table id="hrActivityTable">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Activity</th>
+            <th>Performed By</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="4">Loading activities...</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<div id="toastSuccess" class="toastSuccess"></div>
+<div id="toastWarning" class="toastWarning"></div>
+<div id="toastError" class="toastError"></div>
+<div id="toastInfo" class="toastInfo"></div>
+<div id="toastMissingFields" class="toastMissingFields"></div>
+
+<script src="js/script.js?v=nav-20260528"></script>
+<script src="js/hr_dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../api/client.js';
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function excelText(value) {
+  const text = String(value ?? '');
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function formatExportDateTime(value) {
+  if (!value) return '-';
+  const parsed = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString('en-PH', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Manila'
+  });
+}
+
+function formatTime(value) {
+  if (!value) return '-';
+  return new Date(String(value).replace(' ', 'T')).toLocaleString('en-PH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+function formatDateLabel(value) {
+  if (!value) return '-';
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric'
+  });
+}
+
+function computeHours(record) {
+  if (!record.time_in || !record.time_out) return '-';
+  const timeIn = new Date(String(record.time_in).replace(' ', 'T')).getTime();
+  const timeOut = new Date(String(record.time_out).replace(' ', 'T')).getTime();
+  if (timeOut <= timeIn) return '0.00';
+
+  let breakMs = 0;
+  if (record.break_out && record.break_in) {
+    const breakOut = new Date(String(record.break_out).replace(' ', 'T')).getTime();
+    const breakIn = new Date(String(record.break_in).replace(' ', 'T')).getTime();
+    if (breakIn > breakOut) breakMs = breakIn - breakOut;
+  }
+
+  return ((timeOut - timeIn - breakMs) / 3600000).toFixed(2);
+}
+
+function attendanceStatus(record) {
+  if (!record.time_in) return { label: 'Absent', className: 'rest' };
+  if (!record.time_out || (record.break_out && !record.break_in)) return { label: 'Incomplete', className: 'pending' };
+  return { label: 'Present', className: 'present' };
+}
+
+export default function EmployeeAttendancePage() {
+  const [records, setRecords] = useState([]);
+  const [date, setDate] = useState('');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    api.get('/attendance_overview')
+      .then(({ data }) => {
+        setRecords(data.records || []);
+        setDate(data.date || '');
+      })
+      .catch((err) => console.error('Attendance load failed:', err));
+  }, []);
+
+  const filteredRecords = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return records;
+    return records.filter((record) =>
+      `${record.emp_code || ''} ${record.employee_name || ''} ${record.department || ''}`.toLowerCase().includes(term)
+    );
+  }, [records, search]);
+
+  const present = filteredRecords.filter((record) => attendanceStatus(record).label === 'Present').length;
+  const incomplete = filteredRecords.filter((record) => attendanceStatus(record).label === 'Incomplete').length;
+
+  function exportAttendance() {
+    if (!filteredRecords.length) {
+      window.alert('No attendance records available to export.');
+      return;
+    }
+
+    const headers = [
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Time In',
+      'Break Out',
+      'Break In',
+      'Time Out',
+      'Total Hours',
+      'OT Hours',
+      'Status'
+    ];
+
+    const rows = filteredRecords.map((record) => {
+      const status = attendanceStatus(record);
+      const totalHours = computeHours(record);
+      const ot = totalHours === '-' ? '-' : Math.max(0, Number(totalHours) - 8).toFixed(2);
+
+      return [
+        record.emp_code || 'N/A',
+        record.employee_name || record.full_name || 'N/A',
+        record.department || 'N/A',
+        formatExportDateTime(record.time_in),
+        formatExportDateTime(record.break_out),
+        formatExportDateTime(record.break_in),
+        formatExportDateTime(record.time_out),
+        totalHours,
+        record.ot_hours != null ? Number(record.ot_hours).toFixed(2) : ot,
+        status.label
+      ];
+    });
+
+    const html = `
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          table { border-collapse: collapse; }
+          th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
+          th { background: #f1f1f1; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(excelText(cell))}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance-overview-${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <>
+      <header className="header">
+        <h2>Employee Attendance</h2>
+        <p>Timekeeping and attendance monitoring for payroll processing.</p>
+      </header>
+
+      <section className="summary">
+        <div className="card"><span>Date</span><strong>{formatDateLabel(date)}</strong><small>Selected Day</small></div>
+        <div className="card"><span>Total Employees</span><strong>{filteredRecords.length}</strong></div>
+        <div className="card"><span>Present</span><strong>{present}</strong></div>
+        <div className="card"><span>Late / Incomplete</span><strong>{incomplete}</strong></div>
+      </section>
+
+      <section className="table-section">
+        <div className="table-header">
+          <h3>Attendance Records</h3>
+          <div className="toolbar">
+            <button type="button" className="btn secondary" onClick={exportAttendance}>Export Attendance</button>
+            <label>Search: <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee..." /></label>
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee ID</th>
+                <th>Name</th>
+                <th>Department</th>
+                <th>Time In</th>
+                <th>Break Out</th>
+                <th>Break In</th>
+                <th>Time Out</th>
+                <th>Total Hours</th>
+                <th>OT Hours</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRecords.length === 0 ? (
+                <tr><td colSpan="10">No attendance records found.</td></tr>
+              ) : filteredRecords.map((record) => {
+                const status = attendanceStatus(record);
+                const totalHours = computeHours(record);
+                const ot = totalHours === '-' ? '-' : Math.max(0, Number(totalHours) - 8).toFixed(2);
+                return (
+                  <tr key={`${record.emp_code}-${record.time_in || ''}`}>
+                    <td>{record.emp_code || 'N/A'}</td>
+                    <td>{record.employee_name || record.full_name || 'N/A'}</td>
+                    <td>{record.department || 'N/A'}</td>
+                    <td>{formatTime(record.time_in)}</td>
+                    <td>{formatTime(record.break_out)}</td>
+                    <td>{formatTime(record.break_in)}</td>
+                    <td>{formatTime(record.time_out)}</td>
+                    <td>{totalHours}</td>
+                    <td>{record.ot_hours != null ? Number(record.ot_hours).toFixed(2) : ot}</td>
+                    <td><span className={`status ${status.className}`}>{status.label}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}

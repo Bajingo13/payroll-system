@@ -1,0 +1,180 @@
+.profile-edit-section {
+  margin-bottom: 20px;
+}
+
+.profile-edit-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e8f2ff;
+  color: #1f4f95;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn.btn-secondary {
+  background: #fff;
+  color: #2f4a73;
+  border: 1px solid #cdd8ea;
+}
+
+.profile-edit-form {
+  margin-top: 12px;
+}
+
+.profile-picture-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: #fbfdff;
+}
+
+.profile-picture-panel .profile-picture-preview {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.profile-picture-panel h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: #30405f;
+}
+
+.profile-picture-panel p {
+  margin: 0 0 10px;
+  color: #5f6e87;
+  font-size: 13px;
+}
+
+.edit-group {
+  border: 1px solid #e7ebf3;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fbfdff;
+}
+
+.edit-group h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #30405f;
+}
+
+.edit-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.edit-grid.cols-1 {
+  grid-template-columns: 1fr;
+}
+
+.edit-grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.edit-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.edit-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #5f6e87;
+}
+
+.edit-grid input,
+.edit-grid select,
+.edit-grid textarea {
+  width: 100%;
+  border: 1px solid #d6ddeb;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1f1f1f;
+  background: #fff;
+}
+
+.edit-grid textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.edit-grid input:focus,
+.edit-grid select:focus,
+.edit-grid textarea:focus {
+  border-color: #3c78d8;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(60, 120, 216, 0.15);
+}
+
+.profile-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.time-message {
+  min-height: 18px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.tag-success {
+  color: #1f7a1f;
+  font-weight: 600;
+}
+
+.tag-warn {
+  color: #9a6a00;
+  font-weight: 600;
+}
+
+@media (max-width: 980px) {
+  .profile-edit-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .edit-grid.cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-picture-panel {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .edit-grid.cols-2,
+  .edit-grid.cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-edit-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Year-End Payroll | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+</head>
+<body>
+  <div class="container">
+<aside class="sidebar">
+  <div class="profile"><div class="logo">Astreablue Intelligence Inc.</div><h3></h3><p></p></div>
+  <nav>
+    <ul>
+      <li><a href="dashboard.html">Dashboard</a></li>
+      <li class="dropdown">
+        <a href="employee_management.html" class="dropdown-toggle">Employee Management</a>
+        <ul class="dropdown-menu">
+          <li><a href="employee_management.html">Employee File</a></li>
+          <li><a href="employee_documents.html">201 Files</a></li>
+          <li><a href="organization_setup.html">Departments & Salary Grades</a></li>
+          <li><a href="employee_attendance.html">Employee Attendance</a></li>
+          <li><a href="admin_leave_management.html">Leave Management</a></li>
+          <li><a href="leave_calendar.html">Leave Calendar</a></li>
+          <li><a href="performance_management.html">Performance</a></li>
+        </ul>
+      </li>
+      <li><a href="year_end_payroll.html">Year-End Payroll</a></li>
+      <li><a href="payroll_computation.html">Payroll Computation</a></li>
+      <li><a href="auditing.html">Auditing</a></li>
+      <li class="dropdown">
+        <a href="payroll_journal.html" class="dropdown-toggle">Payroll Summary Report</a>
+        <ul class="dropdown-menu">
+          <li><a href="payroll_journal.html">Payroll Journal</a></li>
+          <li><a href="gross_pay.html">Gross Pay</a></li>
+          <li><a href="net_pay.html">Net Pay</a></li>
+          <li><a href="payslip.html">Payslip</a></li>
+          <li><a href="government_reports.html">Government Reports</a></li>
+          <li><a href="report_builder.html">Report Builder</a></li>
+          <li><a href="reconciliation_details.html">Reconciliation Details</a></li>
+        </ul>
+      </li>
+      <li><a href="security_backup.html">Security & Backup</a></li>
+      <li><a href="analytics_dashboard.html">AI Analytics</a></li>
+      <li><a href="utilities.html">Utilities</a></li>
+      <li><a href="#" id="logout">Logout</a></li>
+    </ul>
+  </nav>
+</aside>
+    <main class="section year-end-payroll-page">
+      <header class="header"><h2>Year-End Payroll</h2><p>Generate 13th month pay, review year-end adjustments, and prepare December payroll reports.</p></header>
+      <section class="advanced-summary"><div><span>Report Employees</span><strong id="thirteenthEmployeeCount">0</strong></div><div><span>Annual Basic Pay</span><strong id="thirteenthAnnualBasicTotal">PHP 0.00</strong></div><div><span>Absence Deductions</span><strong id="thirteenthAbsenceTotal">PHP 0.00</strong></div><div><span>Total 13th Month</span><strong id="thirteenthPayTotal">PHP 0.00</strong></div></section>
+      <section class="advanced-panel active year-end-report-panel"><div class="table-header"><div><h3>13th Month Pay Report</h3><p>Auto-computes each active employee's 13th month pay as annual basic pay less absence deductions, divided by 12.</p></div><div class="toolbar year-end-toolbar"><label>Report Year<input id="thirteenthReportYear" type="number" min="1990" max="2100"></label><button type="button" class="btn" id="generateThirteenthReport">Generate Report</button><button type="button" class="btn secondary" id="exportThirteenthReport">Export CSV</button></div></div><div class="table-scroll"><table><thead><tr><th>Employee</th><th>Department</th><th>Position</th><th>Payroll Records</th><th>Annual Basic</th><th>Absence Deduction</th><th>Net Basic</th><th>13th Month Pay</th></tr></thead><tbody id="thirteenthMonthRows"><tr><td colspan="8">Generate a report to view 13th month pay.</td></tr></tbody></table></div><p class="message" id="thirteenthReportMessage"></p></section>
+      <section class="advanced-panel active year-end-calculator-panel"><div class="table-header"><div><h3>Quick Computation Check</h3><p>Use this for one-off validation before running the full report.</p></div></div><section class="advanced-summary"><div><span>13th Month</span><strong id="thirteenthMonthResult">PHP 0.00</strong></div><div><span>Loan Amortization</span><strong id="loanAmortizationResult">PHP 0.00</strong></div><div><span>Night Differential</span><strong id="nightDiffResult">PHP 0.00</strong></div><div><span>Holiday Premium</span><strong id="holidayPremiumResult">PHP 0.00</strong></div><div><span>Tax Refund / Payable</span><strong id="taxAnnualizationResult">PHP 0.00</strong></div></section><div class="advanced-form-grid"><label>Monthly Basic<input id="monthlyBasic" type="number" value="30000"></label><label>Months Worked<input id="monthsWorked" type="number" value="12"></label><label>Absence Adjustment<input id="absenceAdjustment" type="number" value="0"></label><label>Loan Balance<input id="loanBalance" type="number" value="25000"></label><label>Loan Terms<input id="loanTerms" type="number" value="10"></label><label>Night Hours<input id="nightHours" type="number" value="8"></label><label>Hourly Rate<input id="hourlyRate" type="number" value="180"></label><label>ND Premium %<input id="premiumRate" type="number" value="10"></label><label>Holiday Hours<input id="holidayHours" type="number" value="8"></label><label>Holiday Type<select id="holidayType"><option value="regular">Regular Holiday</option><option value="special">Special Holiday</option><option value="restday">Rest Day</option></select></label><label>Monthly Taxable Income<input id="taxableIncome" type="number" value="50000"></label><label>Tax Already Withheld<input id="taxWithheld" type="number" value="4800"></label></div></section>
+    </main>
+  </div>
+  <script src="js/script.js?v=nav-20260528"></script>
+  <script src="js/feature_pages.js"></script>
+</body>
+</html>

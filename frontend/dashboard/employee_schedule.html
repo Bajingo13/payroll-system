@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+  <link rel="stylesheet" href="css/employee_dashboard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Astreablue Intelligence Inc.</div>
+      <h3 id="empName">Employee</h3>
+      <p id="empRole">Employee</p>
+    </div>
+
+    <nav>
+      <ul>
+        <li><a href="employee_dashboard.html">Employee Dashboard</a></li>
+        <li><a href="employee_profile_edit.html">Profile Management</a></li>
+        <li><a href="employee_payroll_information.html">Payroll Information</a></li>
+        <li class="active"><a href="employee_schedule.html">Schedule</a></li>
+        <li><a href="employee_leave_management.html">Leave Management</a></li>
+        <li><a href="#" id="logout">Logout</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="section">
+    <header class="header">
+      <h2 id="welcomeHeader">Schedule</h2>
+      <p>View your assigned shift and payroll schedule settings.</p>
+    </header>
+
+    <section class="summary employee-summary">
+      <div class="card">
+        <span>Hours Per Day</span>
+        <strong id="schedHoursPerDay">N/A</strong>
+      </div>
+      <div class="card">
+        <span>Days Per Week</span>
+        <strong id="schedDaysPerWeek">N/A</strong>
+      </div>
+      <div class="card">
+        <span>Weekly Hours</span>
+        <strong id="schedWeeklyHours">N/A</strong>
+      </div>
+      <div class="card">
+        <span>Overtime Rule</span>
+        <strong id="schedOvertimeRule">N/A</strong>
+      </div>
+    </section>
+
+    <section class="table-section">
+      <h3>Shift Schedule Information</h3>
+      <div class="payroll-info-grid schedule-info-grid">
+        <div><span>Employee Code</span><strong id="schedEmployeeCode">N/A</strong></div>
+        <div><span>Payroll Period</span><strong id="schedPayrollPeriod">N/A</strong></div>
+        <div><span>Payroll Rate</span><strong id="schedPayrollRate">N/A</strong></div>
+        <div><span>OT Rate</span><strong id="schedOtRate">N/A</strong></div>
+        <div><span>Days In Year</span><strong id="schedDaysInYear">N/A</strong></div>
+        <div><span>Weeks In Year</span><strong id="schedWeeksInYear">N/A</strong></div>
+        <div><span>Days In Year (OT)</span><strong id="schedDaysInYearOt">N/A</strong></div>
+        <div><span>Rate Basis (OT)</span><strong id="schedRateBasisOt">N/A</strong></div>
+        <div><span>Main Computation</span><strong id="schedMainComputation">N/A</strong></div>
+        <div><span>Basis Absences</span><strong id="schedBasisAbsences">N/A</strong></div>
+        <div><span>Basis Overtime</span><strong id="schedBasisOvertime">N/A</strong></div>
+      </div>
+      <p id="scheduleMessage" class="time-message"></p>
+    </section>
+  </main>
+</div>
+
+<script src="js/profile_avatar.js"></script>
+<script src="js/employee_schedule.js"></script>
+</body>
+</html>

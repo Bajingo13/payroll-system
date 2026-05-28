@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile Management | Payroll System</title>
+  <link rel="stylesheet" href="css/style.css?v=nav-20260528">
+  <link rel="stylesheet" href="css/employee_profile_edit.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="profile">
+      <div class="logo">Astreablue Intelligence Inc.</div>
+      <h3 id="empName">Employee</h3>
+      <p id="empRole">Employee</p>
+    </div>
+
+    <nav>
+      <ul>
+        <li><a href="employee_dashboard.html">Employee Dashboard</a></li>
+        <li class="active"><a href="employee_profile_edit.html">Profile Management</a></li>
+        <li><a href="employee_payroll_information.html">Payroll Information</a></li>
+        <li><a href="employee_schedule.html">Schedule</a></li>
+        <li><a href="employee_leave_management.html">Leave Management</a></li>
+        <li><a href="#" id="logout">Logout</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="section">
+    <header class="header">
+      <h2>Profile Management</h2>
+      <p>Update your personal details, government IDs, and document references.</p>
+    </header>
+
+    <section class="table-section profile-edit-section">
+      <div class="profile-edit-toolbar">
+        <span class="badge">Government IDs are encrypted at rest</span>
+        <div class="toolbar-actions">
+          <button id="btnResetProfile" type="button" class="btn btn-secondary">Reset to Last Saved</button>
+          <a class="btn" href="employee_dashboard.html">Back to Dashboard</a>
+        </div>
+      </div>
+
+      <div class="profile-picture-panel" id="profilePicturePanel">
+        <button type="button" class="profile-avatar-button profile-picture-preview" id="profilePicturePreview" aria-label="Upload profile picture">
+          <span class="profile-avatar-placeholder">Upload your picture here</span>
+        </button>
+        <div>
+          <h4>Profile Picture</h4>
+          <p>This photo appears in your employee dashboard and sidebar.</p>
+          <button type="button" class="btn btn-secondary" id="profilePictureChange">Change Picture</button>
+          <input type="file" id="profilePictureInput" class="profile-avatar-input" accept="image/*">
+        </div>
+      </div>
+
+      <form id="profileEditForm" class="profile-edit-form">
+        <div class="edit-group">
+          <h4>Personal Details</h4>
+          <div class="edit-grid cols-3">
+            <label>First Name<input type="text" id="editFirstName"></label>
+            <label>Middle Name<input type="text" id="editMiddleName"></label>
+            <label>Last Name<input type="text" id="editLastName"></label>
+            <label>Nickname<input type="text" id="editNickname"></label>
+            <label>Gender
+              <select id="editGender">
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+            <label>Civil Status
+              <select id="editCivilStatus">
+                <option value="">Select civil status</option>
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+                <option value="Separated">Separated</option>
+                <option value="Widowed">Widowed</option>
+              </select>
+            </label>
+            <label>Birth Date<input type="date" id="editBirthDate"></label>
+            <label>Mobile No<input type="text" id="editMobileNo"></label>
+            <label>Email<input type="email" id="editEmail"></label>
+            <label>Street<input type="text" id="editStreet"></label>
+            <label>City<input type="text" id="editCity"></label>
+            <label>Country<input type="text" id="editCountry"></label>
+            <label>ZIP Code<input type="text" id="editZipCode"></label>
+          </div>
+        </div>
+
+        <div class="edit-group">
+          <h4>Government IDs (Encrypted)</h4>
+          <div class="edit-grid cols-2">
+            <label>SSS No<input type="text" id="editSssNo"></label>
+            <label>PhilHealth No<input type="text" id="editPhilhealthNo"></label>
+            <label>Pag-IBIG No<input type="text" id="editPagibigNo"></label>
+            <label>TIN No<input type="text" id="editTinNo"></label>
+          </div>
+        </div>
+
+        <div class="edit-group">
+          <h4>Employment Details</h4>
+          <div class="edit-grid cols-2">
+            <label>Hire Date<input type="date" id="editDateHired"></label>
+            <label>Employee Status
+              <select id="editEmploymentStatus">
+                <option value="">Select employee status</option>
+                <option value="Active">Active</option>
+                <option value="Probationary">Probationary</option>
+                <option value="Regular">Regular</option>
+                <option value="Contractual">Contractual</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Resigned">Resigned</option>
+                <option value="Terminated">Terminated</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </label>
+            <label>Department<input type="text" id="editDepartment"></label>
+            <label>Designation<input type="text" id="editDesignation"></label>
+          </div>
+        </div>
+
+        <div class="edit-group">
+          <h4>Document References</h4>
+          <div class="edit-grid cols-1">
+            <label>201 Files (links or notes)<textarea id="editFiles201" rows="3"></textarea></label>
+            <label>Contracts (links or notes)<textarea id="editContracts" rows="3"></textarea></label>
+            <label>Certifications (links or notes)<textarea id="editCertifications" rows="3"></textarea></label>
+          </div>
+        </div>
+
+        <div class="profile-edit-actions">
+          <button type="submit" class="btn">Save Changes</button>
+          <p id="profileEditMessage" class="time-message"></p>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+
+<script src="js/profile_avatar.js"></script>
+<script src="js/employee_profile_edit.js"></script>
+</body>
+</html>
