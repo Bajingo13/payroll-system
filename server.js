@@ -1,5 +1,6 @@
 // ================== server.js ==================
 require('dotenv').config();
+process.env.TZ = process.env.TZ || 'Asia/Manila';
 
 const express = require('express');
 const mysql = require('mysql2/promise');
@@ -53,6 +54,23 @@ function isRailwayAppOrigin(origin) {
   }
 }
 
+function getDbTimezone() {
+  const timezone = String(process.env.DB_TIMEZONE || '+08:00').trim();
+  return /^[-+]\d{2}:\d{2}$/.test(timezone) ? timezone : '+08:00';
+}
+
+function applyDbSessionTimezone(pool) {
+  const timezone = getDbTimezone();
+
+  pool.on('connection', (connection) => {
+    connection.query(`SET time_zone = '${timezone}'`, (err) => {
+      if (err) {
+        console.error('FAILED TO SET DB SESSION TIMEZONE:', err.message);
+      }
+    });
+  });
+}
+
 function buildLocalDbConfig() {
   return {
     host: process.env.LOCAL_DB_HOST || '127.0.0.1',
@@ -60,7 +78,7 @@ function buildLocalDbConfig() {
     user: process.env.LOCAL_DB_USER || 'root',
     password: process.env.LOCAL_DB_PASSWORD || '',
     database: process.env.LOCAL_DB_NAME || 'payroll_system',
-    timezone: process.env.DB_TIMEZONE || '+08:00',
+    timezone: getDbTimezone(),
     dateStrings: true,
     waitForConnections: true,
     connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
@@ -76,7 +94,7 @@ function buildPrimaryDbConfig() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    timezone: process.env.DB_TIMEZONE || '+08:00',
+    timezone: getDbTimezone(),
     dateStrings: true,
     waitForConnections: true,
     connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
@@ -92,7 +110,7 @@ function buildRailwayInternalFallbackConfig() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'railway',
-    timezone: process.env.DB_TIMEZONE || '+08:00',
+    timezone: getDbTimezone(),
     dateStrings: true,
     waitForConnections: true,
     connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
@@ -118,6 +136,7 @@ async function testPool(pool, label, config) {
 
 async function tryConnect(label, config) {
   const pool = mysql.createPool(config);
+  applyDbSessionTimezone(pool);
   await testPool(pool, label, config);
   return pool;
 }
@@ -357,6 +376,8 @@ if (useReactFrontend) {
   try {
     console.log('RUNNING FILE:', __filename);
     console.log('RAILWAY DETECTED:', isRunningOnRailway());
+    console.log('APP TIMEZONE:', process.env.TZ);
+    console.log('DB SESSION TIMEZONE:', getDbTimezone());
 
     const { pool, dbMode } = await createWorkingPool();
 
@@ -378,7 +399,7 @@ if (useReactFrontend) {
       let conn;
       try {
         conn = await pool.getConnection();
-        const [rows] = await conn.query('SELECT DATABASE() AS db, NOW() AS server_time');
+        const [rows] = await conn.query('SELECT DATABASE() AS db, NOW() AS server_time, @@session.time_zone AS db_time_zone');
 
         res.json({
           success: true,

@@ -9212,18 +9212,14 @@ if (window.location.pathname === '/dashboard/auditing.html') {
 
           // Render the logs
           data.logs.forEach(log => {
-              const formattedDate = new Date(log.log_time + 'Z').toLocaleString("en-US", {
-                  month: "short", day: "2-digit", year: "numeric",
-                  hour: "2-digit", minute: "2-digit", hour12: true,
-                  timeZone: 'Asia/Manila'
-              });
+              const formattedDate = log.log_time_display || formatDashboardDate(log.log_time);
 
               tbody.innerHTML += `
                   <tr>
-                      <td>${formattedDate}</td>
-                      <td>${log.admin_name}</td>
-                      <td>${log.action}</td>
-                      <td><span class="status completed">${log.status}</span></td>
+                      <td>${escapeHtml(formattedDate)}</td>
+                      <td>${escapeHtml(log.admin_name)}</td>
+                      <td>${escapeHtml(log.action)}</td>
+                      <td><span class="status completed">${escapeHtml(log.status)}</span></td>
                   </tr>
               `;
           });

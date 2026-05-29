@@ -18,7 +18,8 @@ module.exports = function (app, pool) {
                     admin_name,
                     action,
                     status,
-                    log_time
+                    log_time,
+                    DATE_FORMAT(log_time, '%b %d, %Y, %h:%i %p') AS log_time_display
                  FROM audit_logs
                  ORDER BY log_time DESC
                  LIMIT ? OFFSET ?`,
