@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 
 const AuthContext = createContext(null);
@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
 
   async function login(username, password) {
-    const { data } = await api.post('/login', { username, password });
+const { data } = await api.post('/login', { username, password });
     if (!data.success) {
       throw new Error(data.message || 'Invalid username or password.');
     }
@@ -36,15 +36,20 @@ export function AuthProvider({ children }) {
     return nextUser;
   }
 
-  function logout() {
+  const logout = useCallback(async () => {
     sessionStorage.removeItem('user_id');
     sessionStorage.removeItem('admin_name');
     sessionStorage.removeItem('role');
     sessionStorage.removeItem('employee_id');
     setUser(null);
-  }
+    try {
+      await api.post('/logout');
+    } catch (err) {
+      console.warn('Logout request failed:', err);
+    }
+  }, []);
 
-  const value = useMemo(() => ({ user, login, logout }), [user]);
+  const value = useMemo(() => ({ user, login, logout }), [logout, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

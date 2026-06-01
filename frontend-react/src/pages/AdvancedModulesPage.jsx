@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 
 const MODULES = [
   ['documents', '201 Files'],
@@ -55,31 +54,71 @@ function downloadCsv(filename, headers, rows) {
   const csv = [headers, ...rows]
     .map((row) => row.map(escapeCsv).join(','))
     .join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
+
+  // IE / old Edge
+  if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+    window.navigator.msSaveOrOpenBlob(blob, filename);
+    return;
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export default function AdvancedModulesPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedModule = searchParams.get('module');
+async function downloadFromApi(pathname, suggestedFilename = 'export.csv') {
+  const response = await fetch(pathname, { credentials: 'include' });
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const data = await response.json();
+      message = data?.message || message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/i);
+  const filename = match?.[1] || suggestedFilename;
+  const blob = await response.blob();
+
+  // IE / old Edge
+  if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+    window.navigator.msSaveOrOpenBlob(blob, filename);
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+export default function AdvancedModulesPage({ moduleKey: forcedModuleKey = '' }) {
   const allowedModules = useMemo(() => new Set(MODULES.map(([key]) => key)), []);
-  const initialModule = allowedModules.has(requestedModule) ? requestedModule : 'documents';
+  const initialModule = allowedModules.has(forcedModuleKey) ? forcedModuleKey : 'documents';
   const [activeModule, setActiveModule] = useState(initialModule);
 
   useEffect(() => {
-    const nextModule = allowedModules.has(requestedModule) ? requestedModule : 'documents';
+    const nextModule = allowedModules.has(forcedModuleKey) ? forcedModuleKey : 'documents';
     setActiveModule(nextModule);
-  }, [allowedModules, requestedModule]);
-
-  function handleSelectModule(moduleKey) {
-    setActiveModule(moduleKey);
-    setSearchParams({ module: moduleKey });
-  }
+  }, [allowedModules, forcedModuleKey]);
 
   return (
     <>
@@ -87,19 +126,6 @@ export default function AdvancedModulesPage() {
         <h2>Advanced Modules</h2>
         <p>Additional HRIS, payroll, compliance, security, analytics, and reporting modules from the project workbook.</p>
       </header>
-
-      <section className="module-tabs">
-        {MODULES.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            className={activeModule === key ? 'active' : ''}
-            onClick={() => handleSelectModule(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </section>
 
       {activeModule === 'documents' ? <DocumentManagement /> : null}
       {activeModule === 'organization' ? <OrganizationSetup /> : null}
@@ -280,8 +306,91 @@ function computeMonthlyTax(taxableIncome) {
 }
 
 function ComplianceReports() {
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [runs, setRuns] = useState([]);
+  const [filters, setFilters] = useState({ companies: [], departments: [] });
+  const [fromRunId, setFromRunId] = useState('');
+  const [toRunId, setToRunId] = useState('');
+  const [transaction, setTransaction] = useState('active');
+  const [excludeZero, setExcludeZero] = useState(true);
+  const [company, setCompany] = useState('');
+  const [department, setDepartment] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const response = await fetch('/api/government-reports/sss/options', { credentials: 'include' });
+        const data = await response.json();
+        if (!alive) return;
+        if (response.ok && data?.success) {
+          setRuns(Array.isArray(data.runs) ? data.runs : []);
+          setFilters(data.filters || { companies: [], departments: [] });
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   function exportReports() {
     downloadCsv('government-report-checklist.csv', ['Report', 'Purpose', 'Deadline'], GOVERNMENT_REPORTS);
+  }
+
+  async function exportSssCollection() {
+    setBusy(true);
+    setMessage('');
+
+    try {
+      if (!fromRunId || !toRunId) {
+        throw new Error('Please select From and To payroll runs.');
+      }
+
+      const params = new URLSearchParams({
+        from_run_id: String(fromRunId),
+        to_run_id: String(toRunId),
+        transaction,
+        exclude_zero: excludeZero ? '1' : '0'
+      });
+      if (company) params.set('company', company);
+      if (department) params.set('department', department);
+
+      await downloadFromApi(`/api/government-reports/sss-collection?${params.toString()}`, `SSS-Collection-${fromRunId}-to-${toRunId}.csv`);
+      setMessage('SSS report exported.');
+    } catch (err) {
+      setMessage(err?.message || 'Unable to export SSS report.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportAll() {
+    setBusy(true);
+    setMessage('');
+
+    try {
+      const monthPad = String(month).padStart(2, '0');
+      await downloadFromApi(`/api/government-reports/bir-1601c?year=${year}&month=${month}`, `BIR-1601C-${year}-${monthPad}.csv`);
+      await downloadFromApi(`/api/government-reports/sss?year=${year}&month=${month}`, `SSS-R3-R5-${year}-${monthPad}.csv`);
+      await downloadFromApi(`/api/government-reports/philhealth?year=${year}&month=${month}`, `PhilHealth-RF1-${year}-${monthPad}.csv`);
+      await downloadFromApi(`/api/government-reports/pagibig?year=${year}&month=${month}`, `PagIBIG-MCRF-${year}-${monthPad}.csv`);
+      await downloadFromApi(`/api/government-reports/bir-2316?year=${year}`, `BIR-2316-${year}.csv`);
+      await downloadFromApi(`/api/government-reports/bir-1604c?year=${year}`, `BIR-1604C-${year}.csv`);
+      await downloadFromApi(`/api/government-reports/bir-alphalist?year=${year}`, `BIR-Alphalist-${year}.csv`);
+      setMessage('Exports generated.');
+    } catch (err) {
+      setMessage(err?.message || 'Unable to export reports.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -291,9 +400,79 @@ function ComplianceReports() {
           <h3>Government Report Generators</h3>
           <p>BIR, SSS, PhilHealth, and Pag-IBIG report checklist and export templates.</p>
         </div>
-        <button type="button" className="btn" onClick={exportReports}>Export CSV</button>
+        <div className="toolbar">
+          <label>Year<input type="number" min="1990" max="2100" value={year} onChange={(event) => setYear(Number(event.target.value || 0))} /></label>
+          <label>Month<input type="number" min="1" max="12" value={month} onChange={(event) => setMonth(Number(event.target.value || 0))} /></label>
+          <button type="button" className="btn secondary" onClick={exportReports}>Export Checklist</button>
+          <button type="button" className="btn" onClick={exportAll} disabled={busy}>{busy ? 'Exporting…' : 'Export All CSV'}</button>
+        </div>
       </div>
       <SimpleTable headers={['Report', 'Purpose', 'Deadline']} rows={GOVERNMENT_REPORTS} />
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h4 style={{ marginTop: 0 }}>SSS Contribution Collection List (R-3/R-5)</h4>
+        <div className="report-filter-grid">
+          <label>
+            From Run
+            <select value={fromRunId} onChange={(event) => setFromRunId(event.target.value)}>
+              <option value="">Select</option>
+              {runs.map((run) => (
+                <option key={run.run_id} value={run.run_id}>
+                  {run.run_id} — {run.payroll_range || `${run.group_id} ${run.period_id} ${run.month_id}/${run.year_id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            To Run
+            <select value={toRunId} onChange={(event) => setToRunId(event.target.value)}>
+              <option value="">Select</option>
+              {runs.map((run) => (
+                <option key={run.run_id} value={run.run_id}>
+                  {run.run_id} — {run.payroll_range || `${run.group_id} ${run.period_id} ${run.month_id}/${run.year_id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Transaction
+            <select value={transaction} onChange={(event) => setTransaction(event.target.value)}>
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="hold">Hold</option>
+            </select>
+          </label>
+          <label>
+            Company
+            <select value={company} onChange={(event) => setCompany(event.target.value)}>
+              <option value="">All</option>
+              {filters.companies.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Department
+            <select value={department} onChange={(event) => setDepartment(event.target.value)}>
+              <option value="">All</option>
+              {filters.departments.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={excludeZero} onChange={(event) => setExcludeZero(event.target.checked)} />
+            Exclude ZERO contribution
+          </label>
+          <div className="toolbar">
+            <button type="button" className="btn" onClick={exportSssCollection} disabled={busy}>
+              {busy ? 'Exporting…' : 'Export SSS CSV'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {message ? <p className="message">{message}</p> : null}
     </section>
   );
 }
@@ -353,29 +532,114 @@ function PerformanceManagement() {
 }
 
 function CustomReportBuilder() {
-  const [category, setCategory] = useState('Payroll');
-  const [frequency, setFrequency] = useState('Monthly');
-  const rows = [
-    ['Employee Headcount', 'HR', 'Department, status, gender'],
-    ['Payroll Register', 'Payroll', 'Gross, deductions, net pay'],
-    ['Bank File', 'Payroll', 'Employee bank, amount, reference'],
-    ['Attendance Analytics', 'Analytics', 'Absences, late, undertime'],
-    ['Audit Log Report', 'System', 'User, action, timestamp']
-  ].filter((row) => category === 'All' || row[1] === category);
+  const reports = [
+    {
+      id: 'payroll-journal',
+      title: 'Payroll Journal',
+      category: 'Payroll',
+      purpose: 'Shows each payroll run with gross pay, deductions, and net pay for audit and review.',
+      route: 'payroll_journal.html',
+      fields: 'Company, employee, gross pay, deductions, net pay',
+      frequency: 'Per payroll run'
+    },
+    {
+      id: 'gross-pay',
+      title: 'Gross Pay',
+      category: 'Payroll',
+      purpose: 'Summarizes earnings before deductions are applied.',
+      route: 'gross_pay.html',
+      fields: 'Employee ID, employee name, company, gross pay',
+      frequency: 'Per payroll run'
+    },
+    {
+      id: 'net-pay',
+      title: 'Net Pay',
+      category: 'Payroll',
+      purpose: 'Shows take-home pay after all deductions and contributions.',
+      route: 'net_pay.html',
+      fields: 'Employee ID, employee name, company, net pay',
+      frequency: 'Per payroll run'
+    },
+    {
+      id: 'payslip',
+      title: 'Payslip',
+      category: 'Payroll',
+      purpose: 'Employee pay statement with earnings, deductions, and payout details.',
+      route: 'payslip.html',
+      fields: 'Employee, pay period, gross pay, deductions, net pay',
+      frequency: 'Per payroll run'
+    },
+    {
+      id: 'government-reports',
+      title: 'Government Reports',
+      category: 'Compliance',
+      purpose: 'Provides BIR, SSS, PhilHealth, and Pag-IBIG export templates.',
+      route: 'government_reports.html',
+      fields: 'BIR 1601-C, BIR 2316, BIR 1604-C, SSS R3/R5, PhilHealth RF-1, Pag-IBIG MCRF',
+      frequency: 'Monthly / Annual'
+    },
+    {
+      id: 'reconciliation-details',
+      title: 'Reconciliation Details',
+      category: 'Payroll',
+      purpose: 'Compares gross, deductions, and net pay totals for validation.',
+      route: 'reconciliation_details.html',
+      fields: 'Employee ID, gross, deductions, net, delta',
+      frequency: 'Per payroll run'
+    }
+  ];
+  const categories = ['All', 'Payroll', 'Compliance'];
+  const [category, setCategory] = useState('All');
+  const [selectedReportId, setSelectedReportId] = useState(reports[0].id);
+  const selectedReport = reports.find((report) => report.id === selectedReportId) || reports[0];
+
+  const rows = reports.filter((row) => category === 'All' || row.category === category);
+
+  useEffect(() => {
+    if (!rows.some((report) => report.id === selectedReportId)) {
+      setSelectedReportId(rows[0]?.id || reports[0].id);
+    }
+  }, [category, rows, reports, selectedReportId]);
 
   function exportBuilder() {
-    downloadCsv('custom-report-builder.csv', ['Report', 'Category', 'Fields', 'Frequency'], rows.map((row) => [...row, frequency]));
+    downloadCsv(
+      'report-builder-template.csv',
+      ['Report', 'Category', 'Purpose', 'Route', 'Fields', 'Frequency'],
+      rows.map((row) => [row.title, row.category, row.purpose, row.route, row.fields, row.frequency])
+    );
   }
 
   return (
     <section className="table-section">
-      <h3>Custom Report Builder and Bank File Export</h3>
+      <h3>Report Builder</h3>
+      <p style={{ marginTop: 0 }}>Use this module to select a payroll summary report, review its purpose, and export a template for the chosen report.</p>
       <div className="report-filter-grid">
-        <label>Category<select value={category} onChange={(event) => setCategory(event.target.value)}><option>All</option><option>HR</option><option>Payroll</option><option>Analytics</option><option>System</option></select></label>
-        <label>Frequency<select value={frequency} onChange={(event) => setFrequency(event.target.value)}><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Annual</option></select></label>
-        <div className="toolbar"><button type="button" className="btn" onClick={exportBuilder}>Export Template</button></div>
+        <label>
+          Category
+          <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            {categories.map((value) => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          Available Reports
+          <select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}>
+            {rows.map((report) => <option key={report.id} value={report.id}>{report.title}</option>)}
+          </select>
+        </label>
+        <label>
+          Purpose
+          <textarea value={selectedReport.purpose} readOnly rows={4} style={{ resize: 'none' }} />
+        </label>
+        <label>
+          Open Report
+          <input type="text" readOnly value={selectedReport.route} />
+        </label>
+        <div className="toolbar">
+          <button type="button" className="btn" onClick={() => { window.location.href = selectedReport.route; }}>Open Report</button>
+          <button type="button" className="btn secondary" onClick={exportBuilder}>Export Template</button>
+        </div>
       </div>
-      <SimpleTable headers={['Report', 'Category', 'Fields']} rows={rows} />
+      <SimpleTable headers={['Report', 'Category', 'Purpose', 'Route', 'Fields', 'Frequency']} rows={rows.map((row) => [row.title, row.category, row.purpose, row.route, row.fields, row.frequency])} />
     </section>
   );
 }

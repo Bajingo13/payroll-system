@@ -216,8 +216,11 @@ app.use(session({
   cookie: {
     secure: isRunningOnRailway(),
     httpOnly: true,
-    sameSite: 'lax'
-  }
+    sameSite: 'lax',
+    // Default to 15 minutes; override with SESSION_MAX_AGE_MS when needed.
+    maxAge: Number(process.env.SESSION_MAX_AGE_MS || 15 * 60 * 1000)
+  },
+  rolling: false
 }));
 
 // ----------- AUTH MIDDLEWARE -----------
@@ -260,16 +263,16 @@ const legacyReactRedirects = {
   '/dashboard/utilities/system_settings.html': '/utilities',
   '/dashboard/utilities/list_manager.html': '/utilities',
   '/dashboard/utilities/employee_benefits.html': '/utilities',
-  '/dashboard/employee_documents.html': '/advanced-modules?module=documents',
-  '/dashboard/organization_setup.html': '/advanced-modules?module=organization',
-  '/dashboard/loan_deduction_management.html': '/advanced-modules?module=loan',
-  '/dashboard/government_reports.html': '/advanced-modules?module=compliance',
-  '/dashboard/leave_calendar.html': '/advanced-modules?module=leave',
-  '/dashboard/performance_management.html': '/advanced-modules?module=performance',
-  '/dashboard/report_builder.html': '/advanced-modules?module=reports',
-  '/dashboard/security_backup.html': '/advanced-modules?module=security',
-  '/dashboard/analytics_dashboard.html': '/advanced-modules?module=analytics',
-  '/dashboard/year_end_payroll.html': '/advanced-modules?module=payroll'
+  '/dashboard/employee_documents.html': '/employee-documents',
+  '/dashboard/organization_setup.html': '/organization-setup',
+  '/dashboard/loan_deduction_management.html': '/loan-deduction-management',
+  '/dashboard/government_reports.html': '/government-reports',
+  '/dashboard/leave_calendar.html': '/leave-calendar',
+  '/dashboard/performance_management.html': '/performance-management',
+  '/dashboard/report_builder.html': '/report-builder',
+  '/dashboard/security_backup.html': '/security-backup',
+  '/dashboard/analytics_dashboard.html': '/analytics-dashboard',
+  '/dashboard/year_end_payroll.html': '/year-end-payroll'
 };
 
 if (fs.existsSync(reactDistPath)) {
@@ -277,6 +280,15 @@ if (fs.existsSync(reactDistPath)) {
 }
 
 if (useReactFrontend) {
+  app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/assets/')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    next();
+  });
+
   app.use(express.static(reactDistPath));
 
   Object.entries(legacyReactRedirects).forEach(([legacyPath, reactPath]) => {
@@ -294,6 +306,7 @@ if (useReactFrontend) {
     '/employee-leave-request',
     '/employee-payroll-information',
     '/employee-schedule',
+    '/user-settings',
     '/profile-management',
     '/employee-management',
     '/schedule-management',
@@ -302,6 +315,16 @@ if (useReactFrontend) {
     '/payroll-computation',
     '/auditing',
     '/advanced-modules',
+    '/employee-documents',
+    '/organization-setup',
+    '/year-end-payroll',
+    '/loan-deduction-management',
+    '/government-reports',
+    '/leave-calendar',
+    '/performance-management',
+    '/report-builder',
+    '/security-backup',
+    '/analytics-dashboard',
     '/reports',
     '/reports/:reportType',
     '/utilities'
@@ -390,6 +413,7 @@ if (useReactFrontend) {
     require('./backend/loan_deductions')(app, pool);
     require('./backend/payroll_computation')(app, pool);
     require('./backend/payroll_journal')(app, pool);
+    require('./backend/government_reports')(app, pool);
     require('./backend/audit_logs')(app, pool);
     require('./backend/utilities')(app, pool);
     require('./backend/employee_documents')(app, pool);

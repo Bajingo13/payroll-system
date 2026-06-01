@@ -48,6 +48,16 @@ function formatDateLabel(value) {
   });
 }
 
+function formatDateRangeLabel(from, to) {
+  if (!from && !to) return '-';
+  if (!to || from === to) return formatDateLabel(from);
+  return `${formatDateLabel(from)} to ${formatDateLabel(to)}`;
+}
+
+function todayInManila() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
+
 function computeHours(record) {
   if (!record.time_in || !record.time_out) return '-';
   const timeIn = new Date(String(record.time_in).replace(' ', 'T')).getTime();
@@ -72,23 +82,43 @@ function attendanceStatus(record) {
 
 export default function EmployeeAttendancePage() {
   const [records, setRecords] = useState([]);
-  const [date, setDate] = useState('');
+  const [dateRange, setDateRange] = useState(() => {
+    const today = todayInManila();
+    return { from: today, to: today };
+  });
+  const [appliedRange, setAppliedRange] = useState(() => {
+    const today = todayInManila();
+    return { from: today, to: today };
+  });
   const [search, setSearch] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    api.get('/attendance_overview')
+    const params = {
+      from: appliedRange.from,
+      to: appliedRange.to || appliedRange.from
+    };
+
+    api.get('/attendance_overview', { params })
       .then(({ data }) => {
         setRecords(data.records || []);
-        setDate(data.date || '');
+        setAppliedRange({
+          from: data.from || data.date || params.from,
+          to: data.to || data.date || params.to
+        });
+        setLoadError('');
       })
-      .catch((err) => console.error('Attendance load failed:', err));
-  }, []);
+      .catch((err) => {
+        console.error('Attendance load failed:', err);
+        setLoadError(err?.response?.data?.message || err.message || 'Attendance load failed.');
+      });
+  }, [appliedRange.from, appliedRange.to]);
 
   const filteredRecords = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return records;
     return records.filter((record) =>
-      `${record.emp_code || ''} ${record.employee_name || ''} ${record.department || ''}`.toLowerCase().includes(term)
+      `${record.attendance_date || ''} ${record.emp_code || ''} ${record.employee_name || ''} ${record.department || ''}`.toLowerCase().includes(term)
     );
   }, [records, search]);
 
@@ -103,6 +133,7 @@ export default function EmployeeAttendancePage() {
 
     const headers = [
       'Employee ID',
+      'Date',
       'Employee Name',
       'Department',
       'Time In',
@@ -121,6 +152,7 @@ export default function EmployeeAttendancePage() {
 
       return [
         record.emp_code || 'N/A',
+        record.attendance_date || '',
         record.employee_name || record.full_name || 'N/A',
         record.department || 'N/A',
         formatExportDateTime(record.time_in),
@@ -160,11 +192,23 @@ export default function EmployeeAttendancePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `attendance-overview-${new Date().toISOString().slice(0, 10)}.xls`;
+    const dateSuffix = appliedRange.from === appliedRange.to ? appliedRange.from : `${appliedRange.from}-to-${appliedRange.to}`;
+    link.download = `attendance-overview-${dateSuffix}.xls`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function updateDateRange(field, value) {
+    setDateRange((current) => ({ ...current, [field]: value }));
+  }
+
+  function applyDateRange() {
+    const fallback = todayInManila();
+    const from = dateRange.from || fallback;
+    const to = dateRange.to || from;
+    setAppliedRange(from > to ? { from: to, to: from } : { from, to });
   }
 
   return (
@@ -175,7 +219,7 @@ export default function EmployeeAttendancePage() {
       </header>
 
       <section className="summary">
-        <div className="card"><span>Date</span><strong>{formatDateLabel(date)}</strong><small>Selected Day</small></div>
+        <div className="card"><span>Date</span><strong>{formatDateRangeLabel(appliedRange.from, appliedRange.to)}</strong><small>Selected Range</small></div>
         <div className="card"><span>Total Employees</span><strong>{filteredRecords.length}</strong></div>
         <div className="card"><span>Present</span><strong>{present}</strong></div>
         <div className="card"><span>Late / Incomplete</span><strong>{incomplete}</strong></div>
@@ -185,15 +229,20 @@ export default function EmployeeAttendancePage() {
         <div className="table-header">
           <h3>Attendance Records</h3>
           <div className="toolbar">
+            <label>From: <input type="date" value={dateRange.from} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
+            <label>To: <input type="date" value={dateRange.to} onChange={(event) => updateDateRange('to', event.target.value)} /></label>
+            <button type="button" className="btn secondary" onClick={applyDateRange}>Apply</button>
             <button type="button" className="btn secondary" onClick={exportAttendance}>Export Attendance</button>
             <label>Search: <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee..." /></label>
           </div>
         </div>
+        {loadError ? <p className="form-error">{loadError}</p> : null}
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
                 <th>Employee ID</th>
+                <th>Date</th>
                 <th>Name</th>
                 <th>Department</th>
                 <th>Time In</th>
@@ -207,14 +256,15 @@ export default function EmployeeAttendancePage() {
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan="10">No attendance records found.</td></tr>
+                <tr><td colSpan="11">No attendance records found.</td></tr>
               ) : filteredRecords.map((record) => {
                 const status = attendanceStatus(record);
                 const totalHours = computeHours(record);
                 const ot = totalHours === '-' ? '-' : Math.max(0, Number(totalHours) - 8).toFixed(2);
                 return (
-                  <tr key={`${record.emp_code}-${record.time_in || ''}`}>
+                  <tr key={`${record.attendance_date}-${record.emp_code}-${record.time_in || ''}`}>
                     <td>{record.emp_code || 'N/A'}</td>
+                    <td>{formatDateLabel(record.attendance_date)}</td>
                     <td>{record.employee_name || record.full_name || 'N/A'}</td>
                     <td>{record.department || 'N/A'}</td>
                     <td>{formatTime(record.time_in)}</td>

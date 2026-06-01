@@ -831,46 +831,107 @@ module.exports = function (app, pool) {
 
   // ========== HR/ADMIN EMPLOYEE ATTENDANCE OVERVIEW ==========
   app.get('/api/attendance_overview', async (req, res) => {
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const todayParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date()).reduce((parts, part) => {
+      parts[part.type] = part.value;
+      return parts;
+    }, {});
+    const today = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+    const fromDate = datePattern.test(String(req.query.from || '')) ? String(req.query.from) : today;
+    const toDate = datePattern.test(String(req.query.to || '')) ? String(req.query.to) : fromDate;
+    const fromMs = Date.parse(`${fromDate}T00:00:00Z`);
+    const toMs = Date.parse(`${toDate}T00:00:00Z`);
+
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs > toMs) {
+      return res.status(400).json({ success: false, message: 'Invalid attendance date range.' });
+    }
+
+    const maxRangeDays = 62;
+    const rangeDays = Math.floor((toMs - fromMs) / 86400000) + 1;
+    if (rangeDays > maxRangeDays) {
+      return res.status(400).json({ success: false, message: `Attendance range cannot exceed ${maxRangeDays} days.` });
+    }
+
     let conn;
     try {
       conn = await pool.getConnection();
 
       const [rows] = await conn.execute(
-        `SELECT
-            u.user_id,
-            u.username,
-            u.full_name,
-            COALESCE(e_code.emp_code, e_name.emp_code, 'N/A') AS emp_code,
-            COALESCE(CONCAT(e_code.first_name, ' ', e_code.last_name), CONCAT(e_name.first_name, ' ', e_name.last_name), u.full_name) AS employee_name,
-            COALESCE(ee.department, 'N/A') AS department,
-            MIN(CASE WHEN al.action = 'Employee Time In' THEN al.log_time END) AS time_in,
-            MIN(CASE WHEN al.action = 'Employee Break Out' THEN al.log_time END) AS break_out,
-            MIN(CASE WHEN al.action = 'Employee Break In' THEN al.log_time END) AS break_in,
-            MAX(CASE WHEN al.action = 'Employee Time Out' THEN al.log_time END) AS time_out,
+        `WITH RECURSIVE selected_dates AS (
+           SELECT CAST(? AS DATE) AS attendance_date
+           UNION ALL
+           SELECT DATE_ADD(attendance_date, INTERVAL 1 DAY)
+           FROM selected_dates
+           WHERE attendance_date < CAST(? AS DATE)
+         ),
+         employee_users AS (
+           SELECT
+              u.user_id,
+              u.username,
+              u.full_name,
+              COALESCE(e_code.emp_code, e_name.emp_code, 'N/A') AS emp_code,
+              COALESCE(CONCAT(e_code.first_name, ' ', e_code.last_name), CONCAT(e_name.first_name, ' ', e_name.last_name), u.full_name) AS employee_name,
+              COALESCE(ee.department, 'N/A') AS department
+           FROM users u
+           LEFT JOIN employees e_code
+             ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
+           LEFT JOIN employees e_name
+             ON e_code.employee_id IS NULL
+            AND LOWER(TRIM(CONCAT(e_name.first_name, ' ', e_name.last_name))) = LOWER(TRIM(u.full_name))
+           LEFT JOIN employee_employment ee
+             ON ee.employment_id = (
+               SELECT em.employment_id
+               FROM employee_employment em
+               WHERE em.employee_id = COALESCE(e_code.employee_id, e_name.employee_id)
+               ORDER BY em.employment_id DESC
+               LIMIT 1
+             )
+           WHERE LOWER(TRIM(u.role)) = 'employee'
+         ),
+         log_summary AS (
+           SELECT
+              user_id,
+              DATE(log_time) AS attendance_date,
+              MIN(CASE WHEN action = 'Employee Time In' THEN log_time END) AS time_in,
+              MIN(CASE WHEN action = 'Employee Break Out' THEN log_time END) AS break_out,
+              MIN(CASE WHEN action = 'Employee Break In' THEN log_time END) AS break_in,
+              MAX(CASE WHEN action = 'Employee Time Out' THEN log_time END) AS time_out
+           FROM audit_logs
+           WHERE action IN ('Employee Time In', 'Employee Break Out', 'Employee Break In', 'Employee Time Out')
+             AND DATE(log_time) BETWEEN ? AND ?
+           GROUP BY user_id, DATE(log_time)
+         )
+         SELECT
+            DATE_FORMAT(sd.attendance_date, '%Y-%m-%d') AS attendance_date,
+            eu.user_id,
+            eu.username,
+            eu.full_name,
+            eu.emp_code,
+            eu.employee_name,
+            eu.department,
+            ls.time_in,
+            ls.break_out,
+            ls.break_in,
+            ls.time_out,
             ROUND(
               GREATEST(
                 ((
                   CASE
-                    WHEN MIN(CASE WHEN al.action = 'Employee Time In' THEN al.log_time END) IS NULL
-                      OR MAX(CASE WHEN al.action = 'Employee Time Out' THEN al.log_time END) IS NULL
+                    WHEN ls.time_in IS NULL OR ls.time_out IS NULL
                     THEN 0
-                    ELSE TIMESTAMPDIFF(
-                      SECOND,
-                      MIN(CASE WHEN al.action = 'Employee Time In' THEN al.log_time END),
-                      MAX(CASE WHEN al.action = 'Employee Time Out' THEN al.log_time END)
-                    )
+                    ELSE TIMESTAMPDIFF(SECOND, ls.time_in, ls.time_out)
                   END
                 ) - (
                   CASE
-                    WHEN MIN(CASE WHEN al.action = 'Employee Break Out' THEN al.log_time END) IS NOT NULL
-                      AND MIN(CASE WHEN al.action = 'Employee Break In' THEN al.log_time END) IS NOT NULL
-                      AND MIN(CASE WHEN al.action = 'Employee Break In' THEN al.log_time END)
-                        > MIN(CASE WHEN al.action = 'Employee Break Out' THEN al.log_time END)
-                    THEN TIMESTAMPDIFF(
-                      SECOND,
-                      MIN(CASE WHEN al.action = 'Employee Break Out' THEN al.log_time END),
-                      MIN(CASE WHEN al.action = 'Employee Break In' THEN al.log_time END)
-                    )
+                    WHEN ls.break_out IS NOT NULL
+                      AND ls.break_in IS NOT NULL
+                      AND ls.break_in > ls.break_out
+                    THEN TIMESTAMPDIFF(SECOND, ls.break_out, ls.break_in)
                     ELSE 0
                   END
                 )) / 3600 - 8,
@@ -878,42 +939,20 @@ module.exports = function (app, pool) {
               ),
               2
             ) AS ot_hours
-         FROM users u
-         LEFT JOIN employees e_code
-           ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
-         LEFT JOIN employees e_name
-           ON e_code.employee_id IS NULL
-          AND LOWER(TRIM(CONCAT(e_name.first_name, ' ', e_name.last_name))) = LOWER(TRIM(u.full_name))
-         LEFT JOIN employee_employment ee
-           ON ee.employment_id = (
-             SELECT em.employment_id
-             FROM employee_employment em
-             WHERE em.employee_id = COALESCE(e_code.employee_id, e_name.employee_id)
-             ORDER BY em.employment_id DESC
-             LIMIT 1
-           )
-         LEFT JOIN audit_logs al
-           ON al.user_id = u.user_id
-          AND al.action IN ('Employee Time In', 'Employee Break Out', 'Employee Break In', 'Employee Time Out')
-          AND DATE(al.log_time) = CURDATE()
-         WHERE LOWER(TRIM(u.role)) = 'employee'
-         GROUP BY
-            u.user_id,
-            u.username,
-            u.full_name,
-            e_code.emp_code,
-            e_name.emp_code,
-            e_code.first_name,
-            e_code.last_name,
-            e_name.first_name,
-            e_name.last_name,
-            ee.department
-         ORDER BY employee_name ASC`
+         FROM selected_dates sd
+         CROSS JOIN employee_users eu
+         LEFT JOIN log_summary ls
+           ON ls.user_id = eu.user_id
+          AND ls.attendance_date = sd.attendance_date
+         ORDER BY sd.attendance_date DESC, eu.employee_name ASC`,
+        [fromDate, toDate, fromDate, toDate]
       );
 
       res.json({
         success: true,
-        date: new Date().toISOString().slice(0, 10),
+        date: fromDate,
+        from: fromDate,
+        to: toDate,
         records: rows
       });
     } catch (err) {

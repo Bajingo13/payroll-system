@@ -1,12 +1,15 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext.jsx';
+
+const SESSION_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_TIMEOUT_MS || 15 * 60 * 1000);
 
 function normalizeRole(rawRole) {
   const role = String(rawRole || '').trim().toLowerCase();
   if (!role) return 'unknown';
   if (role === 'employee') return 'employee';
-  if (role === 'hr' || role.includes('human resource')) return 'hr';
+  if (role === 'hr' || role.includes('hr') || role.includes('human resource')) return 'hr';
   if (role === 'admin' || role.includes('admin')) return 'admin';
   return 'unknown';
 }
@@ -37,10 +40,55 @@ export default function AppLayout() {
     return () => window.removeEventListener('profile-avatar-updated', updateAvatar);
   }, [avatarStorageKey]);
 
-  function handleLogout(event) {
+  useEffect(() => {
+    if (!user?.user_id) return undefined;
+
+    let timeoutId = null;
+    let sessionExpired = false;
+
+    const expireSession = () => {
+      if (sessionExpired) return;
+      sessionExpired = true;
+
+      toast.warning('Your session has expired. Signing off...', {
+        position: 'bottom-center',
+        autoClose: 1500,
+        hideProgressBar: true,
+        closeButton: false,
+        theme: 'colored'
+      });
+
+      window.setTimeout(() => {
+        logout().finally(() => {
+          navigate('/login', { replace: true });
+        });
+      }, 900);
+    };
+
+    const resetIdleTimer = () => {
+      if (sessionExpired) return;
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(expireSession, SESSION_TIMEOUT_MS);
+    };
+
+    const activityEvents = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, resetIdleTimer, { passive: true });
+    });
+    resetIdleTimer();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, resetIdleTimer);
+      });
+    };
+  }, [logout, navigate, user?.user_id]);
+
+  async function handleLogout(event) {
     event.preventDefault();
-    logout();
-    navigate('/login');
+    await logout();
+    navigate('/login', { replace: true });
   }
 
   function handleAvatarChange(event) {
@@ -64,7 +112,7 @@ export default function AppLayout() {
 
   const isEmployee = normalizeRole(user?.role) === 'employee';
   const isHr = normalizeRole(user?.role) === 'hr';
-  const accountSettingsPath = isEmployee ? '/personal-management' : '/utilities';
+  const accountSettingsPath = '/user-settings';
   const accountInitials = String(user?.full_name || 'User')
     .split(/\s+/)
     .filter(Boolean)
@@ -72,9 +120,22 @@ export default function AppLayout() {
     .map((part) => part[0])
     .join('')
     .toUpperCase() || 'U';
-  const isEmployeeManagementPath = location.pathname.startsWith('/employee-') || location.pathname === '/leave-management' || location.pathname === '/schedule-management';
-  const isPayrollReportPath = location.pathname.startsWith('/reports');
-  const isAdvancedModulesPath = location.pathname === '/advanced-modules';
+  const isEmployeeManagementPath = location.pathname.startsWith('/employee-') ||
+    location.pathname === '/organization-setup' ||
+    location.pathname === '/leave-management' ||
+    location.pathname === '/schedule-management' ||
+    location.pathname === '/leave-calendar' ||
+    location.pathname === '/performance-management';
+  const isPayrollReportPath = location.pathname.startsWith('/reports') ||
+    location.pathname === '/government-reports' ||
+    location.pathname === '/report-builder';
+  const isAdvancedModulesPath = [
+    '/advanced-modules',
+    '/year-end-payroll',
+    '/loan-deduction-management',
+    '/security-backup',
+    '/analytics-dashboard'
+  ].includes(location.pathname);
 
   const employeeNav = [
     { to: '/dashboard', label: 'Dashboard' },
@@ -86,9 +147,13 @@ export default function AppLayout() {
 
   const hrWorkforceNav = [
     { to: '/employee-management', label: 'Employee File' },
+    { to: '/employee-documents', label: '201 Files' },
+    { to: '/organization-setup', label: 'Org Setup' },
     { to: '/employee-attendance', label: 'Employee Attendance' },
     { to: '/leave-management', label: 'Leave Management' },
-    { to: '/schedule-management', label: 'Schedule Management' }
+    { to: '/schedule-management', label: 'Schedule Management' },
+    { to: '/leave-calendar', label: 'Leave Calendar' },
+    { to: '/performance-management', label: 'Performance' }
   ];
 
   const adminReportNav = [
@@ -96,17 +161,22 @@ export default function AppLayout() {
     { to: '/reports/gross-pay', label: 'Gross Pay' },
     { to: '/reports/net-pay', label: 'Net Pay' },
     { to: '/reports/payslip', label: 'Payslip' },
+    { to: '/government-reports', label: 'Government Reports' },
+    { to: '/report-builder', label: 'Report Builder' },
     { to: '/reports/reconciliation-details', label: 'Reconciliation Details' }
   ];
 
   const hrToolsNav = [
     { to: '/auditing', label: 'Auditing' },
-    { to: '/advanced-modules', label: 'Advanced Modules' },
+    { to: '/analytics-dashboard', label: 'AI Analytics' },
     { to: '/utilities', label: 'Utilities' }
   ];
 
   const adminToolsNav = [
-    { to: '/advanced-modules', label: 'Advanced Modules' },
+    { to: '/year-end-payroll', label: 'Year-End Payroll' },
+    { to: '/loan-deduction-management', label: 'Loan Deductions' },
+    { to: '/security-backup', label: 'Security & Backup' },
+    { to: '/analytics-dashboard', label: 'AI Analytics' },
     { to: '/utilities', label: 'Utilities' }
   ];
 
@@ -168,7 +238,7 @@ export default function AppLayout() {
                 <li className="nav-section-label">Overview</li>
                 <li><NavLink to="/dashboard">HR Dashboard</NavLink></li>
 
-                <li className="nav-section-label">Workforce Management</li>
+                <li className="nav-section-label">HRIS</li>
                 <li className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}>
                   <button
                     type="button"
@@ -194,7 +264,7 @@ export default function AppLayout() {
                 <li className="nav-section-label">Overview</li>
                 <li><NavLink to="/dashboard">Dashboard</NavLink></li>
 
-                <li className="nav-section-label">Workforce Management</li>
+                <li className="nav-section-label">HRIS</li>
                 <li className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}>
                   <button
                     type="button"
@@ -205,9 +275,13 @@ export default function AppLayout() {
                   </button>
                   <ul>
                     <li><NavLink to="/employee-management">Employee File</NavLink></li>
+                    <li><NavLink to="/employee-documents">201 Files</NavLink></li>
+                    <li><NavLink to="/organization-setup">Org Setup</NavLink></li>
                     <li><NavLink to="/schedule-management">Schedule Management</NavLink></li>
                     <li><NavLink to="/employee-attendance">Employee Attendance</NavLink></li>
                     <li><NavLink to="/leave-management">Leave Management</NavLink></li>
+                    <li><NavLink to="/leave-calendar">Leave Calendar</NavLink></li>
+                    <li><NavLink to="/performance-management">Performance</NavLink></li>
                   </ul>
                 </li>
 

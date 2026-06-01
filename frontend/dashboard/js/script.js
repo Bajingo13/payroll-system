@@ -11,8 +11,13 @@ function showToast(msg, type = "success") {
   // Use the mapped ID, fallback to "toastMissingFields" if type is unknown
   const toastId = toastMap[type] || "toastMissingFields";
 
-  const toast = document.getElementById(toastId);
-  if (!toast) return;
+  let toast = document.getElementById(toastId);
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = toastId;
+    toast.className = toastId;
+    document.body.appendChild(toast);
+  }
 
   toast.textContent = msg;
   toast.classList.add("show");
@@ -27,6 +32,14 @@ async function parseApiJson(res, fallbackMessage) {
   try {
     data = raw ? JSON.parse(raw) : {};
   } catch {
+    // If we can't parse JSON, it's often because the server returned a redirect to an HTML page (login)
+    const lowered = String(raw || "").toLowerCase();
+    const looksLikeHtml = lowered.includes("<!doctype html") || lowered.includes("<html");
+    if (looksLikeHtml || res.status === 401) {
+      signOutAccount("Your session has expired. Logging out...", "warning");
+      throw new Error("Session expired.");
+    }
+
     throw new Error(fallbackMessage || "Invalid server response. Please refresh and try again.");
   }
 
@@ -124,6 +137,65 @@ function getLogoutHref() {
   return String(window.location.pathname || "").includes("/dashboard/utilities/")
     ? "../../login/login.html"
     : "../../login/login.html";
+}
+
+const IDLE_SESSION_TIMEOUT_MS = 10 * 1000;
+let idleSessionTimeoutId = null;
+let idleSessionTimedOut = false;
+
+const POST_LOGOUT_TOAST_KEY = "post_logout_toast";
+
+function queuePostLogoutToast(message, type) {
+  try {
+    localStorage.setItem(
+      POST_LOGOUT_TOAST_KEY,
+      JSON.stringify({ message: String(message || ""), type: String(type || "warning"), ts: Date.now() })
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
+
+async function signOutAccount(message = "You have been logged out!", toastType = "warning") {
+  if (idleSessionTimedOut) return;
+  idleSessionTimedOut = true;
+  window.clearTimeout(idleSessionTimeoutId);
+
+  showToast(message, toastType);
+  queuePostLogoutToast(message, toastType);
+  sessionStorage.clear();
+
+  fetch("/api/logout", {
+    method: "POST",
+    credentials: "include",
+    keepalive: true
+  }).catch((err) => console.warn("Logout request failed:", err));
+
+  // Give the toast a moment to render before navigating away.
+  window.setTimeout(() => {
+    window.location.replace(getLogoutHref());
+  }, 900);
+}
+
+function requireDashboardSession() {
+  const isDashboardPage = String(window.location.pathname || "").includes("/dashboard/");
+  if (isDashboardPage && !sessionStorage.getItem("user_id")) {
+    signOutAccount("Your session has expired. Signing off...");
+  }
+}
+
+function setupIdleSessionTimeout() {
+  if (!sessionStorage.getItem("user_id")) return;
+
+  const expireSession = () => {
+    if (idleSessionTimedOut) return;
+    signOutAccount("Your session has expired. Signing off...");
+  };
+
+  idleSessionTimeoutId = window.setTimeout(expireSession, IDLE_SESSION_TIMEOUT_MS);
+  window.setInterval(() => {
+    expireSession();
+  }, 1000);
 }
 
 function updateTopAccountProfile(user = {}) {
@@ -354,7 +426,7 @@ function setupFeatureNavigation() {
       <li class="nav-section-label">Overview</li>
       <li${currentPage === "dashboard.html" ? ' class="active"' : ""}>${linkHtml("dashboard.html", "Dashboard")}</li>
 
-      <li class="nav-section-label">Workforce Management</li>
+      <li class="nav-section-label">HRIS</li>
       ${dropdownHtml("employee_management.html", "Employee Management", [
         { href: "employee_management.html", label: "Employee File" },
         { href: "employee_documents.html", label: "201 Files" },
@@ -392,7 +464,7 @@ function setupFeatureNavigation() {
       <li class="nav-section-label">Overview</li>
       <li${currentPage === "hr_dashboard.html" || currentPage === "dashboard.html" ? ' class="active"' : ""}>${linkHtml("hr_dashboard.html", "HR Dashboard")}</li>
 
-      <li class="nav-section-label">Workforce Management</li>
+      <li class="nav-section-label">HRIS</li>
       ${dropdownHtml("employee_management.html", "Employee Management", [
         { href: "employee_management.html", label: "Employee File" },
         { href: "employee_documents.html", label: "201 Files" },
@@ -515,9 +587,8 @@ function setupLogoutHandler() {
 
     logout.dataset.logoutReady = "true";
     logout.addEventListener('click', (event) => {
-    event.preventDefault();
-    showToast('You have been logged out!');
-    window.location.href = getLogoutHref();
+      event.preventDefault();
+      signOutAccount("You have been successfully logged out.", "success");
     });
   });
 }
@@ -563,6 +634,8 @@ async function loadProfile() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  requireDashboardSession();
+  setupIdleSessionTimeout();
   applyRoleNavigation();
   setupFeatureNavigation();
   removeSidebarLogoutLinks();
@@ -4165,7 +4238,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
 
       if (res.ok && data && data.run) {
         // found existing run
-        return data.run.run_id;ev
+        return data.run.run_id;
       }
 
       // 2) Not found — create new run

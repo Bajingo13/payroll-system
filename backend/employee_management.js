@@ -1,4 +1,5 @@
 module.exports = function (app, pool) {
+    const puppeteer = require('puppeteer');
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
@@ -178,20 +179,42 @@ app.get("/api/employee_details/:id", async (req, res) => {
     const conn = await pool.getConnection();
 
     const [rows] = await conn.query(`
-      SELECT 
-        e.employee_id,
-        e.emp_code,
-        e.first_name,
-        e.last_name,
-        ee.company,
-        ee.department,
-        ee.position,
-        ee.employee_type,
-        ea.salary_type
-      FROM employees e
-      LEFT JOIN employee_employment ee ON e.employee_id = ee.employee_id
-      LEFT JOIN employee_accounts ea ON e.employee_id = ea.employee_id
-      WHERE e.employee_id = ?
+            SELECT 
+                e.employee_id,
+                e.emp_code,
+                e.first_name,
+                e.last_name,
+                e.status,
+                ee.company,
+                ee.department,
+                ee.position,
+                ee.employee_type,
+                ea.salary_type,
+                ec.email,
+                ec.mobile_no
+            FROM employees e
+            LEFT JOIN employee_employment ee ON ee.employment_id = (
+                SELECT em.employment_id
+                FROM employee_employment em
+                WHERE em.employee_id = e.employee_id
+                ORDER BY em.employment_id DESC
+                LIMIT 1
+            )
+            LEFT JOIN employee_accounts ea ON ea.account_id = (
+                SELECT a.account_id
+                FROM employee_accounts a
+                WHERE a.employee_id = e.employee_id
+                ORDER BY a.account_id DESC
+                LIMIT 1
+            )
+            LEFT JOIN employee_contacts ec ON ec.contact_id = (
+                SELECT c.contact_id
+                FROM employee_contacts c
+                WHERE c.employee_id = e.employee_id
+                ORDER BY c.contact_id DESC
+                LIMIT 1
+            )
+            WHERE e.employee_id = ?
     `, [id]);
 
     conn.release();
@@ -243,8 +266,8 @@ app.get("/api/employee_details/:id", async (req, res) => {
             const first_name = safe(body.first_name) || "";
             const middle_name = safe(body.middle_name) || "";
             const nickname = safe(body.nickname) || "";
-            const gender = safe(body.gender) || "";
-            const civil_status = safe(body.civil_status) || "";
+            const gender = safe(body.gender) || null;
+            const civil_status = safe(body.civil_status) || null;
             const birth_date = safe(body.birth_date) || null;
 
             // Address
@@ -505,14 +528,22 @@ app.get("/api/employee_details/:id", async (req, res) => {
             // Allowance Payroll Entry
             if (Array.isArray(body.allowances)) {
                 for (const a of body.allowances) {
+                    const allowanceTypeId = Number(a.allowance_type_id);
+                    const amount = a.amount === '' || a.amount === undefined || a.amount === null ? null : Number(a.amount);
+                    const period = ["Weekly", "Monthly", "First Half", "Second Half", "Both"].includes(a.period) ? a.period : null;
+
+                    if (!allowanceTypeId || !period || amount === null || Number.isNaN(amount)) {
+                        continue;
+                    }
+
                     await conn.query(`
                         INSERT INTO employee_allowances (employee_id, allowance_type_id, period, amount)
                         VALUES (?, ?, ?, ?)
                     `, [
                         employeeId,
-                        a.allowance_type_id,
-                        a.period,
-                        a.amount
+                        allowanceTypeId,
+                        period,
+                        amount
                     ]);
                 }
             }
@@ -520,14 +551,22 @@ app.get("/api/employee_details/:id", async (req, res) => {
             // Deduction Payroll Entry
             if (Array.isArray(body.deductions)) {
                 for (const d of body.deductions) {
+                    const deductionTypeId = Number(d.deduction_type_id);
+                    const amount = d.amount === '' || d.amount === undefined || d.amount === null ? null : Number(d.amount);
+                    const period = ["Weekly", "Monthly", "First Half", "Second Half", "Both"].includes(d.period) ? d.period : null;
+
+                    if (!deductionTypeId || !period || amount === null || Number.isNaN(amount)) {
+                        continue;
+                    }
+
                     await conn.query(`
                         INSERT INTO employee_deductions (employee_id, deduction_type_id, period, amount)
                         VALUES (?, ?, ?, ?)
                     `, [
                         employeeId,
-                        d.deduction_type_id,
-                        d.period,
-                        d.amount
+                        deductionTypeId,
+                        period,
+                        amount
                     ]);
                 }
             }
@@ -645,6 +684,348 @@ app.get("/api/employee_details/:id", async (req, res) => {
         } catch (error) {
             console.error('Error fetching employee:', error);
             res.status(500).json({ success: false, message: 'Server error' });
+        }
+    });
+
+    function formatExportValue(value) {
+        if (value === null || value === undefined || value === '') return 'N/A';
+        if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+        if (Array.isArray(value)) return value.length ? value.map(formatExportValue).join(', ') : 'N/A';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function buildEmployeeExportSections(employee) {
+        return [
+            {
+                title: 'Basic Information',
+                type: 'kv',
+                rows: [
+                    ['Employee ID', employee.emp_code],
+                    ['First Name', employee.first_name],
+                    ['Last Name', employee.last_name],
+                    ['Middle Name', employee.middle_name],
+                    ['Nickname', employee.nickname],
+                    ['Gender', employee.gender],
+                    ['Civil Status', employee.civil_status],
+                    ['Birth Date', employee.birth_date],
+                    ['Street', employee.street],
+                    ['City', employee.city],
+                    ['Country', employee.country],
+                    ['Zip Code', employee.zip_code],
+                    ['Status', employee.status]
+                ]
+            },
+            {
+                title: 'Payroll Information',
+                type: 'kv',
+                rows: [
+                    ['Company', employee.company],
+                    ['Location', employee.location],
+                    ['Branch', employee.branch],
+                    ['Division', employee.division],
+                    ['Department', employee.department],
+                    ['Class', employee.class],
+                    ['Position', employee.position],
+                    ['Employee Type', employee.employee_type],
+                    ['Training Date', employee.training_date],
+                    ['Date Hired', employee.date_hired],
+                    ['Date Regular', employee.date_regular],
+                    ['Date Resigned', employee.date_resigned],
+                    ['Date Terminated', employee.date_terminated],
+                    ['End of Contract', employee.end_of_contract],
+                    ['Rehired Date', employee.rehired_date],
+                    ['Rehired', employee.rehired],
+                    ['Email', employee.email],
+                    ['Mobile No.', employee.mobile_no],
+                    ['Telephone No.', employee.tel_no],
+                    ['Fax No.', employee.fax_no],
+                    ['Website', employee.website]
+                ]
+            },
+            {
+                title: 'Payroll Computation',
+                type: 'kv',
+                rows: [
+                    ['Payroll Period', employee.payroll_period],
+                    ['Payroll Rate', employee.payroll_rate],
+                    ['OT Rate', employee.ot_rate],
+                    ['Main Computation', employee.main_computation],
+                    ['Days in Year', employee.days_in_year],
+                    ['Days in Week', employee.days_in_week],
+                    ['Hours in Day', employee.hours_in_day],
+                    ['Week in Year', employee.week_in_year],
+                    ['Days in Year OT', employee.days_in_year_ot],
+                    ['Rate Basis OT', employee.rate_basis_ot],
+                    ['Basis Absences', employee.basis_absences],
+                    ['Basis Overtime', employee.basis_overtime],
+                    ['Strict No Overtime', employee.strict_no_overtime]
+                ]
+            },
+            {
+                title: 'Government / Account Information',
+                type: 'kv',
+                rows: [
+                    ['Machine ID', employee.machine_id],
+                    ['SSS No.', employee.sss_no],
+                    ['GSIS No.', employee.gsis_no],
+                    ['Pag-IBIG No.', employee.pagibig_no],
+                    ['PhilHealth No.', employee.philhealth_no],
+                    ['TIN No.', employee.tin_no],
+                    ['Branch Code', employee.branch_code],
+                    ['ATM No.', employee.atm_no],
+                    ['Bank Name', employee.bank_name],
+                    ['Bank Branch', employee.bank_branch],
+                    ['Projects', employee.projects],
+                    ['Salary Type', employee.salary_type],
+                    ['Tax Status', employee.taxInsurance?.tax_status],
+                    ['Tax Exemption', employee.taxInsurance?.tax_exemption],
+                    ['Insurance', employee.taxInsurance?.insurance],
+                    ['Regional Minimum Wage Rate ID', employee.taxInsurance?.regional_minimum_wage_rate_id]
+                ]
+            },
+            {
+                title: 'Allowance Payroll Entry',
+                type: 'entry',
+                rows: Array.isArray(employee.allowances) && employee.allowances.length
+                    ? employee.allowances.map((row) => [row.allowance_name || row.allowance_type_id || '', row.period || '', row.amount || ''])
+                    : [['No allowance entries', '', '']]
+            },
+            {
+                title: 'Deduction Payroll Entry',
+                type: 'entry',
+                rows: Array.isArray(employee.deductions) && employee.deductions.length
+                    ? employee.deductions.map((row) => [row.deduction_name || row.deduction_type_id || '', row.period || '', row.amount || ''])
+                    : [['No deduction entries', '', '']]
+            },
+            {
+                title: 'Dependents',
+                type: 'dependent',
+                rows: Array.isArray(employee.dependents) && employee.dependents.length
+                    ? employee.dependents.map((row) => [row.name || '', row.birthday || ''])
+                    : [['No dependents', '']]
+            }
+        ];
+    }
+
+    function buildEmployeeExportCsv(employee) {
+        const lines = [];
+        for (const section of buildEmployeeExportSections(employee)) {
+            lines.push([section.title, '']);
+            if (section.type === 'entry') {
+                lines.push(['#', 'Name', 'Period', 'Amount']);
+                section.rows.forEach((row, index) => {
+                    lines.push([String(index + 1), row[0], row[1], row[2]]);
+                });
+            } else if (section.type === 'dependent') {
+                lines.push(['#', 'Name', 'Birthday']);
+                section.rows.forEach((row, index) => {
+                    lines.push([String(index + 1), row[0], row[1]]);
+                });
+            } else {
+                lines.push(['Field', 'Value']);
+                section.rows.forEach(([field, value]) => {
+                    lines.push([field, formatExportValue(value)]);
+                });
+            }
+            lines.push(['', '']);
+        }
+
+        return lines.map((line) => line.map((value) => {
+            const text = String(value ?? '');
+            const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+            return safe.includes(',') || safe.includes('"') || safe.includes('\n')
+                ? `"${safe.replace(/"/g, '""')}"`
+                : safe;
+        }).join(',')).join('\n');
+    }
+
+    function buildEmployeeExportText(employee) {
+        const lines = [];
+        for (const section of buildEmployeeExportSections(employee)) {
+            lines.push(section.title);
+            lines.push('='.repeat(section.title.length));
+            if (section.type === 'entry') {
+                section.rows.forEach((row, index) => {
+                    lines.push(`${index + 1}. ${formatExportValue(row[0])} | Period: ${formatExportValue(row[1])} | Amount: ${formatExportValue(row[2])}`);
+                });
+            } else if (section.type === 'dependent') {
+                section.rows.forEach((row, index) => {
+                    lines.push(`${index + 1}. ${formatExportValue(row[0])} | Birthday: ${formatExportValue(row[1])}`);
+                });
+            } else {
+                section.rows.forEach(([field, value]) => {
+                    lines.push(`${field}: ${formatExportValue(value)}`);
+                });
+            }
+            lines.push('');
+        }
+        return lines.join('\n');
+    }
+
+    function buildEmployeeExportHtml(employee) {
+        const sections = buildEmployeeExportSections(employee);
+        const sectionHtml = sections.map((section) => {
+            const isEntry = section.type === 'entry';
+            const isDependent = section.type === 'dependent';
+            const rows = isEntry
+                ? section.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td><td>${escapeHtml(row[2])}</td></tr>`).join('')
+                : isDependent
+                    ? section.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td></tr>`).join('')
+                    : section.rows.map(([field, value]) => `<tr><th>${escapeHtml(field)}</th><td>${escapeHtml(formatExportValue(value))}</td></tr>`).join('');
+
+            const head = isEntry
+                ? '<tr><th>#</th><th>Name</th><th>Period</th><th>Amount</th></tr>'
+                : isDependent
+                    ? '<tr><th>#</th><th>Name</th><th>Birthday</th></tr>'
+                    : '';
+
+            return `
+                <section class="section-block">
+                    <h2>${escapeHtml(section.title)}</h2>
+                    <table>
+                        ${head ? `<thead>${head}</thead>` : ''}
+                        <tbody>${rows}</tbody>
+                    </table>
+                </section>
+            `;
+        }).join('');
+
+        return `
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+                    h1 { margin: 0 0 6px; font-size: 24px; }
+                    .meta { margin: 0 0 18px; color: #6b7280; }
+                    .section-block { margin-bottom: 22px; page-break-inside: avoid; }
+                    .section-block h2 { font-size: 16px; margin: 0 0 10px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; vertical-align: top; }
+                    th { background: #f9fafb; width: 230px; }
+                    thead th { background: #e5e7eb; width: auto; }
+                </style>
+            </head>
+            <body>
+                <h1>${escapeHtml(`${employee.first_name || ''} ${employee.last_name || ''}`.trim() || employee.emp_code || 'Employee File')}</h1>
+                <p class="meta">Employee File Export - ${escapeHtml(employee.emp_code || '')}</p>
+                ${sectionHtml}
+            </body>
+            </html>
+        `;
+    }
+
+    app.get('/api/employee/:empCode/export', async (req, res) => {
+        const empCode = String(req.params.empCode || '').trim();
+        const format = String(req.query.format || 'csv').trim().toLowerCase();
+
+        if (!empCode) {
+            return res.status(400).json({ success: false, message: 'Missing employee code.' });
+        }
+
+        if (!['csv', 'text', 'txt', 'pdf'].includes(format)) {
+            return res.status(400).json({ success: false, message: 'Unsupported export format.' });
+        }
+
+        try {
+            const [employeeRows] = await pool.query(`
+                SELECT 
+                    e.*,
+                    ec.tel_no, ec.mobile_no, ec.fax_no, ec.email, ec.website,
+                    ee.training_date, ee.date_hired, ee.date_regular, ee.date_resigned, ee.date_terminated, ee.end_of_contract, ee.rehired_date, ee.rehired,
+                    ea.machine_id, ea.sss_no, ea.gsis_no, ea.pagibig_no, ea.philhealth_no, ea.tin_no, ea.branch_code,
+                    ee.company, ee.location, ee.branch, ee.division, ee.department, ee.class, ee.position, ee.employee_type,
+                    ea.atm_no, ea.bank_name, ea.bank_branch, ea.projects, ea.salary_type, 
+                    eps.payroll_period, eps.payroll_rate,
+                    eps.main_computation, eps.days_in_year, eps.days_in_week, eps.hours_in_day, eps.week_in_year, 
+                    eps.ot_rate, eps.days_in_year_ot, eps.rate_basis_ot, eps.strict_no_overtime
+                FROM employees e
+                LEFT JOIN employee_contacts ec ON e.employee_id = ec.employee_id
+                LEFT JOIN employee_employment ee ON e.employee_id = ee.employee_id
+                LEFT JOIN employee_accounts ea ON e.employee_id = ea.employee_id
+                LEFT JOIN employee_payroll_settings eps ON e.employee_id = eps.employee_id
+                WHERE e.emp_code = ?
+                LIMIT 1
+            `, [empCode]);
+
+            if (!employeeRows.length) {
+                return res.status(404).json({ success: false, message: 'Employee not found' });
+            }
+
+            const employee = employeeRows[0];
+
+            const [dependents] = await pool.query(`SELECT name, birthday FROM employee_dependents WHERE employee_id = ?`, [employee.employee_id]);
+            employee.dependents = dependents || [];
+
+            const [taxInsuranceRows] = await pool.query(`
+                SELECT eti.tax_status, eti.tax_exemption, eti.insurance, eti.regional_minimum_wage_rate_id
+                FROM employee_tax_insurance eti
+                WHERE eti.employee_id = ?
+                LIMIT 1
+            `, [employee.employee_id]);
+            employee.taxInsurance = taxInsuranceRows[0] || null;
+
+            const [allowances] = await pool.query(`
+                SELECT ea.*, at.allowance_name
+                FROM employee_allowances ea
+                LEFT JOIN allowance_types at ON ea.allowance_type_id = at.allowance_type_id
+                WHERE ea.employee_id = ?
+                ORDER BY ea.emp_allowance_id ASC
+            `, [employee.employee_id]);
+            employee.allowances = allowances || [];
+
+            const [deductions] = await pool.query(`
+                SELECT ed.*, dt.deduction_name
+                FROM employee_deductions ed
+                LEFT JOIN deduction_types dt ON ed.deduction_type_id = dt.deduction_type_id
+                WHERE ed.employee_id = ?
+                ORDER BY ed.emp_deduction_id ASC
+            `, [employee.employee_id]);
+            employee.deductions = deductions || [];
+
+            const exportBase = `employee-${String(employee.emp_code || empCode).replace(/[^a-z0-9_-]+/gi, '_').toLowerCase()}`;
+
+            if (format === 'pdf') {
+                const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                try {
+                    const page = await browser.newPage();
+                    await page.setContent(buildEmployeeExportHtml(employee), { waitUntil: 'networkidle0' });
+                    const pdfBuffer = await page.pdf({
+                        format: 'legal',
+                        landscape: false,
+                        printBackground: true,
+                        margin: { top: '16mm', right: '12mm', bottom: '16mm', left: '12mm' }
+                    });
+
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `attachment; filename="${exportBase}.pdf"`);
+                    return res.send(pdfBuffer);
+                } finally {
+                    await browser.close().catch(() => {});
+                }
+            }
+
+            if (format === 'text' || format === 'txt') {
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${exportBase}.txt"`);
+                return res.send(buildEmployeeExportText(employee));
+            }
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${exportBase}.csv"`);
+            return res.send(buildEmployeeExportCsv(employee));
+        } catch (err) {
+            console.error('Employee export error:', err);
+            return res.status(500).json({ success: false, message: 'Unable to export employee file.', error: err.message });
         }
     });
 
@@ -779,6 +1160,9 @@ app.get("/api/employee_details/:id", async (req, res) => {
             // Step 5: Update or Insert into employee_payroll_settings (Payroll Computation Tab)
             if (body.payrollComputation) {
                 const comp = body.payrollComputation;
+                const payrollPeriods = ["Weekly", "Semi-Monthly", "Monthly"];
+                const payrollRates = ["Piece Rate", "Hourly Rate", "Daily Rate", "Weekly Rate", "Monthly Rate"];
+                const otRates = ["STANDARD OT RATE"];
 
                 // Check if an existing record exists for this employee
                 const [existingSettings] = await conn.query(`
@@ -798,15 +1182,15 @@ app.get("/api/employee_details/:id", async (req, res) => {
                             basis_absences = ?, basis_overtime = ?
                         WHERE employee_id = ?
                     `, [
-                        comp.payroll_period || null,
-                        comp.payroll_rate || null,
+                            payrollPeriods.includes(comp.payroll_period) ? comp.payroll_period : "Weekly",
+                            payrollRates.includes(comp.payroll_rate) ? comp.payroll_rate : "Daily Rate",
                         comp.main_computation || null,
                         comp.days_in_year || null,
                         comp.days_in_week || null,
                         comp.hours_in_day || null,
                         comp.week_in_year || null,
                         comp.strict_no_overtime ? 1 : 0,
-                        comp.ot_rate || null,
+                            otRates.includes(comp.ot_rate) ? comp.ot_rate : "STANDARD OT RATE",
                         comp.days_in_year_ot || null,
                         comp.rate_basis_ot || null,
                         comp.basis_absences || null,
@@ -823,15 +1207,15 @@ app.get("/api/employee_details/:id", async (req, res) => {
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         employeeId,
-                        comp.payroll_period || null,
-                        comp.payroll_rate || null,
+                            payrollPeriods.includes(comp.payroll_period) ? comp.payroll_period : "Weekly",
+                            payrollRates.includes(comp.payroll_rate) ? comp.payroll_rate : "Daily Rate",
                         comp.main_computation || null,
                         comp.days_in_year || null,
                         comp.days_in_week || null,
                         comp.hours_in_day || null,
                         comp.week_in_year || null,
                         comp.strict_no_overtime ? 1 : 0,
-                        comp.ot_rate || null,
+                            otRates.includes(comp.ot_rate) ? comp.ot_rate : "STANDARD OT RATE",
                         comp.days_in_year_ot || null,
                         comp.rate_basis_ot || null,
                         comp.basis_absences || null,
@@ -963,14 +1347,22 @@ app.get("/api/employee_details/:id", async (req, res) => {
 
             if (Array.isArray(body.allowances)) {
                 for (const a of body.allowances) {
+                    const allowanceTypeId = Number(a.allowance_type_id);
+                    const amount = a.amount === '' || a.amount === undefined || a.amount === null ? null : Number(a.amount);
+                    const period = ["Weekly", "Monthly", "First Half", "Second Half", "Both"].includes(a.period) ? a.period : null;
+
+                    if (!allowanceTypeId || !period || amount === null || Number.isNaN(amount)) {
+                        continue;
+                    }
+
                     await conn.query(`
                         INSERT INTO employee_allowances (employee_id, allowance_type_id, period, amount)
                         VALUES (?, ?, ?, ?)
                     `, [
                         employeeId,
-                        a.allowance_type_id,
-                        a.period,
-                        a.amount
+                        allowanceTypeId,
+                        period,
+                        amount
                     ]);
                 }
             }
@@ -980,14 +1372,22 @@ app.get("/api/employee_details/:id", async (req, res) => {
 
             if (Array.isArray(body.deductions)) {
                 for (const d of body.deductions) {
+                    const deductionTypeId = Number(d.deduction_type_id);
+                    const amount = d.amount === '' || d.amount === undefined || d.amount === null ? null : Number(d.amount);
+                    const period = ["Weekly", "Monthly", "First Half", "Second Half", "Both"].includes(d.period) ? d.period : null;
+
+                    if (!deductionTypeId || !period || amount === null || Number.isNaN(amount)) {
+                        continue;
+                    }
+
                     await conn.query(`
                         INSERT INTO employee_deductions (employee_id, deduction_type_id, period, amount)
                         VALUES (?, ?, ?, ?)
                     `, [
                         employeeId,
-                        d.deduction_type_id,
-                        d.period,
-                        d.amount
+                        deductionTypeId,
+                        period,
+                        amount
                     ]);
                 }
             }

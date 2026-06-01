@@ -16,6 +16,24 @@ function showToast(msg, type = "success") {
   setTimeout(() => toast.classList.remove("show"), 3000);
 }
 
+// Show any queued logout/session-expired toast after redirecting to login.
+(() => {
+  const key = "post_logout_toast";
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+
+  try {
+    const data = JSON.parse(raw);
+    localStorage.removeItem(key);
+
+    if (data && data.message) {
+      showToast(String(data.message), String(data.type || "warning"));
+    }
+  } catch {
+    localStorage.removeItem(key);
+  }
+})();
+
 // ========== TAB SWITCHER ==========
 function showTab(tab) {
   const isLogin = tab === "login";

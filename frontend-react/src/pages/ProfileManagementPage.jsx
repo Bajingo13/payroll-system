@@ -249,7 +249,6 @@ export default function ProfileManagementPage() {
             </button>
           </div>
         </div>
-
         <div className="profile-picture-panel">
           <button
             type="button"
@@ -320,10 +319,10 @@ export default function ProfileManagementPage() {
           <div className="edit-group">
             <h4>Government IDs (Encrypted)</h4>
             <div className="employee-form-grid">
-              <label>SSS No<input value={profile.government_ids.sss_no} onChange={(e) => updateSection('government_ids', 'sss_no', e.target.value)} /></label>
-              <label>PhilHealth No<input value={profile.government_ids.philhealth_no} onChange={(e) => updateSection('government_ids', 'philhealth_no', e.target.value)} /></label>
-              <label>Pag-IBIG No<input value={profile.government_ids.pagibig_no} onChange={(e) => updateSection('government_ids', 'pagibig_no', e.target.value)} /></label>
-              <label>TIN No<input value={profile.government_ids.tin_no} onChange={(e) => updateSection('government_ids', 'tin_no', e.target.value)} /></label>
+              <label>SSS<input value={profile.government_ids.sss_no} onChange={(e) => updateSection('government_ids', 'sss_no', e.target.value)} /></label>
+              <label>PhilHealth<input value={profile.government_ids.philhealth_no} onChange={(e) => updateSection('government_ids', 'philhealth_no', e.target.value)} /></label>
+              <label>Pag-IBIG<input value={profile.government_ids.pagibig_no} onChange={(e) => updateSection('government_ids', 'pagibig_no', e.target.value)} /></label>
+              <label>TIN<input value={profile.government_ids.tin_no} onChange={(e) => updateSection('government_ids', 'tin_no', e.target.value)} /></label>
             </div>
           </div>
 

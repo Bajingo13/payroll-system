@@ -4,6 +4,92 @@ import { useAuth } from '../context/AuthContext.jsx';
 
 const SORT_OPTIONS = ['ID', 'Name', 'Company', 'Department', 'Position', 'Status'];
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
+const PAYROLL_RATE_OPTIONS = ['Piece Rate', 'Hourly Rate', 'Daily Rate', 'Weekly Rate', 'Monthly Rate'];
+const OT_RATE_OPTIONS = ['STANDARD OT RATE'];
+const ENTRY_PERIOD_OPTIONS = ['Weekly', 'Monthly', 'First Half', 'Second Half', 'Both'];
+const ADD_EMPLOYEE_TABS = [
+  { id: 'basic', label: 'Basic Information' },
+  { id: 'payrollInfo', label: 'Payroll Information' },
+  { id: 'payrollComputation', label: 'Payroll Computation' },
+  { id: 'allowances', label: 'Allowance Payroll Entry' },
+  { id: 'deductions', label: 'Deduction Payroll Entry' }
+];
+
+function createBlankEmployeeForm() {
+  return {
+    emp_code: '',
+    first_name: '',
+    last_name: '',
+    middle_name: '',
+    nickname: '',
+    gender: '',
+    civil_status: '',
+    birth_date: '',
+    street: '',
+    city: '',
+    country: 'Philippines',
+    zip_code: '',
+    status: 'Active',
+    tel_no: '',
+    mobile_no: '',
+    fax_no: '',
+    email: '',
+    website: '',
+    company: '',
+    location: '',
+    branch: '',
+    division: '',
+    department: '',
+    class: '',
+    position: '',
+    employee_type: '',
+    training_date: '',
+    date_hired: '',
+    date_regular: '',
+    date_resigned: '',
+    date_terminated: '',
+    end_of_contract: '',
+    rehired_date: '',
+    rehired: false,
+    machine_id: '',
+    sss_no: '',
+    gsis_no: '',
+    pagibig_no: '',
+    philhealth_no: '',
+    tin_no: '',
+    branch_code: '',
+    atm_no: '',
+    bank_name: '',
+    bank_branch: '',
+    projects: '',
+    salary_type: '',
+    taxInsurance: {
+      tax_status: '',
+      tax_exemption: '',
+      insurance: '',
+      regional_minimum_wage_rate_id: ''
+    },
+    payrollComputation: {
+      payroll_period: '',
+      payroll_rate: '',
+      ot_rate: '',
+      days_in_year: '',
+      days_in_week: '',
+      hours_in_day: '',
+      week_in_year: '',
+      days_in_year_ot: '',
+      rate_basis_ot: '',
+      main_computation: '',
+      basis_absences: '',
+      basis_overtime: '',
+      strict_no_overtime: false
+    },
+    contributions: [],
+    allowances: [],
+    deductions: [],
+    dependents: Array.from({ length: 4 }, () => ({ name: '', birthday: '' }))
+  };
+}
 
 function escapeCsv(value) {
   const text = String(value ?? '');
@@ -45,6 +131,16 @@ export default function EmployeeManagementPage() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailSaving, setDetailSaving] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addActiveTab, setAddActiveTab] = useState('basic');
+  const [addForm, setAddForm] = useState(createBlankEmployeeForm);
+  const [createdEmpCode, setCreatedEmpCode] = useState('');
+  const [addSaving, setAddSaving] = useState(false);
+  const [allowanceOptions, setAllowanceOptions] = useState([]);
+  const [deductionOptions, setDeductionOptions] = useState([]);
+  const [saveNotice, setSaveNotice] = useState('');
+
+  const isEmployeeDetailsOpen = addModalOpen || detailModalOpen;
 
   async function loadSummary() {
     const { data } = await api.get('/employee_summary');
@@ -135,6 +231,9 @@ export default function EmployeeManagementPage() {
       }
 
       setMessage(data.message || 'Employee deleted successfully.');
+      setDetailModalOpen(false);
+      setSelectedEmpCode('');
+      setCreatedEmpCode('');
 
       const isLastItemOnPage = employees.length <= 1 && page > 1;
       if (isLastItemOnPage) {
@@ -159,10 +258,35 @@ export default function EmployeeManagementPage() {
         throw new Error(data.message || 'Unable to load employee details.');
       }
 
+      const employee = data.employee;
+      const dependents = Array.isArray(employee.dependents) ? employee.dependents : [];
+
       setSelectedEmpCode(empCode);
-      setDetailForm(data.employee);
+      setDetailForm(employee);
+      setAddForm({
+        ...createBlankEmployeeForm(),
+        ...employee,
+        taxInsurance: employee.taxInsurance || createBlankEmployeeForm().taxInsurance,
+        payrollComputation: employee.payrollComputation || createBlankEmployeeForm().payrollComputation,
+        allowances: Array.isArray(employee.allowances) ? employee.allowances : [],
+        deductions: Array.isArray(employee.deductions) ? employee.deductions : [],
+        dependents: [
+          ...dependents,
+          ...Array.from({ length: Math.max(0, 4 - dependents.length) }, () => ({ name: '', birthday: '' }))
+        ].slice(0, Math.max(4, dependents.length))
+      });
+      setCreatedEmpCode(empCode);
+      setAddActiveTab('basic');
       setDetailModalOpen(true);
       setMessage('Employee details loaded.');
+
+      Promise.all([
+        api.get('/allowances').catch(() => ({ data: [] })),
+        api.get('/deductions').catch(() => ({ data: [] }))
+      ]).then(([allowanceRes, deductionRes]) => {
+        setAllowanceOptions(Array.isArray(allowanceRes.data) ? allowanceRes.data : []);
+        setDeductionOptions(Array.isArray(deductionRes.data) ? deductionRes.data : []);
+      });
     } catch (err) {
       setMessage(getApiMessage(err, 'Unable to load employee details.'));
     } finally {
@@ -172,6 +296,165 @@ export default function EmployeeManagementPage() {
 
   function updateDetailField(field, value) {
     setDetailForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function openAddEmployeeModal() {
+    setAddActiveTab('basic');
+    setAddForm(createBlankEmployeeForm());
+    setCreatedEmpCode('');
+    setAddModalOpen(true);
+    setDetailModalOpen(false);
+    setMessage('');
+    setSaveNotice('');
+
+    Promise.all([
+      api.get('/allowances').catch(() => ({ data: [] })),
+      api.get('/deductions').catch(() => ({ data: [] }))
+    ]).then(([allowanceRes, deductionRes]) => {
+      setAllowanceOptions(Array.isArray(allowanceRes.data) ? allowanceRes.data : []);
+      setDeductionOptions(Array.isArray(deductionRes.data) ? deductionRes.data : []);
+    });
+  }
+
+  function closeAddEmployeeModal() {
+    if (addSaving) return;
+    setAddModalOpen(false);
+    setCreatedEmpCode('');
+    setSaveNotice('');
+  }
+
+  function updateAddField(field, value) {
+    setAddForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateNestedAddField(group, field, value) {
+    setAddForm((current) => ({
+      ...current,
+      [group]: {
+        ...(current[group] || {}),
+        [field]: value
+      }
+    }));
+  }
+
+  function updateEntryRow(group, index, field, value) {
+    setAddForm((current) => ({
+      ...current,
+      [group]: (current[group] || []).map((row, rowIndex) => (
+        rowIndex === index ? { ...row, [field]: value } : row
+      ))
+    }));
+  }
+
+  function addEntryRow(group) {
+    const blankRow = group === 'allowances'
+      ? { allowance_type_id: '', period: '', amount: '' }
+      : { deduction_type_id: '', period: '', amount: '' };
+
+    setAddForm((current) => ({
+      ...current,
+      [group]: [...(current[group] || []), blankRow]
+    }));
+  }
+
+  function removeEntryRow(group, index) {
+    setAddForm((current) => ({
+      ...current,
+      [group]: (current[group] || []).filter((_, rowIndex) => rowIndex !== index)
+    }));
+  }
+
+  function updateDependent(index, field, value) {
+    setAddForm((current) => ({
+      ...current,
+      dependents: (current.dependents || []).map((dependent, rowIndex) => (
+        rowIndex === index ? { ...dependent, [field]: value } : dependent
+      ))
+    }));
+  }
+
+  function buildAddPayload() {
+    const taxInsurance = addForm.taxInsurance || {};
+    const normalizeEntryRows = (rows, typeField) => (
+      (Array.isArray(rows) ? rows : [])
+        .map((row) => ({
+          ...row,
+          [typeField]: row?.[typeField] ? Number(row[typeField]) : null,
+          period: ENTRY_PERIOD_OPTIONS.includes(row?.period) ? row.period : '',
+          amount: row?.amount === '' || row?.amount === null || row?.amount === undefined ? '' : Number(row.amount)
+        }))
+        .filter((row) => row[typeField] && row.period && row.amount !== '' && Number.isFinite(Number(row.amount)))
+    );
+
+    return {
+      ...addForm,
+      tax_status: taxInsurance.tax_status || '',
+      tax_exemption: taxInsurance.tax_exemption || '',
+      insurance: taxInsurance.insurance || '',
+      regional_minimum_wage_rate_id: taxInsurance.regional_minimum_wage_rate_id || '',
+      allowances: normalizeEntryRows(addForm.allowances, 'allowance_type_id'),
+      deductions: normalizeEntryRows(addForm.deductions, 'deduction_type_id'),
+      contributions: Array.isArray(addForm.contributions) ? addForm.contributions : [],
+      dependents: Array.isArray(addForm.dependents)
+        ? addForm.dependents.filter((row) => row.name || row.birthday)
+        : [],
+      user_id: user?.user_id,
+      admin_name: user?.full_name
+    };
+  }
+
+  function validateAddTab(tabId) {
+    if (tabId !== 'basic') return '';
+    if (!addForm.emp_code.trim()) return 'Employee ID is required in Basic Information.';
+    if (!addForm.first_name.trim()) return 'First Name is required in Basic Information.';
+    if (!addForm.last_name.trim()) return 'Last Name is required in Basic Information.';
+    if (!addForm.email.trim()) return 'Email is required in Basic Information.';
+    if (!addForm.date_hired) return 'Date Hired is required in Basic Information.';
+    return '';
+  }
+
+  async function saveAddTab(tabId = addActiveTab) {
+    const validationError = validateAddTab(tabId);
+    if (validationError) {
+      setMessage(validationError);
+      setSaveNotice('');
+      return;
+    }
+
+    if (tabId !== 'basic' && !createdEmpCode) {
+      setMessage('Save Basic Information first before saving this tab.');
+      setSaveNotice('');
+      setAddActiveTab('basic');
+      return;
+    }
+
+    setAddSaving(true);
+    setMessage(`Saving ${ADD_EMPLOYEE_TABS.find((tab) => tab.id === tabId)?.label || 'employee'}...`);
+
+    try {
+      const payload = buildAddPayload();
+      const request = createdEmpCode
+        ? api.put(`/employee/update/${encodeURIComponent(createdEmpCode)}`, payload)
+        : api.post('/add_employee', payload);
+
+      const { data } = await request;
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to save employee.');
+      }
+
+      const nextEmpCode = data.emp_code || payload.emp_code || createdEmpCode;
+      const tabLabel = ADD_EMPLOYEE_TABS.find((tab) => tab.id === tabId)?.label || 'Employee';
+      setCreatedEmpCode(nextEmpCode);
+      setAddForm((current) => ({ ...current, emp_code: nextEmpCode }));
+      setMessage(`${tabLabel} saved successfully.`);
+      setSaveNotice(`${tabLabel} saved successfully.`);
+      void Promise.all([loadSummary(), loadEmployeeList()]).catch(() => {});
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to save employee.'));
+      setSaveNotice('');
+    } finally {
+      setAddSaving(false);
+    }
   }
 
   async function saveEmployeeDetails() {
@@ -200,7 +483,7 @@ export default function EmployeeManagementPage() {
       const updatedEmpCode = detailForm.emp_code || selectedEmpCode;
       setSelectedEmpCode(updatedEmpCode);
       setMessage(data.message || 'Employee details saved successfully.');
-      await Promise.all([loadSummary(), loadEmployeeList()]);
+      void Promise.all([loadSummary(), loadEmployeeList()]).catch(() => {});
       setDetailModalOpen(false);
     } catch (err) {
       setMessage(getApiMessage(err, 'Unable to save employee details.'));
@@ -212,37 +495,400 @@ export default function EmployeeManagementPage() {
   function closeDetailModal() {
     if (detailSaving) return;
     setDetailModalOpen(false);
+    setSelectedEmpCode('');
+    setCreatedEmpCode('');
+    setSaveNotice('');
   }
 
-  function exportEmployeeList() {
-    if (!filteredEmployees.length) {
-      setMessage('No employee rows available to export.');
+  async function exportEmployeeFile() {
+    const query = window.prompt('Enter the employee name or employee code to export:');
+    if (!query || !query.trim()) return;
+
+    const formatInput = window.prompt('Choose export format: pdf, text, or csv', 'pdf');
+    const format = String(formatInput || 'pdf').trim().toLowerCase();
+    const exportFormat = format === 'txt' ? 'text' : format;
+
+    if (!['pdf', 'text', 'csv'].includes(exportFormat)) {
+      setMessage('Invalid export format. Please choose pdf, text, or csv.');
       return;
     }
 
-    const headers = ['Employee ID', 'Name', 'Company', 'Department', 'Position', 'Email', 'Phone', 'Status'];
-    const body = filteredEmployees.map((employee) => [
-      employee.emp_code || '',
-      employee.full_name || '',
-      employee.company || '',
-      employee.department || '',
-      employee.position || '',
-      employee.email || '',
-      employee.mobile_no || '',
-      employee.status || ''
-    ]);
+    try {
+      const response = await api.get('/employee_autocomplete', {
+        params: { q: query.trim() }
+      });
+      const matches = Array.isArray(response.data?.employees) ? response.data.employees : [];
+      const normalized = query.trim().toLowerCase();
 
-    const csv = [headers, ...body].map((line) => line.map(escapeCsv).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `employee-list-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    setMessage('Employee list exported successfully.');
+      const employee = matches.find((item) => {
+        return [item.emp_code, item.full_name, item.display]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase() === normalized || String(value).toLowerCase().includes(normalized));
+      }) || matches[0];
+
+      if (!employee) {
+        setMessage('Employee not found.');
+        return;
+      }
+
+      const { data, headers } = await api.get(`/employee/${encodeURIComponent(employee.emp_code)}/export`, {
+        params: { format: exportFormat },
+        responseType: 'blob'
+      });
+
+      const blob = data instanceof Blob ? data : new Blob([data], { type: headers?.['content-type'] || 'application/octet-stream' });
+      const disposition = headers?.['content-disposition'] || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const fallbackExtension = exportFormat === 'text' ? 'txt' : exportFormat;
+      const fallbackName = `employee-${String(employee.emp_code || 'file').replace(/[^a-z0-9_-]+/gi, '_').toLowerCase()}.${fallbackExtension}`;
+      const fileName = match?.[1] || fallbackName;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMessage(`Employee file exported for ${employee.emp_code || 'employee'} as ${exportFormat.toUpperCase()}.`);
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to export employee file.'));
+    }
+  }
+
+  function renderFormRow(label, control) {
+    return (
+      <div className="legacy-form-row">
+        <label>{label}</label>
+        {control}
+      </div>
+    );
+  }
+
+  function renderBasicAddTab() {
+    return (
+      <div className="legacy-info-grid">
+        <div className="legacy-form-box">
+          {renderFormRow('Employee ID:', <input value={addForm.emp_code} onChange={(event) => updateAddField('emp_code', event.target.value)} />)}
+          {renderFormRow('Last Name:', <input value={addForm.last_name} onChange={(event) => updateAddField('last_name', event.target.value)} />)}
+          {renderFormRow('First Name:', <input value={addForm.first_name} onChange={(event) => updateAddField('first_name', event.target.value)} />)}
+          {renderFormRow('Middle Name:', <input value={addForm.middle_name} onChange={(event) => updateAddField('middle_name', event.target.value)} />)}
+          {renderFormRow('Nickname:', <input value={addForm.nickname} onChange={(event) => updateAddField('nickname', event.target.value)} />)}
+          {renderFormRow('Gender:', (
+            <select value={addForm.gender} onChange={(event) => updateAddField('gender', event.target.value)}>
+              <option value="">-- Select --</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          ))}
+          {renderFormRow('Civil Status:', (
+            <select value={addForm.civil_status} onChange={(event) => updateAddField('civil_status', event.target.value)}>
+              <option value="">-- Select --</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Widowed">Widowed</option>
+              <option value="Separated">Separated</option>
+            </select>
+          ))}
+          {renderFormRow('Birth Date:', <input type="date" value={addForm.birth_date} onChange={(event) => updateAddField('birth_date', event.target.value)} />)}
+          {renderFormRow('Street:', <input value={addForm.street} onChange={(event) => updateAddField('street', event.target.value)} />)}
+          {renderFormRow('City:', <input value={addForm.city} onChange={(event) => updateAddField('city', event.target.value)} />)}
+          {renderFormRow('Country:', <input value={addForm.country} onChange={(event) => updateAddField('country', event.target.value)} />)}
+          {renderFormRow('ZIP Code:', <input value={addForm.zip_code} onChange={(event) => updateAddField('zip_code', event.target.value)} />)}
+          {renderFormRow('Date Hired:', <input type="date" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />)}
+        </div>
+
+        <div className="legacy-info-right">
+          <div className="legacy-form-box">
+            <h4>Contact Details</h4>
+            {renderFormRow('Tel. No.:', <input value={addForm.tel_no} onChange={(event) => updateAddField('tel_no', event.target.value)} />)}
+            {renderFormRow('Mobile No.:', <input value={addForm.mobile_no} onChange={(event) => updateAddField('mobile_no', event.target.value)} />)}
+            {renderFormRow('Fax No.:', <input value={addForm.fax_no} onChange={(event) => updateAddField('fax_no', event.target.value)} />)}
+            {renderFormRow('Email:', <input type="email" placeholder="sample@gmail.com" value={addForm.email} onChange={(event) => updateAddField('email', event.target.value)} />)}
+            {renderFormRow('Website:', <input type="url" placeholder="https://example.com" value={addForm.website} onChange={(event) => updateAddField('website', event.target.value)} />)}
+          </div>
+
+          <div className="legacy-form-box">
+            <h4>Dependents</h4>
+            <table className="dependents-table">
+              <thead>
+                <tr><th>Name</th><th>Birthday</th></tr>
+              </thead>
+              <tbody>
+                {(addForm.dependents || []).map((dependent, index) => (
+                  <tr key={`dependent-${index}`}>
+                    <td>{index + 1}.<input value={dependent.name || ''} onChange={(event) => updateDependent(index, 'name', event.target.value)} /></td>
+                    <td><input type="date" value={dependent.birthday || ''} onChange={(event) => updateDependent(index, 'birthday', event.target.value)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPayrollInfoAddTab() {
+    return (
+      <div className="legacy-form-box">
+        <h4>Payroll Information</h4>
+        <div className="legacy-payroll-grid">
+          <div>
+            {renderFormRow('Training Date:', <input type="date" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />)}
+            {renderFormRow('Date Hired:', <input type="date" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />)}
+            {renderFormRow('Date Regular:', <input type="date" value={addForm.date_regular} onChange={(event) => updateAddField('date_regular', event.target.value)} />)}
+            {renderFormRow('Date Resigned:', <input type="date" value={addForm.date_resigned} onChange={(event) => updateAddField('date_resigned', event.target.value)} />)}
+            {renderFormRow('Date Terminated:', <input type="date" value={addForm.date_terminated} onChange={(event) => updateAddField('date_terminated', event.target.value)} />)}
+            {renderFormRow('End of Contract:', <input type="date" value={addForm.end_of_contract} onChange={(event) => updateAddField('end_of_contract', event.target.value)} />)}
+            <div className="legacy-checkbox-row">
+              <input type="checkbox" checked={addForm.rehired} onChange={(event) => updateAddField('rehired', event.target.checked)} />
+              <label>Rehired</label>
+            </div>
+            {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
+            <hr className="divider" />
+            {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
+            {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
+            {renderFormRow('GSIS:', <input value={addForm.gsis_no} onChange={(event) => updateAddField('gsis_no', event.target.value)} />)}
+            {renderFormRow('Pag-IBIG:', <input value={addForm.pagibig_no} onChange={(event) => updateAddField('pagibig_no', event.target.value)} />)}
+            {renderFormRow('PhilHealth:', <input value={addForm.philhealth_no} onChange={(event) => updateAddField('philhealth_no', event.target.value)} />)}
+            {renderFormRow('TIN:', <input value={addForm.tin_no} onChange={(event) => updateAddField('tin_no', event.target.value)} />)}
+            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}
+          </div>
+          <div>
+            {renderFormRow('Company:', <input value={addForm.company} onChange={(event) => updateAddField('company', event.target.value)} />)}
+            {renderFormRow('Location:', <input value={addForm.location} onChange={(event) => updateAddField('location', event.target.value)} />)}
+            {renderFormRow('Branch:', <input value={addForm.branch} onChange={(event) => updateAddField('branch', event.target.value)} />)}
+            {renderFormRow('Division:', <input value={addForm.division} onChange={(event) => updateAddField('division', event.target.value)} />)}
+            {renderFormRow('Department:', <input value={addForm.department} onChange={(event) => updateAddField('department', event.target.value)} />)}
+            {renderFormRow('Class:', <input value={addForm.class} onChange={(event) => updateAddField('class', event.target.value)} />)}
+            {renderFormRow('Position:', <input value={addForm.position} onChange={(event) => updateAddField('position', event.target.value)} />)}
+            {renderFormRow('Employee Type:', <input value={addForm.employee_type} onChange={(event) => updateAddField('employee_type', event.target.value)} />)}
+            {renderFormRow('Employee Status:', <input value={addForm.status} onChange={(event) => updateAddField('status', event.target.value)} />)}
+            <hr className="divider" />
+            {renderFormRow('ATM:', <input value={addForm.atm_no} onChange={(event) => updateAddField('atm_no', event.target.value)} />)}
+            {renderFormRow('Bank:', <input value={addForm.bank_name} onChange={(event) => updateAddField('bank_name', event.target.value)} />)}
+            {renderFormRow('Bank Branch:', <input value={addForm.bank_branch} onChange={(event) => updateAddField('bank_branch', event.target.value)} />)}
+            {renderFormRow('Projects:', <input value={addForm.projects} onChange={(event) => updateAddField('projects', event.target.value)} />)}
+            {renderFormRow('Salary Type:', <input value={addForm.salary_type} onChange={(event) => updateAddField('salary_type', event.target.value)} />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPayrollComputationAddTab() {
+    const comp = addForm.payrollComputation || {};
+    const tax = addForm.taxInsurance || {};
+
+    return (
+      <div className="legacy-form-box">
+        <div className="legacy-payroll-grid">
+          <div>
+            <h4>Main Computation</h4>
+            {renderFormRow('Payroll Period:', <input value={comp.payroll_period || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'payroll_period', event.target.value)} />)}
+            {renderFormRow('Payroll Rate:', (
+              <select value={comp.payroll_rate || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'payroll_rate', event.target.value)}>
+                <option value="">-- Select --</option>
+                {PAYROLL_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            ))}
+            {renderFormRow('Amount Rate:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
+            <hr className="divider" />
+            <h4>Basis of Computation for Absences, Late and Undertime</h4>
+            {renderFormRow('Days in a Year:', <input type="number" value={comp.days_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year', event.target.value)} />)}
+            {renderFormRow('Days in a Week:', <input type="number" value={comp.days_in_week || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_week', event.target.value)} />)}
+            {renderFormRow('Hours in a Day:', <input type="number" value={comp.hours_in_day || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'hours_in_day', event.target.value)} />)}
+            {renderFormRow('Week in a Year:', <input type="number" value={comp.week_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'week_in_year', event.target.value)} />)}
+            {renderFormRow('Basis Absences:', <input value={comp.basis_absences || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'basis_absences', event.target.value)} />)}
+          </div>
+          <div>
+            <h4>Basis of Computation for Overtime</h4>
+            <div className="legacy-checkbox-row">
+              <input type="checkbox" checked={!!comp.strict_no_overtime} onChange={(event) => updateNestedAddField('payrollComputation', 'strict_no_overtime', event.target.checked)} />
+              <label>STRICTLY NO OVERTIME</label>
+            </div>
+            {renderFormRow('OT Rate:', (
+              <select value={comp.ot_rate || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'ot_rate', event.target.value)}>
+                <option value="">-- Select --</option>
+                {OT_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            ))}
+            {renderFormRow('Days in a Year (O.T.):', <input type="number" value={comp.days_in_year_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year_ot', event.target.value)} />)}
+            {renderFormRow('Rate Basis (O.T.):', <input type="number" value={comp.rate_basis_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'rate_basis_ot', event.target.value)} />)}
+            {renderFormRow('Basis Overtime:', <input value={comp.basis_overtime || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'basis_overtime', event.target.value)} />)}
+            <hr className="divider" />
+            <h4>Tax and Insurance</h4>
+            {renderFormRow('Tax Status:', <input value={tax.tax_status || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_status', event.target.value)} />)}
+            {renderFormRow('Tax Exemption:', <input type="number" value={tax.tax_exemption || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_exemption', event.target.value)} />)}
+            {renderFormRow('Insurance:', <input type="number" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />)}
+            {renderFormRow('Regional Minimum Wage Rate ID:', <input value={tax.regional_minimum_wage_rate_id || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'regional_minimum_wage_rate_id', event.target.value)} />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderEntryRows(group, options, typeField) {
+    const rows = addForm[group] || [];
+    return (
+      <div className="table-scroll compact">
+        <table className={group === 'allowances' ? 'allowance-table' : 'deduction-table'}>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Period</th>
+              <th>Amount</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? <tr><td colSpan="4">No entries yet.</td></tr> : null}
+            {rows.map((row, index) => (
+              <tr key={`${group}-${index}`}>
+                <td>
+                  <select value={row[typeField] || ''} onChange={(event) => updateEntryRow(group, index, typeField, event.target.value)}>
+                    <option value="">Select type</option>
+                    {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <select value={row.period || ''} onChange={(event) => updateEntryRow(group, index, 'period', event.target.value)}>
+                    <option value="">Select period</option>
+                    {ENTRY_PERIOD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </td>
+                <td><input type="number" value={row.amount || ''} onChange={(event) => updateEntryRow(group, index, 'amount', event.target.value)} /></td>
+                <td><button type="button" className="btn danger" onClick={() => removeEntryRow(group, index)}>Remove</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  function renderAddTabContent() {
+    if (addActiveTab === 'basic') return renderBasicAddTab();
+    if (addActiveTab === 'payrollInfo') return renderPayrollInfoAddTab();
+    if (addActiveTab === 'payrollComputation') return renderPayrollComputationAddTab();
+    if (addActiveTab === 'allowances') {
+      return (
+        <div className="legacy-form-box">
+          <h4>Allowance Payroll Entry</h4>
+          <div className="toolbar employee-tab-toolbar">
+            <button type="button" className="btn secondary" onClick={() => addEntryRow('allowances')}>Add Allowance</button>
+          </div>
+          {renderEntryRows('allowances', allowanceOptions, 'allowance_type_id')}
+        </div>
+      );
+    }
+    return (
+      <div className="legacy-form-box">
+        <h4>Deduction Payroll Entry</h4>
+        <div className="toolbar employee-tab-toolbar">
+          <button type="button" className="btn secondary" onClick={() => addEntryRow('deductions')}>Add Deduction</button>
+        </div>
+        {renderEntryRows('deductions', deductionOptions, 'deduction_type_id')}
+      </div>
+    );
+  }
+
+  function renderEmployeeProfileHeader() {
+    const displayName = [addForm.first_name, addForm.middle_name, addForm.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || (addModalOpen ? 'New Employee' : 'Employee Details');
+
+    return (
+      <section className="legacy-profile-header">
+        <div className="legacy-profile-photo">No Image</div>
+        <div className="legacy-profile-info">
+          <h2>{displayName}</h2>
+          <p><strong>Employee ID:</strong> {addForm.emp_code || 'N/A'}</p>
+          <p><strong>Department:</strong> {addForm.department || 'N/A'}</p>
+          <p><strong>Position:</strong> {addForm.position || 'N/A'}</p>
+          <p><strong>Status:</strong> {addForm.status || 'N/A'}</p>
+        </div>
+        <div className="legacy-profile-actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => saveAddTab(addActiveTab)}
+            disabled={addSaving}
+          >
+            {addSaving ? 'Saving...' : detailModalOpen ? 'Save' : 'Save'}
+          </button>
+          {detailModalOpen ? (
+            <button
+              type="button"
+              className="btn danger"
+              onClick={() => handleDeleteEmployee(createdEmpCode || selectedEmpCode)}
+              disabled={addSaving}
+            >
+              Delete
+            </button>
+          ) : null}
+          <button type="button" className="btn secondary" onClick={detailModalOpen ? closeDetailModal : closeAddEmployeeModal} disabled={addSaving}>
+            Back
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  function renderInlineEmployeeDetails() {
+    return (
+      <section className="employee-details-inline">
+        {renderEmployeeProfileHeader()}
+
+        <div className="module-tabs employee-add-tabs">
+          {ADD_EMPLOYEE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={addActiveTab === tab.id ? 'active' : ''}
+              onClick={() => setAddActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {createdEmpCode && addModalOpen ? (
+          <p className="muted">Created employee record: <strong>{createdEmpCode}</strong></p>
+        ) : null}
+
+        {renderAddTabContent()}
+
+        <p className="message">{message}</p>
+
+        <div className="legacy-add-footer">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => saveAddTab(addActiveTab)}
+            disabled={addSaving}
+          >
+            {addSaving ? 'Saving...' : `Save ${ADD_EMPLOYEE_TABS.find((tab) => tab.id === addActiveTab)?.label || 'Tab'}`}
+          </button>
+          <button type="button" className="btn secondary" onClick={detailModalOpen ? closeDetailModal : closeAddEmployeeModal} disabled={addSaving}>
+            Back to Employee List
+          </button>
+        </div>
+
+        {saveNotice ? (
+          <div className="save-success-popup" role="status" aria-live="polite">
+            <div>
+              <h3>Successfully Saved</h3>
+              <p>{saveNotice}</p>
+            </div>
+            <button type="button" className="btn" onClick={() => setSaveNotice('')}>OK</button>
+          </div>
+        ) : null}
+      </section>
+    );
   }
 
   return (
@@ -252,6 +898,8 @@ export default function EmployeeManagementPage() {
         <p>View and manage employee records and details.</p>
       </header>
 
+      {isEmployeeDetailsOpen ? renderInlineEmployeeDetails() : (
+        <>
       <section className="summary">
         <div className="card"><span>Total Employees</span><strong>{summary.totalEmployees}</strong></div>
         <div className="card"><span>Active Employees</span><strong>{summary.activeEmployees}</strong></div>
@@ -259,21 +907,15 @@ export default function EmployeeManagementPage() {
         <div className="card"><span>New Hires</span><strong>{summary.newHires}</strong></div>
       </section>
 
+      <div className="legacy-employee-actions">
+        <button type="button" className="btn secondary" onClick={openAddEmployeeModal}>+ Add New Employee</button>
+        <button type="button" className="btn secondary" onClick={exportEmployeeFile}>Export Employee File</button>
+      </div>
+
       <section className="table-section">
         <div className="table-header employee-mgmt-header">
           <div>
             <h3>Employee List</h3>
-            <p className="muted">Data is sourced from your existing Employee Management APIs.</p>
-          </div>
-          <div className="toolbar">
-            <button type="button" className="btn secondary" onClick={exportEmployeeList}>Export List</button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => window.alert('Detailed add/edit form migration is next. This page now covers summary, listing, sorting, searching, and delete.')}
-            >
-              + Add New Employee
-            </button>
           </div>
         </div>
 
@@ -348,13 +990,6 @@ export default function EmployeeManagementPage() {
                       >
                         View
                       </button>
-                      <button
-                        type="button"
-                        className="btn danger"
-                        onClick={() => handleDeleteEmployee(employee.emp_code)}
-                      >
-                        Delete
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -376,85 +1011,8 @@ export default function EmployeeManagementPage() {
 
         <p className="message">{message}</p>
       </section>
-
-      {detailModalOpen ? (
-        <section className="modal-backdrop" onClick={closeDetailModal}>
-          <div className="modal-sheet" onClick={(event) => event.stopPropagation()}>
-            <div className="table-header employee-mgmt-header">
-              <div>
-                <h3>Employee Details Form</h3>
-                <p className="muted">Edit selected employee details and save updates.</p>
-              </div>
-              <div className="toolbar">
-                <button type="button" className="btn secondary" onClick={closeDetailModal} disabled={detailSaving}>Close</button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={!detailForm || detailLoading || detailSaving}
-                  onClick={saveEmployeeDetails}
-                >
-                  {detailSaving ? 'Saving...' : 'Save Details'}
-                </button>
-              </div>
-            </div>
-
-            {!detailForm ? (
-              <p className="muted">No employee details loaded.</p>
-            ) : (
-              <div className="employee-form-grid">
-                <label>
-                  Employee ID
-                  <input value={detailForm.emp_code || ''} onChange={(event) => updateDetailField('emp_code', event.target.value)} />
-                </label>
-                <label>
-                  First Name
-                  <input value={detailForm.first_name || ''} onChange={(event) => updateDetailField('first_name', event.target.value)} />
-                </label>
-                <label>
-                  Last Name
-                  <input value={detailForm.last_name || ''} onChange={(event) => updateDetailField('last_name', event.target.value)} />
-                </label>
-                <label>
-                  Middle Name
-                  <input value={detailForm.middle_name || ''} onChange={(event) => updateDetailField('middle_name', event.target.value)} />
-                </label>
-                <label>
-                  Status
-                  <input value={detailForm.status || ''} onChange={(event) => updateDetailField('status', event.target.value)} />
-                </label>
-                <label>
-                  Email
-                  <input value={detailForm.email || ''} onChange={(event) => updateDetailField('email', event.target.value)} />
-                </label>
-                <label>
-                  Mobile No
-                  <input value={detailForm.mobile_no || ''} onChange={(event) => updateDetailField('mobile_no', event.target.value)} />
-                </label>
-                <label>
-                  Company
-                  <input value={detailForm.company || ''} onChange={(event) => updateDetailField('company', event.target.value)} />
-                </label>
-                <label>
-                  Department
-                  <input value={detailForm.department || ''} onChange={(event) => updateDetailField('department', event.target.value)} />
-                </label>
-                <label>
-                  Position
-                  <input value={detailForm.position || ''} onChange={(event) => updateDetailField('position', event.target.value)} />
-                </label>
-                <label>
-                  Employee Type
-                  <input value={detailForm.employee_type || ''} onChange={(event) => updateDetailField('employee_type', event.target.value)} />
-                </label>
-                <label>
-                  Salary Type
-                  <input value={detailForm.salary_type || ''} onChange={(event) => updateDetailField('salary_type', event.target.value)} />
-                </label>
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
+        </>
+      )}
     </>
   );
 }

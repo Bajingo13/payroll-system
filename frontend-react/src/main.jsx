@@ -1,6 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
@@ -16,17 +19,18 @@ import PayrollComputationPage from './pages/PayrollComputationPage.jsx';
 import ProfileManagementPage from './pages/ProfileManagementPage.jsx';
 import EmployeeManagementPage from './pages/EmployeeManagementPage.jsx';
 import ScheduleManagementPage from './pages/ScheduleManagementPage.jsx';
-import AuditingPage from './pages/AuditingPage.jsx';  
+import AuditingPage from './pages/AuditingPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import UtilitiesPage from './pages/UtilitiesPage.jsx';
 import AdvancedModulesPage from './pages/AdvancedModulesPage.jsx';
+import UserSettingsPage from './pages/UserSettingsPage.jsx';
 import './styles.css';
 
 function normalizeRole(rawRole) {
   const role = String(rawRole || '').trim().toLowerCase();
   if (!role) return 'unknown';
   if (role === 'employee') return 'employee';
-  if (role === 'hr' || role.includes('human resource')) return 'hr';
+  if (role === 'hr' || role.includes('hr') || role.includes('human resource')) return 'hr';
   if (role === 'admin' || role.includes('admin')) return 'admin';
   return 'unknown';
 }
@@ -64,6 +68,7 @@ function RoleIndexRedirect() {
 function DashboardRoute() {
   const { user } = useAuth();
   const role = normalizeRole(user?.role);
+
   if (role === 'employee') return <EmployeeDashboardPage />;
   if (role === 'hr') return <HRDashboardPage />;
   return <DashboardPage />;
@@ -73,6 +78,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
       <Route
         path="/"
         element={
@@ -87,6 +93,7 @@ function AppRoutes() {
           path="employee-dashboard"
           element={<Navigate to="/dashboard" replace />}
         />
+
         <Route
           path="personal-management"
           element={
@@ -95,6 +102,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="employee-leave-request"
           element={
@@ -103,6 +111,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="employee-payroll-information"
           element={
@@ -111,6 +120,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="employee-schedule"
           element={
@@ -128,10 +138,21 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
+        <Route
+          path="user-settings"
+          element={
+            <RoleRoute roles={['admin', 'hr', 'employee']}>
+              <UserSettingsPage />
+            </RoleRoute>
+          }
+        />
+
         <Route
           path="profile-management"
           element={<Navigate to="/dashboard" replace />}
         />
+
         <Route
           path="employee-attendance"
           element={
@@ -140,6 +161,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="leave-management"
           element={
@@ -148,6 +170,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="employee-management"
           element={
@@ -156,6 +179,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="schedule-management"
           element={
@@ -164,6 +188,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="payroll-computation"
           element={
@@ -172,6 +197,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="auditing"
           element={
@@ -180,7 +206,12 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
-        <Route path="reports" element={<Navigate to="/reports/payroll-journal" replace />} />
+
+        <Route
+          path="reports"
+          element={<Navigate to="/reports/payroll-journal" replace />}
+        />
+
         <Route
           path="reports/:reportType"
           element={
@@ -189,6 +220,7 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
         <Route
           path="advanced-modules"
           element={
@@ -197,6 +229,97 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+
+        <Route
+          path="employee-documents"
+          element={
+            <RoleRoute roles={['admin', 'hr']}>
+              <AdvancedModulesPage moduleKey="documents" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="organization-setup"
+          element={
+            <RoleRoute roles={['admin', 'hr']}>
+              <AdvancedModulesPage moduleKey="organization" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="year-end-payroll"
+          element={
+            <RoleRoute roles={['admin']}>
+              <AdvancedModulesPage moduleKey="payroll" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="loan-deduction-management"
+          element={
+            <RoleRoute roles={['admin']}>
+              <AdvancedModulesPage moduleKey="loan" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="government-reports"
+          element={
+            <RoleRoute roles={['admin']}>
+              <AdvancedModulesPage moduleKey="compliance" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="leave-calendar"
+          element={
+            <RoleRoute roles={['admin', 'hr']}>
+              <AdvancedModulesPage moduleKey="leave" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="performance-management"
+          element={
+            <RoleRoute roles={['admin', 'hr']}>
+              <AdvancedModulesPage moduleKey="performance" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="report-builder"
+          element={
+            <RoleRoute roles={['admin']}>
+              <AdvancedModulesPage moduleKey="reports" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="security-backup"
+          element={
+            <RoleRoute roles={['admin']}>
+              <AdvancedModulesPage moduleKey="security" />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="analytics-dashboard"
+          element={
+            <RoleRoute roles={['admin', 'hr']}>
+              <AdvancedModulesPage moduleKey="analytics" />
+            </RoleRoute>
+          }
+        />
+
         <Route
           path="utilities"
           element={
@@ -206,6 +329,7 @@ function AppRoutes() {
           }
         />
       </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -216,6 +340,15 @@ createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+
+        <ToastContainer
+          position="bottom-center"
+          autoClose={1500}
+          newestOnTop
+          closeOnClick
+          pauseOnHover={false}
+          theme="colored"
+        />
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

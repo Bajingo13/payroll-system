@@ -98,22 +98,72 @@ module.exports = function (app, pool) {
             return res.status(400).json({ success: false, message: "All filters (payroll_group, payroll_period, month, year) are required" });
         }
 
+        let conn;
         try {
-            // Query the payroll_runs table to find the run_id based on the filters
             const query = `
-                SELECT run_id
-                FROM payroll_runs 
-                WHERE group_id = ? 
-                    AND period_id = ? 
-                    AND month_id = ? 
-                    AND year_id = ?
-                    AND status != 'Pending'
+                SELECT
+                    pr.run_id,
+                    COUNT(ep.employee_id) AS employee_count
+                FROM payroll_runs pr
+                LEFT JOIN employee_payroll ep ON ep.run_id = pr.run_id
+                WHERE pr.status != 'Pending'
+                    AND (
+                                                CONVERT(TRIM(CAST(pr.group_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                                                OR CONVERT(LOWER(TRIM(CAST(pr.group_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
+                                                    SELECT CONVERT(LOWER(TRIM(group_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                          FROM payroll_groups
+                          WHERE CAST(group_id AS CHAR) = ?
+                          LIMIT 1
+                        )
+                    )
+                    AND (
+                                                CONVERT(TRIM(CAST(pr.period_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                                                OR CONVERT(LOWER(TRIM(CAST(pr.period_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
+                                                    SELECT CONVERT(LOWER(TRIM(period_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                          FROM payroll_periods
+                          WHERE CAST(period_id AS CHAR) = ?
+                          LIMIT 1
+                        )
+                    )
+                    AND (
+                                                CONVERT(TRIM(CAST(pr.month_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                                                OR CONVERT(LOWER(TRIM(CAST(pr.month_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
+                                                    SELECT CONVERT(LOWER(TRIM(month_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                          FROM payroll_months
+                          WHERE CAST(month_id AS CHAR) = ?
+                          LIMIT 1
+                        )
+                    )
+                    AND (
+                                                CONVERT(TRIM(CAST(pr.year_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                                                OR CONVERT(TRIM(CAST(pr.year_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
+                                                        SELECT CONVERT(TRIM(CAST(year_value AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                            FROM payroll_years
+                            WHERE CAST(year_id AS CHAR) = ?
+                            LIMIT 1
+                        )
+                    )
+                GROUP BY pr.run_id
+                ORDER BY employee_count DESC, pr.run_id DESC
+                LIMIT 1
             `;
             
-            const params = [payroll_group, payroll_period, month, year];
-            const conn = await pool.getConnection();
+            const params = [
+                payroll_group,
+                payroll_group,
+                payroll_period,
+                payroll_period,
+                month,
+                month,
+                year,
+                year
+            ];
+            conn = await pool.getConnection();
             const [rows] = await conn.query(query, params);
-            conn.release();
 
             if (rows.length > 0) {
                 res.json({ success: true, run_id: rows[0].run_id }); // Return the first found run_id
@@ -123,6 +173,8 @@ module.exports = function (app, pool) {
         } catch (err) {
             console.error("Error fetching run_id:", err);
             res.status(500).json({ success: false, message: "Server error", error: err.message });
+        } finally {
+            if (conn) conn.release();
         }
     });
 

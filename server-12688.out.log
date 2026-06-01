@@ -1,0 +1,14 @@
+[dotenv@17.2.4] injecting env (17) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+RUNNING FILE: C:\Users\User\Desktop\payroll-system\server.js
+RAILWAY DETECTED: false
+APP TIMEZONE: Asia/Manila
+DB SESSION TIMEZONE: +08:00
+OK > DATABASE CONNECTED USING LOCAL MYSQL
+OK > DB HOST: 127.0.0.1
+OK > DB PORT: 3306
+OK > ACTIVE DATABASE: payroll_system
+OK > SERVER TIME: 2026-06-01 09:30:09
+AUTH ROUTES LOADED: login.js (password-route-v3)
+OK > Server running on port 12688
+OK > Active DB mode: local-mysql
+OK > db-test route registered
