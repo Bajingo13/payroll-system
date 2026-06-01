@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import astreaBlueLogo from '../assets/astreablue-logo.png';
+import Modal from '../components/Modal.jsx';
+import { AboutUsContent, ContactsContent, HelpContent } from '../components/InfoPopups.jsx';
 
 function normalizeRole(rawRole) {
   const role = String(rawRole || '').trim().toLowerCase();
@@ -20,6 +23,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(false);
+  const [infoModal, setInfoModal] = useState('');
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
 
@@ -112,14 +116,15 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <header className="site-header">
-        <a className="site-logo" href="/login">
-          Astreablue Intelligence Inc.
-        </a>
+        <Link className="site-logo" to="/login" aria-label="AstreaBlue Login">
+          <img src={astreaBlueLogo} alt="AstreaBlue" />
+          <span>Astreablue Intelligence Inc.</span>
+        </Link>
 
         <nav className="site-nav">
-          <a href="#contact">Contacts</a>
-          <a href="#about">About Us</a>
-          <a href="#help">Help</a>
+          <button type="button" className="link-btn" onClick={() => setInfoModal('contacts')}>Contacts</button>
+          <button type="button" className="link-btn" onClick={() => setInfoModal('about')}>About Us</button>
+          <button type="button" className="link-btn" onClick={() => setInfoModal('help')}>Help</button>
         </nav>
       </header>
 
@@ -306,6 +311,16 @@ export default function LoginPage() {
           )}
         </section>
       </main>
+
+      <Modal
+        open={Boolean(infoModal)}
+        title={infoModal === 'contacts' ? 'Contacts' : infoModal === 'help' ? 'Help' : 'About Us'}
+        onClose={() => setInfoModal('')}
+      >
+        {infoModal === 'contacts' ? <ContactsContent /> : null}
+        {infoModal === 'help' ? <HelpContent /> : null}
+        {infoModal === 'about' ? <AboutUsContent /> : null}
+      </Modal>
     </div>
   );
 }

@@ -2,6 +2,9 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext.jsx';
+import astreaBlueLogo from '../assets/astreablue-logo.png';
+import Modal from './Modal.jsx';
+import { AboutUsContent, ContactsContent, HelpContent } from './InfoPopups.jsx';
 
 const SESSION_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_TIMEOUT_MS || 15 * 60 * 1000);
 
@@ -21,6 +24,7 @@ export default function AppLayout() {
   const fileInputRef = useRef(null);
   const avatarStorageKey = user?.user_id ? `profile_avatar_${user.user_id}` : 'profile_avatar';
   const [avatar, setAvatar] = useState('');
+  const [infoModal, setInfoModal] = useState('');
   const [openGroups, setOpenGroups] = useState({
     employeeManagement: false,
     payrollReports: false,
@@ -200,7 +204,10 @@ export default function AppLayout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="profile">
-          <div className="logo">Astreablue Intelligence Inc.</div>
+          <div className="logo">
+            <img src={astreaBlueLogo} alt="AstreaBlue" />
+            <strong>Astreablue Intelligence Inc.</strong>
+          </div>
           <button
             type="button"
             className="profile-avatar-button"
@@ -340,6 +347,9 @@ export default function AppLayout() {
             <NavLink className="page-account-action" to={accountSettingsPath}>
               Account Settings
             </NavLink>
+            <button type="button" className="page-account-action" onClick={() => setInfoModal('help')}>Help</button>
+            <button type="button" className="page-account-action" onClick={() => setInfoModal('contacts')}>Contacts</button>
+            <button type="button" className="page-account-action" onClick={() => setInfoModal('about')}>About Us</button>
             <button type="button" className="page-account-action danger" onClick={handleLogout}>
               Sign Out
             </button>
@@ -347,6 +357,16 @@ export default function AppLayout() {
         </details>
         <Outlet />
       </main>
+
+      <Modal
+        open={Boolean(infoModal)}
+        title={infoModal === 'contacts' ? 'Contacts' : infoModal === 'help' ? 'Help' : 'About Us'}
+        onClose={() => setInfoModal('')}
+      >
+        {infoModal === 'contacts' ? <ContactsContent /> : null}
+        {infoModal === 'help' ? <HelpContent /> : null}
+        {infoModal === 'about' ? <AboutUsContent /> : null}
+      </Modal>
     </div>
   );
 }

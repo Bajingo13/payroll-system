@@ -543,18 +543,6 @@ function PayrollAggregateSection({ type, roleSettings }) {
       </header>
 
       <section className="table-section">
-        <h3>Role-Based Settings</h3>
-        <div className="summary react-summary">
-          <div className="card"><span>Role</span><strong>{roleSettings.label}</strong></div>
-          <div className="card"><span>Generate</span><strong>{roleSettings.canGenerate ? 'Allowed' : 'Restricted'}</strong></div>
-          <div className="card"><span>Export</span><strong>{roleSettings.canExport ? 'Allowed' : 'Restricted'}</strong></div>
-          <div className="card"><span>Status Scope</span><strong>{roleSettings.allowedStatuses.join(', ')}</strong></div>
-          <div className="card"><span>Export Formats</span><strong>{allowedExportFormats.length ? allowedExportFormats.join(', ') : 'None'}</strong></div>
-        </div>
-        <p className="message">{roleSettings.note}</p>
-      </section>
-
-      <section className="table-section">
         <h3>Filters</h3>
 
         <div className="report-filter-grid">
@@ -956,17 +944,6 @@ ${'-'.repeat(PAYSLIP_WIDTH)}`;
         <h2>Payslip</h2>
         <p>Load and print the latest employee payslip.</p>
       </header>
-
-      <section className="table-section no-print">
-        <h3>Role-Based Settings</h3>
-        <div className="summary react-summary">
-          <div className="card"><span>Role</span><strong>{roleSettings.label}</strong></div>
-          <div className="card"><span>Generate</span><strong>{roleSettings.canGenerate ? 'Allowed' : 'Restricted'}</strong></div>
-          <div className="card"><span>Export</span><strong>{roleSettings.canExport ? 'Allowed' : 'Restricted'}</strong></div>
-          <div className="card"><span>Formats</span><strong>{roleSettings.exportFormats.length ? roleSettings.exportFormats.join(', ') : 'None'}</strong></div>
-        </div>
-        <p className="message">{roleSettings.note}</p>
-      </section>
 
       <section className="table-section no-print">
         <h3>Select Employee</h3>

@@ -24,6 +24,9 @@ import ReportsPage from './pages/ReportsPage.jsx';
 import UtilitiesPage from './pages/UtilitiesPage.jsx';
 import AdvancedModulesPage from './pages/AdvancedModulesPage.jsx';
 import UserSettingsPage from './pages/UserSettingsPage.jsx';
+import AboutUsPage from './pages/AboutUsPage.jsx';
+import HelpPage from './pages/HelpPage.jsx';
+import ContactsPage from './pages/ContactsPage.jsx';
 import './styles.css';
 
 function normalizeRole(rawRole) {
@@ -78,6 +81,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/about-us" element={<AboutUsPage />} />
+      <Route path="/help" element={<HelpPage />} />
+      <Route path="/contacts" element={<ContactsPage />} />
 
       <Route
         path="/"
@@ -325,6 +331,33 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['admin', 'hr']}>
               <UtilitiesPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="about-us"
+          element={
+            <RoleRoute roles={['admin', 'hr', 'employee']}>
+              <AboutUsPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="help"
+          element={
+            <RoleRoute roles={['admin', 'hr', 'employee']}>
+              <HelpPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="contacts"
+          element={
+            <RoleRoute roles={['admin', 'hr', 'employee']}>
+              <ContactsPage />
             </RoleRoute>
           }
         />
