@@ -13,6 +13,8 @@ import EmployeeDashboardPage from './pages/EmployeeDashboardPage.jsx';
 import EmployeeAttendancePage from './pages/EmployeeAttendancePage.jsx';
 import LeaveManagementPage from './pages/LeaveManagementPage.jsx';
 import EmployeeLeaveRequestPage from './pages/EmployeeLeaveRequestPage.jsx';
+import OvertimeManagementPage from './pages/OvertimeManagementPage.jsx';
+import EmployeeOvertimeRequestPage from './pages/EmployeeOvertimeRequestPage.jsx';
 import EmployeePayrollInformationPage from './pages/EmployeePayrollInformationPage.jsx';
 import EmployeeSchedulePage from './pages/EmployeeSchedulePage.jsx';
 import PayrollComputationPage from './pages/PayrollComputationPage.jsx';
@@ -146,6 +148,15 @@ function AppRoutes() {
         />
 
         <Route
+          path="employee-overtime-request"
+          element={
+            <RoleRoute roles={['employee']}>
+              <EmployeeOvertimeRequestPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
           path="user-settings"
           element={
             <RoleRoute roles={['admin', 'hr', 'employee']}>
@@ -232,6 +243,15 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['admin', 'hr']}>
               <AdvancedModulesPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="overtime-management"
+          element={
+            <RoleRoute roles={['admin', 'hr']}>
+              <OvertimeManagementPage />
             </RoleRoute>
           }
         />

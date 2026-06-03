@@ -247,6 +247,8 @@ const legacyReactRedirects = {
   '/dashboard/employee_attendance.html': '/employee-attendance',
   '/dashboard/admin_leave_management.html': '/leave-management',
   '/dashboard/employee_leave_management.html': '/employee-leave-request',
+  '/dashboard/admin_overtime_management.html': '/overtime-management',
+  '/dashboard/employee_overtime_management.html': '/employee-overtime-request',
   '/dashboard/employee_management.html': '/employee-management',
   '/dashboard/employee_payroll_information.html': '/employee-payroll-information',
   '/dashboard/employee_profile_edit.html': '/personal-management',
@@ -304,6 +306,7 @@ if (useReactFrontend) {
     '/employee-dashboard',
     '/personal-management',
     '/employee-leave-request',
+    '/employee-overtime-request',
     '/employee-payroll-information',
     '/employee-schedule',
     '/user-settings',
@@ -312,6 +315,7 @@ if (useReactFrontend) {
     '/schedule-management',
     '/employee-attendance',
     '/leave-management',
+    '/overtime-management',
     '/payroll-computation',
     '/auditing',
     '/advanced-modules',
@@ -334,7 +338,7 @@ if (useReactFrontend) {
     });
   });
 
-  app.get(/^\/(employee-dashboard|personal-management|employee-leave-request|employee-payroll-information|employee-schedule|schedule-management)\/?$/, (req, res) => {
+  app.get(/^\/(employee-dashboard|personal-management|employee-leave-request|employee-overtime-request|employee-payroll-information|employee-schedule|schedule-management)\/?$/, (req, res) => {
     res.sendFile(path.join(reactDistPath, 'index.html'));
   });
 
@@ -409,6 +413,7 @@ if (useReactFrontend) {
     require('./backend/dashboard')(app, pool);
     require('./backend/employee_profile_edit')(app, pool);
     require('./backend/employee_leave')(app, pool);
+    require('./backend/overtime_requests')(app, pool);
     require('./backend/employee_management')(app, pool);
     require('./backend/loan_deductions')(app, pool);
     require('./backend/payroll_computation')(app, pool);

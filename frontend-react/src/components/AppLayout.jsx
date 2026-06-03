@@ -124,6 +124,7 @@ export default function AppLayout() {
   const isEmployeeManagementPath = location.pathname.startsWith('/employee-') ||
     location.pathname === '/organization-setup' ||
     location.pathname === '/leave-management' ||
+    location.pathname === '/overtime-management' ||
     location.pathname === '/schedule-management' ||
     location.pathname === '/leave-calendar' ||
     location.pathname === '/performance-management';
@@ -142,6 +143,7 @@ export default function AppLayout() {
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/personal-management', label: 'Personal Management' },
     { to: '/employee-leave-request', label: 'Leave Request' },
+    { to: '/employee-overtime-request', label: 'Overtime Request' },
     { to: '/employee-payroll-information', label: 'Payroll Information' },
     { to: '/employee-schedule', label: 'Schedule' }
   ];
@@ -152,6 +154,7 @@ export default function AppLayout() {
     { to: '/organization-setup', label: 'Org Setup' },
     { to: '/employee-attendance', label: 'Employee Attendance' },
     { to: '/leave-management', label: 'Leave Management' },
+    { to: '/overtime-management', label: 'Overtime Management' },
     { to: '/schedule-management', label: 'Schedule Management' },
     { to: '/leave-calendar', label: 'Leave Calendar' },
     { to: '/performance-management', label: 'Performance' }
@@ -284,6 +287,7 @@ export default function AppLayout() {
                     <li><NavLink to="/schedule-management">Schedule Management</NavLink></li>
                     <li><NavLink to="/employee-attendance">Employee Attendance</NavLink></li>
                     <li><NavLink to="/leave-management">Leave Management</NavLink></li>
+                    <li><NavLink to="/overtime-management">Overtime Management</NavLink></li>
                     <li><NavLink to="/leave-calendar">Leave Calendar</NavLink></li>
                     <li><NavLink to="/performance-management">Performance</NavLink></li>
                   </ul>
