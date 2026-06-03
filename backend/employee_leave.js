@@ -1,4 +1,193 @@
+const nodemailer = require('nodemailer');
+
 module.exports = function (app, pool) {
+  let leaveMailTransporter = null;
+
+  function getLeaveMailConfig() {
+    const user = process.env.GMAIL_USER || process.env.SMTP_USER || process.env.MAIL_USER;
+    const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.SMTP_PASS || process.env.MAIL_PASS;
+
+    if (!user || !pass) return null;
+
+    return {
+      user,
+      pass,
+      from: {
+        name: process.env.MAIL_FROM_NAME || 'Astreablue Intelligence Inc.',
+        address: user
+      }
+    };
+  }
+
+  function getLeaveMailTransporter() {
+    const config = getLeaveMailConfig();
+    if (!config) return null;
+
+    if (!leaveMailTransporter) {
+      leaveMailTransporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: config.user,
+          pass: config.pass
+        }
+      });
+    }
+
+    return leaveMailTransporter;
+  }
+
+  function formatLeaveDate(value) {
+    if (!value) return 'N/A';
+
+    const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return String(value);
+
+    return date.toLocaleDateString('en-PH', {
+      month: 'long',
+      day: '2-digit',
+      year: 'numeric'
+    });
+  }
+
+  function escapeMailHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function buildLeaveMailContent(request, status) {
+    const employeeName = request.employee_name || request.emp_code || 'Employee';
+    const leaveName = request.leave_name || 'Leave';
+    const dateRange = `${formatLeaveDate(request.start_date)} to ${formatLeaveDate(request.end_date)}`;
+    const totalDays = Number(request.total_days || 0).toFixed(2);
+    const reason = request.reason || 'N/A';
+    const statusText = String(status || request.status || 'Pending');
+
+    const templates = {
+      Pending: {
+        subject: `Leave request for review: ${leaveName}`,
+        intro: 'Your leave request has been submitted and is now for review.',
+        closing: 'You will receive another email once HR/Admin approves or rejects your request.'
+      },
+      Approved: {
+        subject: `Leave request approved: ${leaveName}`,
+        intro: 'Good news. Your leave request has been approved.',
+        closing: 'Please coordinate with your supervisor or HR if you need any further schedule guidance.'
+      },
+      Rejected: {
+        subject: `Leave request rejected: ${leaveName}`,
+        intro: 'Your leave request has been reviewed and rejected.',
+        closing: 'Please contact HR or your supervisor if you need clarification about this decision.'
+      }
+    };
+
+    const template = templates[statusText] || templates.Pending;
+    const text = [
+      `Hi ${employeeName},`,
+      '',
+      template.intro,
+      '',
+      `Leave Type: ${leaveName}`,
+      `Date Range: ${dateRange}`,
+      `Total Days: ${totalDays}`,
+      `Reason: ${reason}`,
+      `Status: ${statusText === 'Pending' ? 'For Review' : statusText}`,
+      '',
+      template.closing,
+      '',
+      'Payroll System'
+    ].join('\n');
+
+    const htmlEmployeeName = escapeMailHtml(employeeName);
+    const htmlLeaveName = escapeMailHtml(leaveName);
+    const htmlDateRange = escapeMailHtml(dateRange);
+    const htmlTotalDays = escapeMailHtml(totalDays);
+    const htmlReason = escapeMailHtml(reason);
+    const htmlStatus = escapeMailHtml(statusText === 'Pending' ? 'For Review' : statusText);
+
+    const html = `
+      <p>Hi ${htmlEmployeeName},</p>
+      <p>${escapeMailHtml(template.intro)}</p>
+      <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+        <tr><td style="padding:4px 12px 4px 0;"><strong>Leave Type</strong></td><td>${htmlLeaveName}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;"><strong>Date Range</strong></td><td>${htmlDateRange}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;"><strong>Total Days</strong></td><td>${htmlTotalDays}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${htmlReason}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>${htmlStatus}</td></tr>
+      </table>
+      <p>${escapeMailHtml(template.closing)}</p>
+      <p>Payroll System</p>
+    `;
+
+    return { subject: template.subject, text, html };
+  }
+
+  async function getLeaveRequestForNotification(conn, requestId) {
+    const [rows] = await conn.execute(
+      `SELECT
+         r.request_id,
+         r.status,
+         r.start_date,
+         r.end_date,
+         r.total_days,
+         r.reason,
+         e.emp_code,
+         CONCAT_WS(' ', e.first_name, e.last_name) AS employee_name,
+         ec.email,
+         t.leave_name
+       FROM employee_leave_requests r
+       JOIN employees e ON e.employee_id = r.employee_id
+       LEFT JOIN employee_contacts ec ON ec.contact_id = (
+         SELECT c.contact_id
+         FROM employee_contacts c
+         WHERE c.employee_id = e.employee_id
+         ORDER BY c.contact_id DESC
+         LIMIT 1
+       )
+       JOIN leave_types t ON t.leave_type_id = r.leave_type_id
+       WHERE r.request_id = ?
+       LIMIT 1`,
+      [requestId]
+    );
+
+    return rows[0] || null;
+  }
+
+  async function sendLeaveRequestNotification(conn, requestId, status) {
+    try {
+      const config = getLeaveMailConfig();
+      const transporter = getLeaveMailTransporter();
+      if (!config || !transporter) {
+        console.warn('Leave email skipped: Gmail SMTP credentials are not configured.');
+        return false;
+      }
+
+      const request = await getLeaveRequestForNotification(conn, requestId);
+      const recipient = String((request && request.email) || '').trim();
+      if (!request || !recipient) {
+        console.warn(`Leave email skipped: no employee email found for request #${requestId}.`);
+        return false;
+      }
+
+      const mail = buildLeaveMailContent(request, status);
+      await transporter.sendMail({
+        from: config.from,
+        to: recipient,
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html
+      });
+
+      return true;
+    } catch (err) {
+      console.warn('Leave email notification skipped:', err.message);
+      return false;
+    }
+  }
+
   async function findEmployeeByUser(conn, user) {
     const username = String((user && user.username) || '').trim();
     if (username) {
@@ -373,14 +562,20 @@ module.exports = function (app, pool) {
         });
       }
 
-      await conn.execute(
+      const [insertResult] = await conn.execute(
         `INSERT INTO employee_leave_requests
          (employee_id, leave_type_id, start_date, end_date, total_days, reason, status)
          VALUES (?, ?, ?, ?, ?, ?, 'Pending')`,
         [employee.employee_id, leaveTypeId, startDate, endDate, totalDays, reason]
       );
 
-      return res.json({ success: true, message: 'Leave request submitted successfully.' });
+      const emailSent = await sendLeaveRequestNotification(conn, insertResult.insertId, 'Pending');
+
+      return res.json({
+        success: true,
+        message: 'Leave request submitted successfully.',
+        emailNotificationSent: emailSent
+      });
     } catch (err) {
       console.error('Leave request save error:', err);
       return res.status(500).json({ success: false, message: err.message || 'Server error' });
@@ -676,7 +871,13 @@ module.exports = function (app, pool) {
 
       await conn.commit();
 
-      return res.json({ success: true, message: `Leave request ${nextStatus.toLowerCase()} successfully.` });
+      const emailSent = await sendLeaveRequestNotification(conn, requestId, nextStatus);
+
+      return res.json({
+        success: true,
+        message: `Leave request ${nextStatus.toLowerCase()} successfully.`,
+        emailNotificationSent: emailSent
+      });
     } catch (err) {
       if (conn) {
         try {

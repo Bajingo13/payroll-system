@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api/client.js';
+import { api, getApiMessage } from '../api/client.js';
+import Modal from '../components/Modal.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -58,6 +60,15 @@ function todayInManila() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 }
 
+function toTimeInput(value) {
+  if (!value) return '';
+  const date = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) return '';
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 function computeHours(record) {
   if (!record.time_in || !record.time_out) return '-';
   const timeIn = new Date(String(record.time_in).replace(' ', 'T')).getTime();
@@ -81,6 +92,7 @@ function attendanceStatus(record) {
 }
 
 export default function EmployeeAttendancePage() {
+  const { user } = useAuth();
   const [records, setRecords] = useState([]);
   const [dateRange, setDateRange] = useState(() => {
     const today = todayInManila();
@@ -92,26 +104,32 @@ export default function EmployeeAttendancePage() {
   });
   const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [editRecord, setEditRecord] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  async function loadAttendance() {
     const params = {
       from: appliedRange.from,
       to: appliedRange.to || appliedRange.from
     };
 
-    api.get('/attendance_overview', { params })
-      .then(({ data }) => {
-        setRecords(data.records || []);
-        setAppliedRange({
-          from: data.from || data.date || params.from,
-          to: data.to || data.date || params.to
-        });
-        setLoadError('');
-      })
-      .catch((err) => {
-        console.error('Attendance load failed:', err);
-        setLoadError(err?.response?.data?.message || err.message || 'Attendance load failed.');
+    try {
+      const { data } = await api.get('/attendance_overview', { params });
+      setRecords(data.records || []);
+      setAppliedRange({
+        from: data.from || data.date || params.from,
+        to: data.to || data.date || params.to
       });
+      setLoadError('');
+    } catch (err) {
+      console.error('Attendance load failed:', err);
+      setLoadError(getApiMessage(err, 'Attendance load failed.'));
+    }
+  }
+
+  useEffect(() => {
+    loadAttendance().catch(() => {});
   }, [appliedRange.from, appliedRange.to]);
 
   const filteredRecords = useMemo(() => {
@@ -211,6 +229,61 @@ export default function EmployeeAttendancePage() {
     setAppliedRange(from > to ? { from: to, to: from } : { from, to });
   }
 
+  function openEditAttendance(record) {
+    setEditRecord(record);
+    setEditForm({
+      attendance_date: record.attendance_date || todayInManila(),
+      time_in: toTimeInput(record.time_in),
+      break_out: toTimeInput(record.break_out),
+      break_in: toTimeInput(record.break_in),
+      time_out: toTimeInput(record.time_out)
+    });
+    setLoadError('');
+  }
+
+  function closeEditAttendance() {
+    if (saving) return;
+    setEditRecord(null);
+    setEditForm(null);
+  }
+
+  function updateEditForm(field, value) {
+    setEditForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveAttendanceEdit(event) {
+    event.preventDefault();
+    if (!editRecord || !editForm || !user?.user_id) return;
+
+    setSaving(true);
+    setLoadError('');
+
+    try {
+      const { data } = await api.put('/attendance_overview', {
+        admin_user_id: user.user_id,
+        user_id: editRecord.user_id,
+        original_date: editRecord.attendance_date,
+        attendance_date: editForm.attendance_date,
+        time_in: editForm.time_in,
+        break_out: editForm.break_out,
+        break_in: editForm.break_in,
+        time_out: editForm.time_out
+      });
+
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to update attendance.');
+      }
+
+      setEditRecord(null);
+      setEditForm(null);
+      await loadAttendance();
+    } catch (err) {
+      setLoadError(getApiMessage(err, 'Unable to update attendance.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       <header className="header">
@@ -252,11 +325,12 @@ export default function EmployeeAttendancePage() {
                 <th>Total Hours</th>
                 <th>OT Hours</th>
                 <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan="11">No attendance records found.</td></tr>
+                <tr><td colSpan="12">No attendance records found.</td></tr>
               ) : filteredRecords.map((record) => {
                 const status = attendanceStatus(record);
                 const totalHours = computeHours(record);
@@ -274,6 +348,11 @@ export default function EmployeeAttendancePage() {
                     <td>{totalHours}</td>
                     <td>{record.ot_hours != null ? Number(record.ot_hours).toFixed(2) : ot}</td>
                     <td><span className={`status ${status.className}`}>{status.label}</span></td>
+                    <td>
+                      <button type="button" className="btn secondary" onClick={() => openEditAttendance(record)}>
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -281,6 +360,35 @@ export default function EmployeeAttendancePage() {
           </table>
         </div>
       </section>
+
+      <Modal open={Boolean(editRecord && editForm)} title="Edit Attendance" onClose={closeEditAttendance}>
+        {editRecord && editForm ? (
+          <form className="employee-form-grid" onSubmit={saveAttendanceEdit}>
+            <label>Employee
+              <input value={`${editRecord.emp_code || 'N/A'} - ${editRecord.employee_name || editRecord.full_name || 'N/A'}`} readOnly />
+            </label>
+            <label>Date
+              <input type="date" value={editForm.attendance_date} onChange={(event) => updateEditForm('attendance_date', event.target.value)} required />
+            </label>
+            <label>Time In
+              <input type="time" value={editForm.time_in} onChange={(event) => updateEditForm('time_in', event.target.value)} />
+            </label>
+            <label>Break Out
+              <input type="time" value={editForm.break_out} onChange={(event) => updateEditForm('break_out', event.target.value)} />
+            </label>
+            <label>Break In
+              <input type="time" value={editForm.break_in} onChange={(event) => updateEditForm('break_in', event.target.value)} />
+            </label>
+            <label>Time Out
+              <input type="time" value={editForm.time_out} onChange={(event) => updateEditForm('time_out', event.target.value)} />
+            </label>
+            <div className="employee-form-wide row-actions">
+              <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving...' : 'Save Attendance'}</button>
+              <button type="button" className="btn secondary" onClick={closeEditAttendance} disabled={saving}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </>
   );
 }

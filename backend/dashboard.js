@@ -52,6 +52,24 @@ module.exports = function (app, pool) {
     return typeof value === 'string' ? value.trim() : value;
   }
 
+  function canManageAttendance(role) {
+    const normalized = String(role || '').trim().toLowerCase();
+    return normalized.includes('admin') || normalized.includes('hr') || normalized.includes('human resource');
+  }
+
+  function isDateOnly(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+  }
+
+  function isTimeOnly(value) {
+    return /^\d{2}:\d{2}$/.test(String(value || '').trim());
+  }
+
+  function buildAttendanceDateTime(date, time) {
+    if (!isDateOnly(date) || !isTimeOnly(time)) return null;
+    return `${date} ${time}:00`;
+  }
+
   async function ensureEmployeeDocumentsTable(conn) {
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS employee_documents (
@@ -958,6 +976,153 @@ module.exports = function (app, pool) {
     } catch (err) {
       console.error('Attendance overview error:', err);
       res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.put('/api/attendance_overview', async (req, res) => {
+    const body = req.body || {};
+    const adminUserId = Number(body.admin_user_id || body.editor_user_id || body.updated_by);
+    const employeeUserId = Number(body.user_id);
+    const originalDate = String(body.original_date || body.attendance_date || '').trim();
+    const attendanceDate = String(body.attendance_date || '').trim();
+    const timeFields = {
+      time_in: body.time_in,
+      break_out: body.break_out,
+      break_in: body.break_in,
+      time_out: body.time_out
+    };
+
+    if (!adminUserId || !employeeUserId || !isDateOnly(originalDate) || !isDateOnly(attendanceDate)) {
+      return res.status(400).json({ success: false, message: 'Missing attendance edit details.' });
+    }
+
+    const normalizedTimes = {};
+    for (const [field, value] of Object.entries(timeFields)) {
+      const trimmed = String(value || '').trim();
+      if (trimmed && !isTimeOnly(trimmed)) {
+        return res.status(400).json({ success: false, message: 'Attendance times must use HH:mm format.' });
+      }
+      normalizedTimes[field] = trimmed || null;
+    }
+
+    const orderedTimes = [
+      normalizedTimes.time_in,
+      normalizedTimes.break_out,
+      normalizedTimes.break_in,
+      normalizedTimes.time_out
+    ].filter(Boolean);
+
+    for (let index = 1; index < orderedTimes.length; index += 1) {
+      if (orderedTimes[index] <= orderedTimes[index - 1]) {
+        return res.status(400).json({ success: false, message: 'Attendance times must be in chronological order.' });
+      }
+    }
+
+    if ((normalizedTimes.break_out || normalizedTimes.break_in || normalizedTimes.time_out) && !normalizedTimes.time_in) {
+      return res.status(400).json({ success: false, message: 'Time In is required before other attendance times.' });
+    }
+
+    if (normalizedTimes.break_in && !normalizedTimes.break_out) {
+      return res.status(400).json({ success: false, message: 'Break Out is required before Break In.' });
+    }
+
+    if (normalizedTimes.time_out && normalizedTimes.break_out && !normalizedTimes.break_in) {
+      return res.status(400).json({ success: false, message: 'Break In is required before Time Out after a break.' });
+    }
+
+    const actionByField = {
+      time_in: 'Employee Time In',
+      break_out: 'Employee Break Out',
+      break_in: 'Employee Break In',
+      time_out: 'Employee Time Out'
+    };
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+
+      const [adminRows] = await conn.execute(
+        'SELECT user_id, full_name, role FROM users WHERE user_id = ? LIMIT 1',
+        [adminUserId]
+      );
+      const adminUser = adminRows[0] || null;
+      if (!adminUser || !canManageAttendance(adminUser.role)) {
+        return res.status(403).json({ success: false, message: 'Only Admin or HR users can edit attendance.' });
+      }
+
+      const [employeeRows] = await conn.execute(
+        'SELECT user_id, full_name FROM users WHERE user_id = ? LIMIT 1',
+        [employeeUserId]
+      );
+      const employeeUser = employeeRows[0] || null;
+      if (!employeeUser) {
+        return res.status(404).json({ success: false, message: 'Employee user not found.' });
+      }
+
+      await conn.beginTransaction();
+
+      for (const [field, action] of Object.entries(actionByField)) {
+        const nextDateTime = buildAttendanceDateTime(attendanceDate, normalizedTimes[field]);
+        const [existingRows] = await conn.execute(
+          `SELECT log_id
+           FROM audit_logs
+           WHERE user_id = ?
+             AND action = ?
+             AND DATE(log_time) = ?
+           ORDER BY log_time ASC, log_id ASC`,
+          [employeeUserId, action, originalDate]
+        );
+
+        const primaryLog = existingRows[0] || null;
+        const duplicateIds = existingRows.slice(1).map((row) => row.log_id);
+
+        if (duplicateIds.length) {
+          await conn.execute(
+            `DELETE FROM audit_logs
+             WHERE log_id IN (${duplicateIds.map(() => '?').join(',')})`,
+            duplicateIds
+          );
+        }
+
+        if (nextDateTime && primaryLog) {
+          await conn.execute(
+            `UPDATE audit_logs
+             SET admin_name = ?, status = 'Success', log_time = ?
+             WHERE log_id = ?`,
+            [employeeUser.full_name, nextDateTime, primaryLog.log_id]
+          );
+        } else if (nextDateTime) {
+          await conn.execute(
+            `INSERT INTO audit_logs (user_id, admin_name, action, status, log_time)
+             VALUES (?, ?, ?, 'Success', ?)`,
+            [employeeUserId, employeeUser.full_name, action, nextDateTime]
+          );
+        } else if (primaryLog) {
+          await conn.execute('DELETE FROM audit_logs WHERE log_id = ?', [primaryLog.log_id]);
+        }
+      }
+
+      await conn.execute(
+        `INSERT INTO audit_logs (user_id, admin_name, action, status)
+         VALUES (?, ?, ?, 'Success')`,
+        [
+          adminUserId,
+          adminUser.full_name,
+          `Edited attendance for ${employeeUser.full_name} (${originalDate}${originalDate === attendanceDate ? '' : ` to ${attendanceDate}`})`
+        ]
+      );
+
+      await conn.commit();
+
+      return res.json({ success: true, message: 'Attendance updated successfully.' });
+    } catch (err) {
+      if (conn) {
+        await conn.rollback().catch(() => {});
+      }
+      console.error('Attendance edit error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Server error' });
     } finally {
       if (conn) conn.release();
     }

@@ -24,11 +24,46 @@ function money(value) {
   });
 }
 
+function parseDateTime(value) {
+  if (!value) return null;
+  const date = new Date(String(value).replace(' ', 'T'));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Number(totalSeconds || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  return [hours, minutes, remainingSeconds].map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+function computeWorkedSeconds(todayState, now) {
+  const timeIn = parseDateTime(todayState.timeIn);
+  if (!timeIn) return 0;
+
+  const timeOut = parseDateTime(todayState.timeOut);
+  const breakOut = parseDateTime(todayState.breakOut);
+  const breakIn = parseDateTime(todayState.breakIn);
+  const end = timeOut || now;
+  let breakSeconds = 0;
+
+  if (breakOut) {
+    const breakEnd = breakIn || (!timeOut ? now : null);
+    if (breakEnd && breakEnd > breakOut) {
+      breakSeconds = Math.floor((breakEnd.getTime() - breakOut.getTime()) / 1000);
+    }
+  }
+
+  return Math.max(0, Math.floor((end.getTime() - timeIn.getTime()) / 1000) - breakSeconds);
+}
+
 export default function EmployeeDashboardPage() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   async function loadDashboard() {
     if (!user?.user_id) return;
@@ -52,10 +87,26 @@ export default function EmployeeDashboardPage() {
     loadDashboard().catch(() => {});
   }, [user?.user_id]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const todayState = data?.todayTime || {};
   const employee = data?.employee || {};
   const payrollSummary = data?.payrollSummary || null;
   const attendanceLogs = data?.attendanceLogs || [];
+
+  const workedSeconds = computeWorkedSeconds(todayState, now);
+  const isOnBreak = Boolean(todayState.hasBreakOut && !todayState.hasBreakIn && !todayState.hasTimeOut);
+  const isClockedIn = Boolean(todayState.hasTimeIn && !todayState.hasTimeOut && !isOnBreak);
+  const clockStatus = todayState.hasTimeOut
+    ? 'Clocked out'
+    : isOnBreak
+      ? 'On break'
+      : isClockedIn
+        ? 'Clocked in'
+        : 'Not started';
 
   const timeButtons = useMemo(() => {
     const hasTimeIn = Boolean(todayState.hasTimeIn);
@@ -113,7 +164,7 @@ export default function EmployeeDashboardPage() {
         <div className="table-header employee-mgmt-header">
           <div>
             <h3>Timekeeping</h3>
-            <p>Use the controls below for today&apos;s attendance actions.</p>
+            <p>Clockify-style live timer for today&apos;s attendance.</p>
           </div>
           <div className="row-actions">
             {timeButtons.map((item) => (
@@ -128,6 +179,13 @@ export default function EmployeeDashboardPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="summary employee-mini-summary">
+          <div className="card"><span>Status</span><strong>{clockStatus}</strong></div>
+          <div className="card"><span>Worked Time</span><strong>{formatDuration(workedSeconds)}</strong></div>
+          <div className="card"><span>Billable Target</span><strong>08:00:00</strong></div>
+          <div className="card"><span>Overtime</span><strong>{formatDuration(Math.max(0, workedSeconds - 28800))}</strong></div>
         </div>
 
         <div className="summary employee-mini-summary">
