@@ -9,11 +9,14 @@ const OT_RATE_OPTIONS = ['STANDARD OT RATE'];
 const ENTRY_PERIOD_OPTIONS = ['Weekly', 'Monthly', 'First Half', 'Second Half', 'Both'];
 const ADD_EMPLOYEE_TABS = [
   { id: 'basic', label: 'Basic Information' },
+  { id: 'systemAccount', label: 'Create Account Setting' },
   { id: 'payrollInfo', label: 'Payroll Information' },
   { id: 'payrollComputation', label: 'Payroll Computation' },
   { id: 'allowances', label: 'Allowance Payroll Entry' },
   { id: 'deductions', label: 'Deduction Payroll Entry' }
 ];
+
+const SYSTEM_ACCOUNT_ROLES = ['Employee', 'HR', 'Admin'];
 
 function createBlankEmployeeForm() {
   return {
@@ -84,11 +87,23 @@ function createBlankEmployeeForm() {
       basis_overtime: '',
       strict_no_overtime: false
     },
+    systemAccount: {
+      user_id: '',
+      username: '',
+      password: '',
+      confirmPassword: '',
+      role: 'Employee'
+    },
     contributions: [],
     allowances: [],
     deductions: [],
     dependents: Array.from({ length: 4 }, () => ({ name: '', birthday: '' }))
   };
+}
+
+function canManageSystemAccounts(role) {
+  const value = String(role || '').trim().toLowerCase();
+  return value === 'admin' || value === 'system administrator' || value.includes('admin') || value === 'hr' || value.includes('human resource');
 }
 
 function escapeCsv(value) {
@@ -139,8 +154,11 @@ export default function EmployeeManagementPage() {
   const [allowanceOptions, setAllowanceOptions] = useState([]);
   const [deductionOptions, setDeductionOptions] = useState([]);
   const [saveNotice, setSaveNotice] = useState('');
+  const [showAccountPassword, setShowAccountPassword] = useState(false);
+  const [showAccountConfirmPassword, setShowAccountConfirmPassword] = useState(false);
 
   const isEmployeeDetailsOpen = addModalOpen || detailModalOpen;
+  const canCreateAccounts = canManageSystemAccounts(user?.role);
 
   async function loadSummary() {
     const { data } = await api.get('/employee_summary');
@@ -268,6 +286,12 @@ export default function EmployeeManagementPage() {
         ...employee,
         taxInsurance: employee.taxInsurance || createBlankEmployeeForm().taxInsurance,
         payrollComputation: employee.payrollComputation || createBlankEmployeeForm().payrollComputation,
+        systemAccount: {
+          ...createBlankEmployeeForm().systemAccount,
+          ...(employee.systemAccount || {}),
+          password: '',
+          confirmPassword: ''
+        },
         allowances: Array.isArray(employee.allowances) ? employee.allowances : [],
         deductions: Array.isArray(employee.deductions) ? employee.deductions : [],
         dependents: [
@@ -375,6 +399,7 @@ export default function EmployeeManagementPage() {
 
   function buildAddPayload() {
     const taxInsurance = addForm.taxInsurance || {};
+    const systemAccount = addForm.systemAccount || {};
     const normalizeEntryRows = (rows, typeField) => (
       (Array.isArray(rows) ? rows : [])
         .map((row) => ({
@@ -398,18 +423,37 @@ export default function EmployeeManagementPage() {
       dependents: Array.isArray(addForm.dependents)
         ? addForm.dependents.filter((row) => row.name || row.birthday)
         : [],
+      systemAccount: {
+        user_id: systemAccount.user_id || '',
+        username: String(systemAccount.username || '').trim(),
+        password: systemAccount.password || '',
+        role: systemAccount.role || 'Employee'
+      },
       user_id: user?.user_id,
-      admin_name: user?.full_name
+      admin_name: user?.full_name,
+      actor_role: user?.role
     };
   }
 
   function validateAddTab(tabId) {
-    if (tabId !== 'basic') return '';
-    if (!addForm.emp_code.trim()) return 'Employee ID is required in Basic Information.';
-    if (!addForm.first_name.trim()) return 'First Name is required in Basic Information.';
-    if (!addForm.last_name.trim()) return 'Last Name is required in Basic Information.';
-    if (!addForm.email.trim()) return 'Email is required in Basic Information.';
-    if (!addForm.date_hired) return 'Date Hired is required in Basic Information.';
+    if (tabId === 'basic') {
+      if (!addForm.emp_code.trim()) return 'Employee ID is required in Basic Information.';
+      if (!addForm.first_name.trim()) return 'First Name is required in Basic Information.';
+      if (!addForm.last_name.trim()) return 'Last Name is required in Basic Information.';
+      if (!addForm.email.trim()) return 'Email is required in Basic Information.';
+      if (!addForm.date_hired) return 'Date Hired is required in Basic Information.';
+    }
+
+    if (tabId === 'systemAccount') {
+      const account = addForm.systemAccount || {};
+      if (!canCreateAccounts) return 'Only Admin and HR users can create employee accounts.';
+      if (!account.username.trim()) return 'Username is required in Create Account Setting.';
+      if (!account.user_id && !account.password) return 'Password is required in Create Account Setting.';
+      if (account.password && account.password.length < 8) return 'Password must be at least 8 characters.';
+      if (account.password !== account.confirmPassword) return 'Passwords do not match in Create Account Setting.';
+      if (!SYSTEM_ACCOUNT_ROLES.includes(account.role)) return 'Select a valid role in Create Account Setting.';
+    }
+
     return '';
   }
 
@@ -433,6 +477,48 @@ export default function EmployeeManagementPage() {
 
     try {
       const payload = buildAddPayload();
+
+      if (tabId === 'systemAccount') {
+        const account = payload.systemAccount || {};
+        const fullName = [addForm.first_name, addForm.last_name].filter(Boolean).join(' ').trim();
+        const accountRequest = account.user_id
+          ? api.put(`/employee/${encodeURIComponent(createdEmpCode)}/system-account`, {
+              systemAccount: account,
+              user_id: user?.user_id,
+              admin_name: user?.full_name,
+              actor_role: user?.role
+            })
+          : api.post('/register', {
+              username: account.username,
+              password: account.password,
+              full_name: fullName,
+              role: account.role || 'Employee'
+            });
+
+        const { data } = await accountRequest;
+
+        const savedUserId = data.systemAccountUserId || data.user_id || '';
+        if (!data.success || !savedUserId) {
+          throw new Error(data.message || 'Account was not saved in the database.');
+        }
+
+        setAddForm((current) => ({
+          ...current,
+          systemAccount: {
+            ...(current.systemAccount || {}),
+            user_id: savedUserId,
+            username: data.systemAccount?.username || current.systemAccount?.username || '',
+            role: data.systemAccount?.role || current.systemAccount?.role || 'Employee',
+            password: '',
+            confirmPassword: ''
+          }
+        }));
+        const successMessage = data.message || `Account saved. Username '${account.username}' can now sign in.`;
+        setMessage(successMessage);
+        setSaveNotice(successMessage);
+        return;
+      }
+
       const request = createdEmpCode
         ? api.put(`/employee/update/${encodeURIComponent(createdEmpCode)}`, payload)
         : api.post('/add_employee', payload);
@@ -445,7 +531,17 @@ export default function EmployeeManagementPage() {
       const nextEmpCode = data.emp_code || payload.emp_code || createdEmpCode;
       const tabLabel = ADD_EMPLOYEE_TABS.find((tab) => tab.id === tabId)?.label || 'Employee';
       setCreatedEmpCode(nextEmpCode);
-      setAddForm((current) => ({ ...current, emp_code: nextEmpCode }));
+      setAddForm((current) => ({
+        ...current,
+        emp_code: nextEmpCode,
+        systemAccount: {
+          ...(current.systemAccount || {}),
+          user_id: data.systemAccountUserId || current.systemAccount?.user_id || '',
+          username: current.systemAccount?.username || nextEmpCode,
+          password: '',
+          confirmPassword: ''
+        }
+      }));
       setMessage(`${tabLabel} saved successfully.`);
       setSaveNotice(`${tabLabel} saved successfully.`);
       void Promise.all([loadSummary(), loadEmployeeList()]).catch(() => {});
@@ -678,6 +774,81 @@ export default function EmployeeManagementPage() {
     );
   }
 
+  function renderSystemAccountAddTab() {
+    const account = addForm.systemAccount || createBlankEmployeeForm().systemAccount;
+    const fullName = [addForm.first_name, addForm.middle_name, addForm.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    if (!canCreateAccounts) {
+      return (
+        <div className="legacy-form-box">
+          <h4>Create Account Setting</h4>
+          <p className="muted">Only Admin and HR users can create login accounts for employees.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="legacy-form-box">
+        <div className="legacy-payroll-grid">
+          <div>
+            <h4>Create Account Setting</h4>
+            {renderFormRow('Employee Name:', <input value={fullName || 'Complete Basic Information first'} disabled />)}
+            {renderFormRow('Username:', <input value={account.username || ''} onChange={(event) => updateNestedAddField('systemAccount', 'username', event.target.value)} />)}
+            {renderFormRow('Role:', (
+              <select value={account.role || 'Employee'} onChange={(event) => updateNestedAddField('systemAccount', 'role', event.target.value)}>
+                {SYSTEM_ACCOUNT_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+              </select>
+            ))}
+          </div>
+          <div>
+            <h4>Password</h4>
+            {renderFormRow(account.user_id ? 'New Password:' : 'Password:', (
+              <div className="password-field compact">
+                <input
+                  type={showAccountPassword ? 'text' : 'password'}
+                  value={account.password || ''}
+                  onChange={(event) => updateNestedAddField('systemAccount', 'password', event.target.value)}
+                  placeholder={account.user_id ? 'Leave blank to keep current password' : ''}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowAccountPassword((current) => !current)}
+                  aria-label={showAccountPassword ? 'Hide password' : 'Show password'}
+                  title={showAccountPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showAccountPassword ? '🙈' : '👁'}
+                </button>
+              </div>
+            ))}
+            {renderFormRow('Confirm Password:', (
+              <div className="password-field compact">
+                <input
+                  type={showAccountConfirmPassword ? 'text' : 'password'}
+                  value={account.confirmPassword || ''}
+                  onChange={(event) => updateNestedAddField('systemAccount', 'confirmPassword', event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowAccountConfirmPassword((current) => !current)}
+                  aria-label={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
+                  title={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showAccountConfirmPassword ? '🙈' : '👁'}
+                </button>
+              </div>
+            ))}
+            {account.user_id ? <p className="muted">Existing account found. Enter a new password only when changing it.</p> : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderPayrollComputationAddTab() {
     const comp = addForm.payrollComputation || {};
     const tax = addForm.taxInsurance || {};
@@ -771,6 +942,7 @@ export default function EmployeeManagementPage() {
 
   function renderAddTabContent() {
     if (addActiveTab === 'basic') return renderBasicAddTab();
+    if (addActiveTab === 'systemAccount') return renderSystemAccountAddTab();
     if (addActiveTab === 'payrollInfo') return renderPayrollInfoAddTab();
     if (addActiveTab === 'payrollComputation') return renderPayrollComputationAddTab();
     if (addActiveTab === 'allowances') {

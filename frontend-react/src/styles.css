@@ -16,6 +16,13 @@
 
   --brand-gradient: linear-gradient(135deg, var(--brand-primary), var(--brand-violet));
   --brand-gradient-soft: linear-gradient(135deg, rgba(11, 91, 211, 0.22), rgba(139, 92, 246, 0.18));
+
+  --shadow-sm: 0 6px 16px rgba(15, 23, 42, 0.10);
+  --shadow-md: 0 18px 46px rgba(15, 23, 42, 0.16);
+  --shadow-lg: 0 30px 80px rgba(15, 23, 42, 0.22);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
 }
 
 body {
@@ -266,7 +273,7 @@ textarea {
   border-left: 1px solid rgba(52, 152, 219, 0.45);
   transition: max-height 0.22s ease, opacity 0.2s ease, transform 0.2s ease;
   background: rgba(255, 255, 255, 0.035);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .nav-group.open > ul {
@@ -828,16 +835,20 @@ td small {
 .btn,
 .primary-btn {
   border: none;
-  border-radius: 5px;
+  border-radius: 12px;
   background: var(--brand-primary);
   color: #fff;
   padding: 8px 14px;
   cursor: pointer;
+  box-shadow: 0 10px 22px rgba(10, 102, 217, 0.18);
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 .btn:hover,
 .primary-btn:hover {
   background: var(--brand-primary-2);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(10, 102, 217, 0.24);
 }
 
 .btn.secondary {
@@ -859,9 +870,17 @@ td small {
 input,
 select {
   min-height: 34px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  padding: 6px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(10, 102, 217, 0.25);
+  border-color: rgba(10, 102, 217, 0.55);
 }
 
 .status {
@@ -902,10 +921,11 @@ select {
   height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 20%, #e2f3e6 0%, transparent 30%),
-    radial-gradient(circle at 88% 82%, #d2e9d8 0%, transparent 28%),
-    linear-gradient(130deg, #f3f9f4, #dceee0);
-  color: #1f3024;
+    radial-gradient(circle at 18% 20%, rgba(40, 200, 255, 0.22) 0%, transparent 32%),
+    radial-gradient(circle at 88% 82%, rgba(124, 77, 255, 0.20) 0%, transparent 30%),
+    radial-gradient(circle at 52% 12%, rgba(10, 102, 217, 0.16) 0%, transparent 38%),
+    linear-gradient(135deg, #f6f9ff, #eef3ff);
+  color: #0b1b33;
 }
 
 .site-header {
@@ -1011,7 +1031,7 @@ select {
 
 .service-copy {
   max-width: 560px;
-  color: #52665a;
+  color: #475569;
   font-size: 15px;
   line-height: 1.45;
 }
@@ -1026,7 +1046,7 @@ select {
   grid-template-columns: 46px minmax(0, 1fr);
   gap: 16px;
   padding: 10px 0;
-  border-top: 1px solid rgba(20, 76, 45, 0.13);
+  border-top: 1px solid rgba(148, 163, 184, 0.38);
 }
 
 .service-list span {
@@ -1057,8 +1077,8 @@ select {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.65);
   border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 24px 60px rgba(17, 61, 31, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.18);
 }
 
 .auth-brand {
@@ -1115,6 +1135,41 @@ select {
   height: 40px;
   background: #f7faff;
   border-color: rgba(148, 163, 184, 0.45);
+}
+
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.password-field .password-toggle {
+  position: absolute;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.password-field .password-toggle:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.password-field.compact {
+  flex: 1;
+  min-width: 0;
 }
 
 .auth-form .primary-btn {

@@ -292,13 +292,14 @@ module.exports = function (app, pool) {
       const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
       const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-      await conn.execute(
+      const [result] = await conn.execute(
         'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)',
         [username, hashedPassword, full_name, role]
       );
 
       return res.json({
         success: true,
+        user_id: result.insertId,
         message: 'Registration successful.'
       });
     } catch (err) {

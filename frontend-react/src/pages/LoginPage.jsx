@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { api, getApiMessage } from '../api/client.js';
+import { getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 import Modal from '../components/Modal.jsx';
@@ -19,21 +19,13 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [mode, setMode] = useState('login');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(false);
   const [infoModal, setInfoModal] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-
-  const [registerForm, setRegisterForm] = useState({
-    full_name: '',
-    username: '',
-    password: '',
-    confirm: '',
-    role: ''
-  });
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -67,48 +59,6 @@ export default function LoginPage() {
     } catch (err) {
       setMessage(getApiMessage(err, 'Invalid username or password.'));
       setMessageType('error');
-      setLoading(false);
-    }
-  }
-
-  async function handleRegister(event) {
-    event.preventDefault();
-    setMessage('');
-    setMessageType('');
-
-    if (registerForm.password !== registerForm.confirm) {
-      setMessage('Passwords do not match.');
-      setMessageType('error');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { data } = await api.post('/register', {
-        username: registerForm.username.trim(),
-        password: registerForm.password,
-        full_name: registerForm.full_name.trim(),
-        role: registerForm.role
-      });
-
-      if (!data.success) throw new Error(data.message || 'Registration failed.');
-
-      setRegisterForm({
-        full_name: '',
-        username: '',
-        password: '',
-        confirm: '',
-        role: ''
-      });
-
-      setMode('login');
-      setMessage('Registration successful. You can now log in.');
-      setMessageType('success');
-    } catch (err) {
-      setMessage(getApiMessage(err, 'Registration failed.'));
-      setMessageType('error');
-    } finally {
       setLoading(false);
     }
   }
@@ -182,45 +132,19 @@ export default function LoginPage() {
             <p>Securely manage payroll, attendance, and employee records.</p>
           </div>
 
-          <div className="auth-tabs">
-            <button
-              className={mode === 'login' ? 'active' : ''}
-              type="button"
-              onClick={() => {
-                setMode('login');
-                setMessage('');
-                setMessageType('');
-              }}
-            >
-              Login
-            </button>
+          <form className="auth-form" onSubmit={handleLogin}>
+            <input
+              value={loginForm.username}
+              onChange={(e) =>
+                setLoginForm({ ...loginForm, username: e.target.value })
+              }
+              placeholder="Username"
+              required
+            />
 
-            <button
-              className={mode === 'register' ? 'active' : ''}
-              type="button"
-              onClick={() => {
-                setMode('register');
-                setMessage('');
-                setMessageType('');
-              }}
-            >
-              Register
-            </button>
-          </div>
-
-          {mode === 'login' ? (
-            <form className="auth-form" onSubmit={handleLogin}>
+            <div className="password-field">
               <input
-                value={loginForm.username}
-                onChange={(e) =>
-                  setLoginForm({ ...loginForm, username: e.target.value })
-                }
-                placeholder="Username"
-                required
-              />
-
-              <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={loginForm.password}
                 onChange={(e) =>
                   setLoginForm({ ...loginForm, password: e.target.value })
@@ -228,81 +152,21 @@ export default function LoginPage() {
                 placeholder="Password"
                 required
               />
-
-              <button className="primary-btn" type="submit" disabled={loading}>
-                {loading ? 'Logging in...' : 'Login'}
-              </button>
-            </form>
-          ) : (
-            <form className="auth-form" onSubmit={handleRegister}>
-              <input
-                value={registerForm.full_name}
-                onChange={(e) =>
-                  setRegisterForm({
-                    ...registerForm,
-                    full_name: e.target.value
-                  })
-                }
-                placeholder="Full Name"
-                required
-              />
-
-              <input
-                value={registerForm.username}
-                onChange={(e) =>
-                  setRegisterForm({
-                    ...registerForm,
-                    username: e.target.value
-                  })
-                }
-                placeholder="Username"
-                required
-              />
-
-              <input
-                type="password"
-                value={registerForm.password}
-                onChange={(e) =>
-                  setRegisterForm({
-                    ...registerForm,
-                    password: e.target.value
-                  })
-                }
-                placeholder="Password"
-                required
-              />
-
-              <input
-                type="password"
-                value={registerForm.confirm}
-                onChange={(e) =>
-                  setRegisterForm({
-                    ...registerForm,
-                    confirm: e.target.value
-                  })
-                }
-                placeholder="Confirm Password"
-                required
-              />
-
-              <select
-                value={registerForm.role}
-                onChange={(e) =>
-                  setRegisterForm({ ...registerForm, role: e.target.value })
-                }
-                required
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
               >
-                <option value="">Select Role</option>
-                <option value="Employee">Employee</option>
-                <option value="HR">HR</option>
-                <option value="Admin">Admin</option>
-              </select>
-
-              <button className="primary-btn" type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Register'}
+                {showPassword ? '🙈' : '👁'}
               </button>
-            </form>
-          )}
+            </div>
+
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
+          </form>
 
           {message && (
             <p className={`form-message ${messageType}`}>

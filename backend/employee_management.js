@@ -1,5 +1,127 @@
 module.exports = function (app, pool) {
     const puppeteer = require('puppeteer');
+    const bcrypt = require('bcryptjs');
+    const allowedSystemAccountRoles = ['Employee', 'HR', 'Admin'];
+
+    function canManageSystemAccounts(role) {
+        const value = String(role || '').trim().toLowerCase();
+        return value === 'admin' || value === 'system administrator' || value.includes('admin') || value === 'hr' || value.includes('human resource');
+    }
+
+    function normalizeSystemAccount(body, fullName, employeeCode) {
+        const account = body.systemAccount || {};
+        const username = String(account.username || '').trim();
+        const password = String(account.password || '');
+        const role = allowedSystemAccountRoles.includes(account.role) ? account.role : 'Employee';
+        const userId = Number(account.user_id || 0);
+
+        if (!username && !password && !userId) return null;
+
+        return {
+            userId,
+            username,
+            password,
+            role,
+            fullName: String(fullName || '').trim(),
+            employeeCode: String(employeeCode || '').trim()
+        };
+    }
+
+    async function saveSystemAccount(conn, account, actorRole) {
+        if (!account) return null;
+
+        if (!canManageSystemAccounts(actorRole)) {
+            const err = new Error('Only Admin and HR users can create employee system accounts.');
+            err.statusCode = 403;
+            throw err;
+        }
+
+        if (!account.username) {
+            const err = new Error('Username is required for the employee system account.');
+            err.statusCode = 400;
+            throw err;
+        }
+
+        if (!account.fullName) {
+            const err = new Error('Employee full name is required before creating a system account.');
+            err.statusCode = 400;
+            throw err;
+        }
+
+        if (!account.userId && !account.password) {
+            const err = new Error('Password is required for the employee system account.');
+            err.statusCode = 400;
+            throw err;
+        }
+
+        if (account.password && account.password.length < 8) {
+            const err = new Error('Password must be at least 8 characters.');
+            err.statusCode = 400;
+            throw err;
+        }
+
+        let targetUserId = account.userId;
+
+        if (!targetUserId) {
+            const [existingRows] = await conn.execute(
+                `SELECT user_id
+                FROM users
+                WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
+                   OR LOWER(TRIM(username)) = LOWER(TRIM(?))
+                   OR LOWER(TRIM(full_name)) = LOWER(TRIM(?))
+                ORDER BY user_id DESC
+                LIMIT 1`,
+                [account.username, account.employeeCode || account.username, account.fullName]
+            );
+            targetUserId = Number(existingRows[0]?.user_id || 0);
+        }
+
+        const [duplicateRows] = await conn.execute(
+            'SELECT user_id FROM users WHERE username = ? AND user_id != ? LIMIT 1',
+            [account.username, targetUserId || 0]
+        );
+
+        if (duplicateRows.length > 0) {
+            const err = new Error('Username already exists.');
+            err.statusCode = 409;
+            throw err;
+        }
+
+        if (targetUserId) {
+            if (account.password) {
+                const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
+                const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
+                await conn.execute(
+                    'UPDATE users SET username = ?, password = ?, full_name = ?, role = ? WHERE user_id = ?',
+                    [account.username, hashedPassword, account.fullName, account.role, targetUserId]
+                );
+            } else {
+                await conn.execute(
+                    'UPDATE users SET username = ?, full_name = ?, role = ? WHERE user_id = ?',
+                    [account.username, account.fullName, account.role, targetUserId]
+                );
+            }
+
+            return {
+                user_id: targetUserId,
+                username: account.username,
+                role: account.role
+            };
+        }
+
+        const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
+        const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
+        const [result] = await conn.execute(
+            'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)',
+            [account.username, hashedPassword, account.fullName, account.role]
+        );
+
+        return {
+            user_id: result.insertId,
+            username: account.username,
+            role: account.role
+        };
+    }
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
@@ -328,6 +450,9 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 });
             }
 
+            const employeeFullName = [first_name, last_name].filter(Boolean).join(" ").trim();
+            const systemAccount = normalizeSystemAccount(body, employeeFullName, emp_code);
+
             await conn.beginTransaction();
 
             // Insert into main employees table
@@ -571,6 +696,8 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 }
             }
 
+            const systemAccountResult = await saveSystemAccount(conn, systemAccount, body.actor_role);
+
             await conn.commit();
             conn.release();
 
@@ -579,15 +706,21 @@ app.get("/api/employee_details/:id", async (req, res) => {
             const adminName = req.body.admin_name || "Unknown";
             await logAudit(pool, userId, adminName, `Added Employee ${emp_code}`, "Success");
 
-            res.json({ success: true, message: "Employee added successfully", emp_code });
+            res.json({
+                success: true,
+                message: "Employee added successfully",
+                emp_code,
+                systemAccount: systemAccountResult,
+                systemAccountUserId: systemAccountResult?.user_id || null
+            });
         } catch (err) {
             await conn.rollback().catch(() => {});
             console.error("❌ /api/add_employee error:", err);
             res
-            .status(500)
+            .status(err.statusCode || 500)
             .json({
                 success: false,
-                message: "Server error while adding employee",
+                message: err.statusCode ? err.message : "Server error while adding employee",
                 error: err.message,
             });
         } finally {
@@ -680,10 +813,87 @@ app.get("/api/employee_details/:id", async (req, res) => {
             employee.allowances = allowances;
             employee.deductions = deductions;
 
+            const employeeFullName = [employee.first_name, employee.last_name].filter(Boolean).join(" ").trim();
+            const [systemAccountRows] = await pool.query(
+                `SELECT user_id, username, full_name, role
+                FROM users
+                WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
+                   OR LOWER(TRIM(full_name)) = LOWER(TRIM(?))
+                ORDER BY user_id DESC
+                LIMIT 1`,
+                [employee.emp_code || '', employeeFullName]
+            );
+
+            employee.systemAccount = systemAccountRows[0]
+                ? {
+                    user_id: systemAccountRows[0].user_id,
+                    username: systemAccountRows[0].username || '',
+                    role: allowedSystemAccountRoles.includes(systemAccountRows[0].role) ? systemAccountRows[0].role : 'Employee'
+                }
+                : null;
+
             res.json({ success: true, employee });
         } catch (error) {
             console.error('Error fetching employee:', error);
             res.status(500).json({ success: false, message: 'Server error' });
+        }
+    });
+
+    app.put('/api/employee/:empCode/system-account', async (req, res) => {
+        const empCode = String(req.params.empCode || '').trim();
+        const body = req.body || {};
+
+        if (!empCode) {
+            return res.status(400).json({ success: false, message: 'Employee ID is required.' });
+        }
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+
+            const [employeeRows] = await conn.execute(
+                `SELECT employee_id, emp_code, first_name, last_name
+                FROM employees
+                WHERE emp_code = ?
+                LIMIT 1`,
+                [empCode]
+            );
+
+            if (!employeeRows.length) {
+                return res.status(404).json({ success: false, message: 'Employee record not found.' });
+            }
+
+            const employee = employeeRows[0];
+            const employeeFullName = [employee.first_name, employee.last_name].filter(Boolean).join(' ').trim();
+            const systemAccount = normalizeSystemAccount(body, employeeFullName, employee.emp_code);
+
+            if (!systemAccount) {
+                return res.status(400).json({ success: false, message: 'Username and password are required to create an account.' });
+            }
+
+            await conn.beginTransaction();
+            const account = await saveSystemAccount(conn, systemAccount, body.actor_role);
+            await conn.commit();
+
+            await logAudit(pool, body.user_id, body.admin_name, `Saved Account for Employee ${empCode}`, 'Success');
+
+            return res.json({
+                success: true,
+                message: `Account saved. Username '${account.username}' can now sign in.`,
+                emp_code: employee.emp_code,
+                systemAccount: account,
+                systemAccountUserId: account.user_id
+            });
+        } catch (error) {
+            if (conn) await conn.rollback().catch(() => {});
+            console.error('❌ Error saving employee system account:', error);
+            return res.status(error.statusCode || 500).json({
+                success: false,
+                message: error.statusCode ? error.message : 'Server error while saving employee account',
+                error: error.message
+            });
+        } finally {
+            if (conn) conn.release();
         }
     });
 
@@ -1392,16 +1602,26 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 }
             }
 
+            const employeeFullName = [safe(body.first_name), safe(body.last_name)].filter(Boolean).join(" ").trim();
+            const systemAccount = normalizeSystemAccount(body, employeeFullName, safe(body.emp_code) || empCode);
+            const systemAccountResult = await saveSystemAccount(conn, systemAccount, body.actor_role);
+
             await conn.commit();
             await logAudit(pool, req.body.user_id, req.body.admin_name, `Updated Employee ${empCode}`, 'Success');
-            res.json({ success: true, message: "Employee updated successfully", emp_code: body.emp_code || empCode });
+            res.json({
+                success: true,
+                message: "Employee updated successfully",
+                emp_code: body.emp_code || empCode,
+                systemAccount: systemAccountResult,
+                systemAccountUserId: systemAccountResult?.user_id || null
+            });
             conn.release();
         } catch (error) {
             console.error("❌ Error updating employee:", error);
             if (error.code === "ER_DUP_ENTRY") {
             return res.status(400).json({ success: false, message: "Employee ID already exists" });
             }
-            res.status(500).json({ success: false, message: "Server error while updating employee", error: error.message });
+            res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : "Server error while updating employee", error: error.message });
         }
     });
 
