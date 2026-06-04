@@ -31,6 +31,99 @@ function escapeExportHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function pdfEscape(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+function makeSimplePdf(title, headers, rows) {
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const margin = 28;
+  const lineHeight = 11;
+  const maxLines = Math.floor((pageHeight - margin * 2 - 50) / lineHeight);
+  const widths = [10, 18, 14, 14, 14, 14, 14, 9, 8, 11];
+  const totalWidth = widths.reduce((sum, value) => sum + value, 0);
+
+  function fit(value, width) {
+    const size = Math.max(6, Math.floor((width / totalWidth) * 145));
+    const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > size ? `${text.slice(0, size - 3)}...` : text.padEnd(size, ' ');
+  }
+
+  const lines = [
+    title,
+    `Generated: ${new Date().toLocaleString('en-PH')}`,
+    `Rows: ${rows.length}`,
+    '',
+    headers.map((header, index) => fit(header, widths[index])).join(' | '),
+    '-'.repeat(145),
+    ...rows.map((row) => row.map((cell, index) => fit(cell, widths[index])).join(' | '))
+  ];
+
+  const pages = [];
+  for (let i = 0; i < lines.length; i += maxLines) {
+    pages.push(lines.slice(i, i + maxLines));
+  }
+
+  const objects = [];
+  const addObject = (content) => {
+    objects.push(content);
+    return objects.length;
+  };
+  const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
+  const contentIds = pages.map((pageLines, pageIndex) => {
+    const stream = [
+      'BT',
+      '/F1 7 Tf',
+      `${margin} ${pageHeight - margin} Td`,
+      ...pageLines.map((line, index) => `${index === 0 ? '' : `0 -${lineHeight} Td `}(${pdfEscape(line)}) Tj`),
+      `0 -${lineHeight * 2} Td (Page ${pageIndex + 1}) Tj`,
+      'ET'
+    ].join('\n');
+    return addObject(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+  const pageIds = [];
+  const pagesId = objects.length + pages.length + 1;
+  contentIds.forEach((contentId) => {
+    pageIds.push(addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`));
+  });
+  const actualPagesId = addObject(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
+  const catalogId = addObject(`<< /Type /Catalog /Pages ${actualPagesId} 0 R >>`);
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
+}
+
 function formatExportDateTime(value) {
   if (!value) return '—';
   const parsed = new Date(String(value).replace(' ', 'T'));
@@ -47,7 +140,7 @@ function formatExportDateTime(value) {
   });
 }
 
-function downloadAttendanceForExcel() {
+function downloadAttendanceReport(format = 'csv') {
   const exportRows = filteredRecords || [];
   if (!exportRows.length) {
     if (typeof showToast === 'function') {
@@ -85,42 +178,23 @@ function downloadAttendanceForExcel() {
     ];
   });
 
-  const htmlTable = `
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        table { border-collapse: collapse; }
-        th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
-        th { background: #f1f1f1; font-weight: bold; }
-      </style>
-    </head>
-    <body>
-      <table>
-        <thead>
-          <tr>${headers.map((header) => `<th>${escapeExportHtml(header)}</th>`).join('')}</tr>
-        </thead>
-        <tbody>
-          ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeExportHtml(exportValue(cell))}</td>`).join('')}</tr>`).join('')}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `;
-
-  const blob = new Blob([htmlTable], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
   const dateSuffix = new Date().toISOString().slice(0, 10);
-  link.href = url;
-  link.download = `attendance-overview-${dateSuffix}.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const filenameBase = `attendance-overview-${dateSuffix}`;
+  const normalized = String(format || 'csv').toLowerCase();
+
+  if (normalized === 'pdf') {
+    const pdf = makeSimplePdf('Attendance Overview Report', headers, rows);
+    downloadBlob(`${filenameBase}.pdf`, new Blob([pdf], { type: 'application/pdf' }));
+  } else if (normalized === 'txt') {
+    const text = [headers, ...rows].map((row) => row.map(exportValue).join('\t')).join('\n');
+    downloadBlob(`${filenameBase}.txt`, new Blob([text], { type: 'text/plain;charset=utf-8;' }));
+  } else {
+    const csv = [headers, ...rows].map((row) => row.map((cell) => csvCell(exportValue(cell))).join(',')).join('\n');
+    downloadBlob(`${filenameBase}.csv`, new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' }));
+  }
 
   if (typeof showToast === 'function') {
-    showToast('Attendance records exported successfully.', 'success');
+    showToast(`Attendance records exported as ${normalized.toUpperCase()}.`, 'success');
   }
 }
 
@@ -292,9 +366,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderTable();
   });
 
-  const exportBtn = document.getElementById('exportAttendanceBtn');
-  if (exportBtn) {
-    exportBtn.addEventListener('click', downloadAttendanceForExcel);
+  const exportSelect = document.getElementById('exportAttendanceFormat');
+  if (exportSelect) {
+    exportSelect.addEventListener('change', () => {
+      if (!exportSelect.value) return;
+      downloadAttendanceReport(exportSelect.value);
+      exportSelect.value = '';
+    });
   }
 
   document.getElementById('attendancePrev').addEventListener('click', () => {

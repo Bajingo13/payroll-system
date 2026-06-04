@@ -222,6 +222,7 @@ body {
 }
 
 #loginForm,
+#resetForm,
 #registerForm {
     padding: 18px 26px 22px;
     display: flex;
@@ -230,11 +231,13 @@ body {
 }
 
 #loginForm.hidden,
+#resetForm.hidden,
 #registerForm.hidden {
     display: none;
 }
 
 #loginForm input,
+#resetForm input,
 #registerForm input,
 #registerForm select {
     width: 100%;
@@ -249,6 +252,7 @@ body {
 }
 
 #loginForm input:focus,
+#resetForm input:focus,
 #registerForm input:focus,
 #registerForm select:focus {
     border-color: var(--primary);
@@ -270,10 +274,27 @@ body {
 }
 
 #loginMessage,
+#resetMessage,
 #registerMessage {
     color: var(--danger);
     font-size: 13px;
     min-height: 18px;
+}
+
+.forgot-password-btn {
+    border: 0;
+    background: transparent;
+    color: var(--primary-2);
+    padding: 6px 8px;
+    text-align: center;
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.forgot-password-btn:hover {
+    text-decoration: underline;
 }
 
 .btnn {
@@ -311,6 +332,12 @@ body {
 }
 
 @media (max-width: 860px) {
+    body {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+    }
+
     .site-header {
         height: 62px;
         min-height: 0;
@@ -331,7 +358,9 @@ body {
         grid-template-columns: 1fr;
         padding-top: 78px;
         align-content: start;
-        overflow: hidden;
+        overflow: visible;
+        height: auto;
+        min-height: 100vh;
     }
 
     .service-panel {
@@ -368,6 +397,7 @@ body {
 
     .auth-brand,
     #loginForm,
+    #resetForm,
     #registerForm {
         padding-left: 16px;
         padding-right: 16px;

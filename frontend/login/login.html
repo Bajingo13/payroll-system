@@ -72,7 +72,15 @@
             <input type="text" id="username" placeholder="Username" required>
             <input type="password" id="password" placeholder="Password" required>
             <button type="submit" class="btnn" id="loginBtn">Login</button>
+            <button type="button" class="forgot-password-btn" id="showResetForm">Forgot password?</button>
             <div id="loginMessage"></div>
+        </form>
+
+        <form id="resetForm" class="hidden">
+            <input type="text" id="reset_username" placeholder="Username" required>
+            <button type="submit" class="btnn">Send Reset Link</button>
+            <button type="button" class="forgot-password-btn" id="backToLogin">Back to login</button>
+            <div id="resetMessage"></div>
         </form>
 
         <!-- Register Form -->

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { api, getApiMessage } from '../api/client.js';
 
 const MODULES = [
   ['documents', '201 Files'],
@@ -679,18 +680,229 @@ function SecurityCenter() {
 }
 
 function AnalyticsAndMobile() {
-  const rows = [
-    ['Attrition Risk', 'Turnover prediction using tenure, attendance, leave, and performance signals', 'AI microservice'],
-    ['Overtime Trends', 'Monitor OT patterns and cost spikes', 'Dashboard'],
-    ['Payroll Forecasting', 'Project payroll cost by period and department', 'Finance planning'],
-    ['Attendance Analytics', 'Absence, late, undertime, and schedule compliance insights', 'HR analytics'],
-    ['Mobile GPS Clock-In', 'React Native time entry with GPS, leave, and payslip access', 'Mobile app']
-  ];
+  const [analytics, setAnalytics] = useState(null);
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function loadAnalytics() {
+    setLoading(true);
+    setMessage('');
+    try {
+      const { data } = await api.get('/ai-analytics');
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to load AI analytics.');
+      }
+      setAnalytics(data);
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to load AI analytics.'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAnalytics().catch(() => {});
+  }, []);
+
+  const summary = analytics?.summary || {};
+  const otTrendRows = analytics
+    ? [
+        ...(analytics.overtimePatterns || []).map((row) => ({
+          label: `${row.week_start || row.week_key}`,
+          value: Number(row.total_hours || 0),
+          group: row.department || 'N/A'
+        })),
+        {
+          label: 'Forecast',
+          value: Number(analytics.forecast?.nextWeekHours || 0),
+          group: 'Next week'
+        }
+      ]
+    : [];
+
   return (
-    <section className="table-section">
-      <h3>AI Analytics and Mobile App Modules</h3>
-      <SimpleTable headers={['Module', 'Description', 'Channel']} rows={rows} />
-    </section>
+    <>
+      <section className="analytics-hero">
+        <div>
+          <span>Live Workforce Signals</span>
+          <h3>AI Analytics</h3>
+          <p>Tardiness, absence, turnover risk, overtime pressure, and next-week forecasting from live HRIS data.</p>
+        </div>
+        <button type="button" className="btn secondary" onClick={loadAnalytics} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh Analytics'}
+        </button>
+      </section>
+
+      <section className="analytics-metric-grid">
+        <AnimatedMetricCard label="Tardiness Rate" value={`${Number(summary.tardinessRate || 0).toFixed(2)}%`} detail={`${Number(summary.lateDays || 0)} late signal(s)`} tone="blue" />
+        <AnimatedMetricCard label="Absence Rate" value={`${Number(summary.absenceRate || 0).toFixed(2)}%`} detail={`${Number(summary.absentDays || 0)} absence signal(s)`} tone="cyan" />
+        <AnimatedMetricCard label="High Turnover Risks" value={summary.highTurnoverRisks || 0} detail="Heuristic risk model" tone="violet" />
+        <AnimatedMetricCard label="Next Week OT Forecast" value={Number(summary.nextWeekOtForecast || 0).toFixed(2)} detail={`${analytics?.forecast?.direction || 'Stable'} trend`} tone="green" />
+      </section>
+
+      {message ? <p className="message">{message}</p> : null}
+      {!analytics && !message ? <section className="table-section"><p className="muted">Loading analytics...</p></section> : null}
+
+      {analytics ? (
+        <>
+          <section className="analytics-panel-grid">
+            <AnimatedBarChart
+              title="Tardiness Patterns"
+              subtitle="Late time-in signals by day, last 30 days"
+              rows={(analytics.tardinessPatterns || []).map((row) => ({ label: row.day_name, value: Number(row.late_count || 0) }))}
+              empty="No tardiness signals found in the last 30 days."
+            />
+            <AnimatedBarChart
+              title="Absence Patterns"
+              subtitle="Absence signals by department, last 30 weekdays"
+              rows={(analytics.absencePatterns || []).map((row) => ({ label: row.department || 'N/A', value: Number(row.absence_days || 0) }))}
+              empty="No absence signals found in the last 30 weekdays."
+            />
+          </section>
+
+          <section className="table-section">
+            <h3>Turnover Risk Spotlight</h3>
+            <RiskRadar rows={analytics.turnoverRisks || []} />
+          </section>
+
+          <section className="table-section">
+            <h3>Employee Turnover Prediction</h3>
+            <SimpleTable
+              headers={['Employee', 'Department', 'Risk', 'Score', 'Signals']}
+              rows={(analytics.turnoverRisks || []).map((row) => [
+                `${row.emp_code || 'N/A'} - ${row.employee_name || 'Employee'}`,
+                row.department || 'N/A',
+                row.risk_band,
+                Number(row.risk_score || 0).toFixed(1),
+                row.insight
+              ])}
+            />
+          </section>
+
+          <section className="table-section">
+            <h3>OT Patterns and Forecasting</h3>
+            <ForecastLineChart rows={otTrendRows} forecast={analytics.forecast || {}} />
+            <AnimatedBarChart
+              title="Approved OT by Week and Department"
+              subtitle="Moving bars show relative overtime pressure"
+              rows={(analytics.overtimePatterns || []).map((row) => ({
+                label: `${row.week_start || row.week_key} - ${row.department || 'N/A'}`,
+                value: Number(row.total_hours || 0),
+                suffix: 'h'
+              }))}
+              empty="No approved overtime requests found for the last 8 weeks."
+            />
+          </section>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function AnimatedMetricCard({ label, value, detail, tone }) {
+  return (
+    <article className={`analytics-metric-card ${tone || 'blue'}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+      <i />
+    </article>
+  );
+}
+
+function AnimatedBarChart({ title, subtitle, rows, empty }) {
+  const max = Math.max(...(rows || []).map((row) => Number(row.value || 0)), 1);
+
+  return (
+    <article className="analytics-chart-card">
+      <div className="analytics-chart-header">
+        <div>
+          <h4>{title}</h4>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+      <div className="analytics-bars">
+        {!rows?.length ? <p className="muted">{empty}</p> : null}
+        {(rows || []).map((row, index) => {
+          const width = Math.max((Number(row.value || 0) / max) * 100, 4);
+          return (
+            <div className="analytics-bar-row" key={`${row.label}-${index}`} style={{ '--bar-width': `${width}%`, '--bar-delay': `${index * 80}ms` }}>
+              <span>{row.label}</span>
+              <b><i /></b>
+              <strong>{Number(row.value || 0).toFixed(row.suffix ? 2 : 0)}{row.suffix || ''}</strong>
+            </div>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+function ForecastLineChart({ rows, forecast }) {
+  const values = (rows || []).map((row) => Number(row.value || 0));
+  const max = Math.max(...values, 1);
+  const points = (rows || []).map((row, index) => {
+    const x = rows.length <= 1 ? 50 : (index / (rows.length - 1)) * 100;
+    const y = 90 - ((Number(row.value || 0) / max) * 70);
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <article className="analytics-chart-card forecast-card">
+      <div className="analytics-chart-header">
+        <div>
+          <h4>Overtime Forecast Curve</h4>
+          <p>Weekly approved OT plus projected next-week demand</p>
+        </div>
+        <strong>{forecast.direction || 'Stable'}</strong>
+      </div>
+      <svg className="analytics-line-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Overtime forecast line chart">
+        <defs>
+          <linearGradient id="analyticsLineGradient" x1="0" x2="1">
+            <stop offset="0%" stopColor="#0a66d9" />
+            <stop offset="55%" stopColor="#28c8ff" />
+            <stop offset="100%" stopColor="#7c4dff" />
+          </linearGradient>
+        </defs>
+        <polyline className="analytics-grid-line" points="0,90 100,90" />
+        <polyline className="analytics-grid-line" points="0,55 100,55" />
+        <polyline className="analytics-grid-line" points="0,20 100,20" />
+        <polyline className="analytics-forecast-line" points={points || '0,90 100,90'} />
+        {(rows || []).map((row, index) => {
+          const x = rows.length <= 1 ? 50 : (index / (rows.length - 1)) * 100;
+          const y = 90 - ((Number(row.value || 0) / max) * 70);
+          return <circle key={`${row.label}-${index}`} className={row.label === 'Forecast' ? 'forecast-dot' : ''} cx={x} cy={y} r="1.7" />;
+        })}
+      </svg>
+      <div className="forecast-stats">
+        <span>Current <strong>{Number(forecast.currentWeekHours || 0).toFixed(2)}h</strong></span>
+        <span>Average <strong>{Number(forecast.weeklyAverage || 0).toFixed(2)}h</strong></span>
+        <span>Forecast <strong>{Number(forecast.nextWeekHours || 0).toFixed(2)}h</strong></span>
+      </div>
+    </article>
+  );
+}
+
+function RiskRadar({ rows }) {
+  const topRows = (rows || []).slice(0, 5);
+
+  return (
+    <div className="risk-radar">
+      {topRows.length === 0 ? <p className="muted">No turnover risk signals available.</p> : null}
+      {topRows.map((row, index) => {
+        const score = Math.min(100, Number(row.risk_score || 0));
+        return (
+          <article key={`${row.emp_code}-${index}`} style={{ '--risk-score': `${score}%`, '--risk-delay': `${index * 100}ms` }}>
+            <div className="risk-orbit"><i /></div>
+            <div>
+              <strong>{row.employee_name || 'Employee'}</strong>
+              <span>{row.risk_band} risk · {score.toFixed(1)}</span>
+              <small>{row.insight}</small>
+            </div>
+          </article>
+        );
+      })}
+    </div>
   );
 }
 

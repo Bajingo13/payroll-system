@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { exportReport } from '../utils/reportExport.js';
 
 function formatDateTime(value) {
   if (!value) return 'N/A';
@@ -22,42 +23,6 @@ function statusClass(status) {
   if (normalized === 'rejected') return 'rejected';
   if (normalized === 'cancelled') return 'cancelled';
   return 'pending';
-}
-
-function excelText(value) {
-  const text = String(value ?? '');
-  return /^[=+\-@]/.test(text) ? `'${text}` : text;
-}
-
-function downloadXls(filename, headers, rows) {
-  const html = `
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        table { border-collapse: collapse; }
-        th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
-        th { background: #e8f5e8; font-weight: bold; }
-      </style>
-    </head>
-    <body>
-      <table>
-        <thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${excelText(cell)}</td>`).join('')}</tr>`).join('')}</tbody>
-      </table>
-    </body>
-    </html>
-  `;
-
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 export default function LeaveManagementPage() {
@@ -103,7 +68,7 @@ export default function LeaveManagementPage() {
     }
   }
 
-  async function exportExcel() {
+  async function exportLeave(format) {
     const { data } = await api.get('/admin/leave-requests', { params: { user_id: user.user_id } });
     const allRequests = data.requests || [];
     if (allRequests.length === 0) {
@@ -111,10 +76,8 @@ export default function LeaveManagementPage() {
       return;
     }
 
-    downloadXls(
-      `leave-management-${new Date().toISOString().slice(0, 10)}.xls`,
-      ['Request ID', 'Submitted', 'Employee ID', 'Employee Name', 'Leave Type', 'Start Date', 'End Date', 'Total Days', 'Reason', 'Status', 'Last Updated'],
-      allRequests.map((request) => [
+    const headers = ['Request ID', 'Submitted', 'Employee ID', 'Employee Name', 'Leave Type', 'Start Date', 'End Date', 'Total Days', 'Reason', 'Status', 'Last Updated'];
+    const rows = allRequests.map((request) => [
         request.request_id,
         formatDateTime(request.created_at),
         request.emp_code || '',
@@ -126,9 +89,16 @@ export default function LeaveManagementPage() {
         request.reason || '',
         request.status || '',
         formatDateTime(request.updated_at)
-      ])
+      ]);
+
+    exportReport(
+      format,
+      `leave-management-${new Date().toISOString().slice(0, 10)}`,
+      'Leave Management Report',
+      headers,
+      rows
     );
-    setMessage('Leave requests exported successfully.');
+    setMessage(`Leave requests exported as ${String(format).toUpperCase()}.`);
   }
 
   const previousRequests = useMemo(
@@ -159,7 +129,20 @@ export default function LeaveManagementPage() {
             <p>Filter requests by status, then approve or reject pending leave submissions.</p>
           </div>
           <div className="toolbar">
-            <button className="btn secondary" onClick={exportExcel}>Export Excel</button>
+            <select
+              aria-label="Export leave report format"
+              defaultValue=""
+              onChange={(event) => {
+                if (!event.target.value) return;
+                exportLeave(event.target.value);
+                event.target.value = '';
+              }}
+            >
+              <option value="">Export Report</option>
+              <option value="csv">CSV Format</option>
+              <option value="txt">Text Format</option>
+              <option value="pdf">PDF Format</option>
+            </select>
             <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); loadRequests(event.target.value); }}>
               <option value="">All Requests</option>
               <option value="Pending">Pending</option>

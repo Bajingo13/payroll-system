@@ -2422,6 +2422,54 @@ th {
   gap: 3px;
 }
 
+/* ===============================
+   DASHBOARD CHART ANIMATIONS
+   (Used by renderDonutChart/renderBarChart in frontend/dashboard/js/script.js)
+=============================== */
+@keyframes bbDonutPop {
+  0% { transform: scale(0.92); filter: saturate(0.9); opacity: 0.0; }
+  55% { transform: scale(1.02); opacity: 1; filter: saturate(1.15); }
+  100% { transform: scale(1); filter: saturate(1); opacity: 1; }
+}
+
+@keyframes bbLegendIn {
+  0% { transform: translateY(6px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes bbBarGrow {
+  0% { transform: translateY(8px); opacity: 0.0; }
+  60% { transform: translateY(-2px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.chart-animate {
+  animation: bbDonutPop 520ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.chart-animate .donut-chart {
+  will-change: transform, filter, opacity;
+}
+
+.bar-chart .bar-track i {
+  transform-origin: left center;
+  animation: bbBarGrow 520ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+/* stagger if multiple bars */
+.bar-chart .bar-track i {
+  animation-delay: var(--bb-delay, 0ms);
+}
+
+.chart-animate .chart-legend {
+  animation: bbLegendIn 420ms ease both;
+}
+
+.chart-animate .legend-row {
+  animation: bbLegendIn 420ms ease both;
+  animation-delay: var(--bb-legend-delay, 0ms);
+}
+
 .advanced-calendar .has-leave {
   border-color: #9fd7a4;
   background: #f1fbf2;

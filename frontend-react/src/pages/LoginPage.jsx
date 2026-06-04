@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { getApiMessage } from '../api/client.js';
+import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 import Modal from '../components/Modal.jsx';
@@ -24,6 +24,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [infoModal, setInfoModal] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUsername, setResetUsername] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
 
@@ -60,6 +64,22 @@ export default function LoginPage() {
       setMessage(getApiMessage(err, 'Invalid username or password.'));
       setMessageType('error');
       setLoading(false);
+    }
+  }
+
+  async function handlePasswordResetRequest(event) {
+    event.preventDefault();
+    setResetMessage('');
+    setResetLoading(true);
+
+    try {
+      const { data } = await api.post('/password-reset/request', { username: resetUsername.trim() });
+      setResetMessage(data.message || 'Password reset instructions will be sent to the email linked to that username.');
+      setResetUsername('');
+    } catch (err) {
+      setResetMessage(getApiMessage(err, 'Unable to request password reset.'));
+    } finally {
+      setResetLoading(false);
     }
   }
 
@@ -166,6 +186,17 @@ export default function LoginPage() {
             <button className="primary-btn" type="submit" disabled={loading}>
               {loading ? 'Logging in...' : 'Login'}
             </button>
+
+            <button
+              type="button"
+              className="forgot-password-btn"
+              onClick={() => {
+                setResetOpen(true);
+                setResetMessage('');
+              }}
+            >
+              Forgot password?
+            </button>
           </form>
 
           {message && (
@@ -184,6 +215,32 @@ export default function LoginPage() {
         {infoModal === 'contacts' ? <ContactsContent /> : null}
         {infoModal === 'help' ? <HelpContent /> : null}
         {infoModal === 'about' ? <AboutUsContent /> : null}
+      </Modal>
+
+      <Modal
+        open={resetOpen}
+        title="Reset Password"
+        onClose={() => {
+          setResetOpen(false);
+          setResetMessage('');
+        }}
+      >
+        <form className="modal-form" onSubmit={handlePasswordResetRequest}>
+          <label>
+            Username
+            <input
+              type="text"
+              value={resetUsername}
+              onChange={(event) => setResetUsername(event.target.value)}
+              placeholder="Enter your username"
+              required
+            />
+          </label>
+          <button className="primary-btn" type="submit" disabled={resetLoading}>
+            {resetLoading ? 'Sending...' : 'Send Reset Link'}
+          </button>
+          {resetMessage && <p className="form-message">{resetMessage}</p>}
+        </form>
       </Modal>
     </div>
   );

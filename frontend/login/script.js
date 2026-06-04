@@ -39,10 +39,13 @@ function showTab(tab) {
   const isLogin = tab === "login";
   document.getElementById("loginForm").classList.toggle("hidden", !isLogin);
   document.getElementById("registerForm").classList.toggle("hidden", isLogin);
+  document.getElementById("resetForm")?.classList.add("hidden");
   document.getElementById("tabLogin").classList.toggle("active", isLogin);
   document.getElementById("tabRegister").classList.toggle("active", !isLogin);
   document.getElementById("loginMessage").textContent = "";
   document.getElementById("registerMessage").textContent = "";
+  const resetMessage = document.getElementById("resetMessage");
+  if (resetMessage) resetMessage.textContent = "";
 }
 
 // ========== LOGIN ==========
@@ -115,6 +118,46 @@ async function login() {
 document.getElementById("loginForm").addEventListener("submit", function (e) {
   e.preventDefault();
   login();
+});
+
+document.getElementById("showResetForm")?.addEventListener("click", function () {
+  document.getElementById("loginForm").classList.add("hidden");
+  document.getElementById("registerForm").classList.add("hidden");
+  document.getElementById("resetForm").classList.remove("hidden");
+  document.getElementById("tabLogin").classList.add("active");
+  document.getElementById("tabRegister").classList.remove("active");
+});
+
+document.getElementById("backToLogin")?.addEventListener("click", function () {
+  showTab("login");
+});
+
+document.getElementById("resetForm")?.addEventListener("submit", async function (e) {
+  e.preventDefault();
+  const username = document.getElementById("reset_username").value.trim();
+  const msgDiv = document.getElementById("resetMessage");
+
+  msgDiv.textContent = "";
+  msgDiv.style.color = "red";
+
+  try {
+    const res = await fetch("/api/password-reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || "Unable to request password reset.");
+    }
+
+    msgDiv.style.color = "green";
+    msgDiv.textContent = data.message || "Password reset instructions will be sent to the email linked to that username.";
+    document.getElementById("resetForm").reset();
+  } catch (err) {
+    msgDiv.textContent = err.message || "Unable to request password reset.";
+  }
 });
 
 // ========== REGISTER ==========

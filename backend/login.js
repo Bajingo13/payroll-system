@@ -1,8 +1,129 @@
 // ----------- USER AUTHENTICATION -----------
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 module.exports = function (app, pool) {
   console.log('AUTH ROUTES LOADED: login.js (password-route-v3)');
+
+  let passwordResetTransporter = null;
+
+  function getPasswordResetMailConfig() {
+    const user = process.env.GMAIL_USER || process.env.SMTP_USER || process.env.MAIL_USER;
+    const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.SMTP_PASS || process.env.MAIL_PASS;
+    if (!user || !pass) return null;
+    return {
+      user,
+      pass,
+      from: {
+        name: process.env.MAIL_FROM_NAME || 'Astreablue Intelligence Inc.',
+        address: user
+      }
+    };
+  }
+
+  function getPasswordResetTransporter() {
+    const config = getPasswordResetMailConfig();
+    if (!config) return null;
+    if (!passwordResetTransporter) {
+      passwordResetTransporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: config.user, pass: config.pass }
+      });
+    }
+    return passwordResetTransporter;
+  }
+
+  async function ensurePasswordResetTable(conn) {
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        reset_id INT NOT NULL AUTO_INCREMENT,
+        user_id INT NOT NULL,
+        token_hash VARCHAR(64) NOT NULL,
+        email VARCHAR(150) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        used_at DATETIME NULL DEFAULT NULL,
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (reset_id),
+        UNIQUE KEY uq_password_reset_token_hash (token_hash),
+        KEY idx_password_reset_user (user_id),
+        KEY idx_password_reset_expires (expires_at),
+        CONSTRAINT fk_password_reset_user
+          FOREIGN KEY (user_id) REFERENCES users (user_id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    `);
+  }
+
+  async function findUserByResetUsername(conn, username) {
+    const [rows] = await conn.execute(
+      `SELECT u.user_id, u.username, u.full_name, ec.email
+       FROM users u
+       LEFT JOIN employees e ON
+         LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))
+         OR LOWER(TRIM(CONCAT_WS(' ', e.first_name, e.last_name))) = LOWER(TRIM(u.full_name))
+       LEFT JOIN employee_contacts ec ON ec.contact_id = (
+         SELECT c.contact_id
+         FROM employee_contacts c
+         WHERE c.employee_id = e.employee_id
+           AND TRIM(COALESCE(c.email, '')) <> ''
+         ORDER BY c.contact_id DESC
+         LIMIT 1
+       )
+       WHERE LOWER(TRIM(u.username)) = LOWER(TRIM(?))
+       LIMIT 1`,
+      [username]
+    );
+    return rows[0] || null;
+  }
+
+  function escapeMailHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  async function sendPasswordResetEmail(user, token) {
+    const config = getPasswordResetMailConfig();
+    const transporter = getPasswordResetTransporter();
+    if (!config || !transporter) {
+      console.warn('Password reset email skipped: SMTP credentials are not configured.');
+      return false;
+    }
+
+    const baseUrl = String(process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:12687').replace(/\/+$/, '');
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    const recipient = String(user.email || '').trim();
+    const displayName = escapeMailHtml(user.full_name || user.username || 'there');
+
+    await transporter.sendMail({
+      from: config.from,
+      to: recipient,
+      subject: 'Password reset request',
+      text: [
+        `Hi ${user.full_name || user.username || 'there'},`,
+        '',
+        'We received a request to reset your payroll system password.',
+        `Open this link to set a new password: ${resetUrl}`,
+        '',
+        'This link expires in 30 minutes. If you did not request this, you can ignore this email.',
+        '',
+        'Payroll System'
+      ].join('\n'),
+      html: `
+        <p>Hi ${displayName},</p>
+        <p>We received a request to reset your payroll system password.</p>
+        <p><a href="${resetUrl}">Set a new password</a></p>
+        <p>This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>
+        <p>Payroll System</p>
+      `
+    });
+
+    return true;
+  }
   // LOGIN
   app.post('/api/login', async (req, res) => {
     console.log('LOGIN API HIT:', req.body?.username);
@@ -112,6 +233,127 @@ module.exports = function (app, pool) {
       res.clearCookie('connect.sid');
       return res.json({ success: true });
     });
+  });
+
+  app.post('/api/password-reset/request', async (req, res) => {
+    const username = String(req.body?.username || '').trim();
+
+    if (!username) {
+      return res.status(400).json({ success: false, message: 'Username is required.' });
+    }
+
+    let conn;
+
+    try {
+      conn = await pool.getConnection();
+      await ensurePasswordResetTable(conn);
+
+      const user = await findUserByResetUsername(conn, username);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Username was not found.' });
+      }
+
+      const email = String(user.email || '').trim().toLowerCase();
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'This username has no linked employee email. Please add an email to the employee contact record first.'
+        });
+      }
+
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      await conn.execute(
+        `UPDATE password_reset_tokens
+         SET used_at = NOW()
+         WHERE user_id = ? AND used_at IS NULL`,
+        [user.user_id]
+      );
+
+      await conn.execute(
+        `INSERT INTO password_reset_tokens (user_id, token_hash, email, expires_at)
+         VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE))`,
+        [user.user_id, tokenHash, email]
+      );
+
+      const emailSent = await sendPasswordResetEmail(user, rawToken);
+      if (!emailSent) {
+        return res.status(500).json({
+          success: false,
+          message: 'Email service is not configured. Please check the Gmail account and app password.'
+        });
+      }
+
+      return res.json({ success: true, message: `Password reset instructions were sent to ${email}.` });
+    } catch (err) {
+      console.error('PASSWORD RESET REQUEST ERROR:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Unable to request password reset.'
+      });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.post('/api/password-reset/confirm', async (req, res) => {
+    const token = String(req.body?.token || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+    const confirmPassword = String(req.body?.confirmPassword || '');
+
+    if (!token || !newPassword || !confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Reset token, new password, and confirmation are required.' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'New password and confirmation do not match.' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 8 characters.' });
+    }
+
+    let conn;
+
+    try {
+      conn = await pool.getConnection();
+      await ensurePasswordResetTable(conn);
+
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const [rows] = await conn.execute(
+        `SELECT reset_id, user_id
+         FROM password_reset_tokens
+         WHERE token_hash = ?
+           AND used_at IS NULL
+           AND expires_at > NOW()
+         LIMIT 1`,
+        [tokenHash]
+      );
+
+      if (!rows.length) {
+        return res.status(400).json({ success: false, message: 'This password reset link is invalid or expired.' });
+      }
+
+      const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
+      const hashedPassword = await bcrypt.hash(newPassword, bcryptRounds);
+
+      await conn.beginTransaction();
+      await conn.execute('UPDATE users SET password = ? WHERE user_id = ?', [hashedPassword, rows[0].user_id]);
+      await conn.execute('UPDATE password_reset_tokens SET used_at = NOW() WHERE reset_id = ?', [rows[0].reset_id]);
+      await conn.commit();
+
+      return res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+    } catch (err) {
+      if (conn) await conn.rollback().catch(() => {});
+      console.error('PASSWORD RESET CONFIRM ERROR:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Unable to reset password.'
+      });
+    } finally {
+      if (conn) conn.release();
+    }
   });
 
   // CHANGE OWN PASSWORD

@@ -7,6 +7,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import HRDashboardPage from './pages/HRDashboardPage.jsx';
 import EmployeeDashboardPage from './pages/EmployeeDashboardPage.jsx';
@@ -83,6 +84,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/about-us" element={<AboutUsPage />} />
       <Route path="/help" element={<HelpPage />} />
       <Route path="/contacts" element={<ContactsPage />} />

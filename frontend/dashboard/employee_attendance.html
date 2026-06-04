@@ -83,7 +83,12 @@
           </select>
           <label>entries</label>
           <div class="right-actions">
-            <button type="button" class="btn" id="exportAttendanceBtn">Export Attendance</button>
+            <select id="exportAttendanceFormat" aria-label="Export attendance report format">
+              <option value="">Export Report</option>
+              <option value="csv">CSV Format</option>
+              <option value="txt">Text Format</option>
+              <option value="pdf">PDF Format</option>
+            </select>
             <label>Search:
               <input id="attendanceSearch" type="text" placeholder="Search employee...">
             </label>

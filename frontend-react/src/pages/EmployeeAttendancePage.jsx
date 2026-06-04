@@ -2,20 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import Modal from '../components/Modal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function excelText(value) {
-  const text = String(value ?? '');
-  return /^[=+\-@]/.test(text) ? `'${text}` : text;
-}
+import { exportReport } from '../utils/reportExport.js';
 
 function formatExportDateTime(value) {
   if (!value) return '-';
@@ -143,7 +130,7 @@ export default function EmployeeAttendancePage() {
   const present = filteredRecords.filter((record) => attendanceStatus(record).label === 'Present').length;
   const incomplete = filteredRecords.filter((record) => attendanceStatus(record).label === 'Incomplete').length;
 
-  function exportAttendance() {
+  function exportAttendance(format) {
     if (!filteredRecords.length) {
       window.alert('No attendance records available to export.');
       return;
@@ -183,39 +170,14 @@ export default function EmployeeAttendancePage() {
       ];
     });
 
-    const html = `
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          table { border-collapse: collapse; }
-          th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
-          th { background: #f1f1f1; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <table>
-          <thead>
-            <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
-          </thead>
-          <tbody>
-            ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(excelText(cell))}</td>`).join('')}</tr>`).join('')}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
     const dateSuffix = appliedRange.from === appliedRange.to ? appliedRange.from : `${appliedRange.from}-to-${appliedRange.to}`;
-    link.download = `attendance-overview-${dateSuffix}.xls`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    exportReport(
+      format,
+      `attendance-overview-${dateSuffix}`,
+      'Attendance Overview Report',
+      headers,
+      rows
+    );
   }
 
   function updateDateRange(field, value) {
@@ -305,7 +267,20 @@ export default function EmployeeAttendancePage() {
             <label>From: <input type="date" value={dateRange.from} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
             <label>To: <input type="date" value={dateRange.to} onChange={(event) => updateDateRange('to', event.target.value)} /></label>
             <button type="button" className="btn secondary" onClick={applyDateRange}>Apply</button>
-            <button type="button" className="btn secondary" onClick={exportAttendance}>Export Attendance</button>
+            <select
+              aria-label="Export attendance report format"
+              defaultValue=""
+              onChange={(event) => {
+                if (!event.target.value) return;
+                exportAttendance(event.target.value);
+                event.target.value = '';
+              }}
+            >
+              <option value="">Export Report</option>
+              <option value="csv">CSV Format</option>
+              <option value="txt">Text Format</option>
+              <option value="pdf">PDF Format</option>
+            </select>
             <label>Search: <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee..." /></label>
           </div>
         </div>

@@ -302,6 +302,7 @@ if (useReactFrontend) {
   [
     '/',
     '/login',
+    '/reset-password',
     '/dashboard',
     '/employee-dashboard',
     '/personal-management',
@@ -411,6 +412,7 @@ if (useReactFrontend) {
     require('./backend/login')(app, pool);
     require('./backend/profile_sidebar')(app, pool);
     require('./backend/dashboard')(app, pool);
+    require('./backend/ai_analytics')(app, pool);
     require('./backend/employee_profile_edit')(app, pool);
     require('./backend/employee_leave')(app, pool);
     require('./backend/overtime_requests')(app, pool);
