@@ -402,37 +402,71 @@ module.exports = function (app, pool) {
     }
 
     let conn;
+    let transactionStarted = false;
 
     try {
       conn = await pool.getConnection();
       await ensurePasswordResetTable(conn);
 
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      await conn.beginTransaction();
+      transactionStarted = true;
+
       const [rows] = await conn.execute(
-        `SELECT reset_id, user_id
-         FROM password_reset_tokens
-         WHERE token_hash = ?
-           AND used_at IS NULL
-           AND expires_at > NOW()
+        `SELECT prt.reset_id, prt.user_id, u.username
+         FROM password_reset_tokens prt
+         INNER JOIN users u ON u.user_id = prt.user_id
+         WHERE prt.token_hash = ?
+           AND prt.used_at IS NULL
+           AND prt.expires_at > NOW()
          LIMIT 1`,
         [tokenHash]
       );
 
       if (!rows.length) {
+        await conn.rollback();
+        transactionStarted = false;
         return res.status(400).json({ success: false, message: 'This password reset link is invalid or expired.' });
       }
 
       const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
       const hashedPassword = await bcrypt.hash(newPassword, bcryptRounds);
 
-      await conn.beginTransaction();
-      await conn.execute('UPDATE users SET password = ? WHERE user_id = ?', [hashedPassword, rows[0].user_id]);
+      const [updateResult] = await conn.execute(
+        'UPDATE users SET password = ? WHERE user_id = ?',
+        [hashedPassword, rows[0].user_id]
+      );
+
+      if (updateResult.affectedRows !== 1) {
+        await conn.rollback();
+        transactionStarted = false;
+        return res.status(404).json({ success: false, message: 'User account was not found. Password was not reset.' });
+      }
+
+      const [verifyRows] = await conn.execute(
+        'SELECT password FROM users WHERE user_id = ? LIMIT 1',
+        [rows[0].user_id]
+      );
+      const savedPassword = String(verifyRows?.[0]?.password || '');
+      const savedPasswordMatches = savedPassword
+        ? await bcrypt.compare(newPassword, savedPassword)
+        : false;
+
+      if (!savedPasswordMatches) {
+        await conn.rollback();
+        transactionStarted = false;
+        return res.status(500).json({ success: false, message: 'Password reset could not be saved. Please try again.' });
+      }
+
       await conn.execute('UPDATE password_reset_tokens SET used_at = NOW() WHERE reset_id = ?', [rows[0].reset_id]);
       await conn.commit();
+      transactionStarted = false;
+
+      console.log('PASSWORD RESET SAVED FOR USER:', rows[0].username || rows[0].user_id);
 
       return res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
     } catch (err) {
-      if (conn) await conn.rollback().catch(() => {});
+      if (conn && transactionStarted) await conn.rollback().catch(() => {});
       console.error('PASSWORD RESET CONFIRM ERROR:', err);
       return res.status(500).json({
         success: false,

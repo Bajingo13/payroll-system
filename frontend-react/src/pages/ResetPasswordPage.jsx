@@ -23,6 +23,9 @@ export default function ResetPasswordPage() {
         newPassword: form.newPassword,
         confirmPassword: form.confirmPassword
       });
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to reset password.');
+      }
       setMessage(data.message || 'Password reset successfully. You can now log in.');
       setMessageType('success');
       setForm({ newPassword: '', confirmPassword: '' });
