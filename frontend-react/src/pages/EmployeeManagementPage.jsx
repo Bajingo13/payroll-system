@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import PasswordToggleIcon from '../components/PasswordToggleIcon.jsx';
 
 const SORT_OPTIONS = ['ID', 'Name', 'Company', 'Department', 'Position', 'Status'];
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
@@ -13,10 +14,35 @@ const ADD_EMPLOYEE_TABS = [
   { id: 'payrollInfo', label: 'Payroll Information' },
   { id: 'payrollComputation', label: 'Payroll Computation' },
   { id: 'allowances', label: 'Allowance Payroll Entry' },
-  { id: 'deductions', label: 'Deduction Payroll Entry' }
+  { id: 'deductions', label: 'Deduction Payroll Entry' },
+  { id: 'evaluations', label: 'Growth Evaluation' }
 ];
 
 const SYSTEM_ACCOUNT_ROLES = ['Employee', 'HR', 'Admin'];
+const EVALUATION_SCORE_FIELDS = [
+  { key: 'productivity_score', label: 'Productivity' },
+  { key: 'quality_score', label: 'Quality' },
+  { key: 'teamwork_score', label: 'Teamwork' },
+  { key: 'attendance_score', label: 'Attendance' },
+  { key: 'initiative_score', label: 'Initiative' }
+];
+
+function createBlankEvaluationForm() {
+  return {
+    review_period: '',
+    review_date: new Date().toISOString().slice(0, 10),
+    evaluator_name: '',
+    productivity_score: 80,
+    quality_score: 80,
+    teamwork_score: 80,
+    attendance_score: 80,
+    initiative_score: 80,
+    strengths: '',
+    improvement_areas: '',
+    goals: '',
+    action_plan: ''
+  };
+}
 
 function createBlankEmployeeForm() {
   return {
@@ -92,11 +118,21 @@ function createBlankEmployeeForm() {
       username: '',
       password: '',
       confirmPassword: '',
-      role: 'Employee'
+      role: 'Employee',
+      account_status: ''
     },
     contributions: [],
     allowances: [],
     deductions: [],
+    evaluations: [],
+    evaluationSummary: {
+      count: 0,
+      averageScore: 0,
+      latestScore: 0,
+      latestRating: 'No Evaluation',
+      growthDelta: 0
+    },
+    evaluationForm: createBlankEvaluationForm(),
     dependents: Array.from({ length: 4 }, () => ({ name: '', birthday: '' }))
   };
 }
@@ -119,7 +155,32 @@ function statusClass(status) {
   const value = String(status || '').toLowerCase();
   if (value === 'active') return 'present';
   if (value === 'terminated') return 'terminated';
+  if (value === 'deleted' || value === 'deactivated') return 'terminated';
   if (value === 'end of contract' || value === 'resigned') return 'rest';
+  return 'rest';
+}
+
+function evaluationRating(score) {
+  const value = Number(score || 0);
+  if (value >= 90) return 'Outstanding';
+  if (value >= 80) return 'Exceeds Expectations';
+  if (value >= 70) return 'Meets Expectations';
+  if (value >= 60) return 'Developing';
+  return 'Needs Support';
+}
+
+function evaluationOverall(form) {
+  const total = EVALUATION_SCORE_FIELDS.reduce((sum, field) => {
+    const score = Number(form?.[field.key] || 0);
+    return sum + (Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0);
+  }, 0);
+  return Number((total / EVALUATION_SCORE_FIELDS.length).toFixed(2));
+}
+
+function evaluationTrendClass(delta) {
+  const value = Number(delta || 0);
+  if (value > 0) return 'present';
+  if (value < 0) return 'terminated';
   return 'rest';
 }
 
@@ -231,7 +292,7 @@ export default function EmployeeManagementPage() {
   async function handleDeleteEmployee(empCode) {
     if (!empCode) return;
 
-    const confirmDelete = window.confirm(`Delete employee ${empCode}? This cannot be undone.`);
+    const confirmDelete = window.confirm(`Delete employee record ${empCode}? This removes saved employee information and cannot be undone.`);
     if (!confirmDelete) return;
 
     setMessage('Deleting employee...');
@@ -248,7 +309,7 @@ export default function EmployeeManagementPage() {
         throw new Error(data.message || 'Unable to delete employee.');
       }
 
-      setMessage(data.message || 'Employee deleted successfully.');
+      setMessage(data.message || 'Employee record deleted successfully.');
       setDetailModalOpen(false);
       setSelectedEmpCode('');
       setCreatedEmpCode('');
@@ -261,6 +322,59 @@ export default function EmployeeManagementPage() {
       }
     } catch (err) {
       setMessage(getApiMessage(err, 'Unable to delete employee.'));
+    }
+  }
+
+  async function handleAccountStatusAction(action) {
+    const empCode = createdEmpCode || selectedEmpCode;
+    const account = addForm.systemAccount || {};
+    if (!empCode || !account.user_id) {
+      setMessage('No login account is linked to this employee.');
+      return;
+    }
+
+    const actionText = {
+      deactivate: { verb: 'deactivate', progress: 'Deactivating' },
+      reactivate: { verb: 'reactivate', progress: 'Reactivating' },
+      delete: { verb: 'delete', progress: 'Deleting' }
+    };
+    const confirmMessage = action === 'delete'
+      ? `Delete login access for ${empCode}? The employee information will stay saved.`
+      : `${actionText[action].verb[0].toUpperCase()}${actionText[action].verb.slice(1)} login access for ${empCode}? Employee information will stay saved.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    setAddSaving(true);
+    setMessage(`${actionText[action].progress} account...`);
+
+    try {
+      const { data } = await api.post(`/employee/${encodeURIComponent(empCode)}/system-account/status`, {
+        action,
+        user_id: user?.user_id,
+        admin_name: user?.full_name,
+        actor_role: user?.role
+      });
+
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to update account status.');
+      }
+
+      setAddForm((current) => ({
+        ...current,
+        systemAccount: {
+          ...(current.systemAccount || {}),
+          ...(data.systemAccount || {}),
+          password: '',
+          confirmPassword: ''
+        }
+      }));
+      setMessage(data.message || 'Account status updated.');
+      setSaveNotice(data.message || 'Account status updated.');
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to update account status.'));
+      setSaveNotice('');
+    } finally {
+      setAddSaving(false);
     }
   }
 
@@ -278,6 +392,8 @@ export default function EmployeeManagementPage() {
 
       const employee = data.employee;
       const dependents = Array.isArray(employee.dependents) ? employee.dependents : [];
+      const evaluations = Array.isArray(employee.evaluations) ? employee.evaluations : [];
+      const evaluationSummary = employee.evaluationSummary || createBlankEmployeeForm().evaluationSummary;
 
       setSelectedEmpCode(empCode);
       setDetailForm(employee);
@@ -294,6 +410,9 @@ export default function EmployeeManagementPage() {
         },
         allowances: Array.isArray(employee.allowances) ? employee.allowances : [],
         deductions: Array.isArray(employee.deductions) ? employee.deductions : [],
+        evaluations,
+        evaluationSummary,
+        evaluationForm: createBlankEvaluationForm(),
         dependents: [
           ...dependents,
           ...Array.from({ length: Math.max(0, 4 - dependents.length) }, () => ({ name: '', birthday: '' }))
@@ -397,6 +516,63 @@ export default function EmployeeManagementPage() {
     }));
   }
 
+  function updateEvaluationField(field, value) {
+    setAddForm((current) => ({
+      ...current,
+      evaluationForm: {
+        ...(current.evaluationForm || createBlankEvaluationForm()),
+        [field]: value
+      }
+    }));
+  }
+
+  async function saveEvaluationTab() {
+    const empCode = createdEmpCode || selectedEmpCode;
+    const evaluationForm = addForm.evaluationForm || createBlankEvaluationForm();
+
+    if (!empCode) {
+      setMessage('Save Basic Information first before adding an evaluation.');
+      setSaveNotice('');
+      return;
+    }
+
+    if (!String(evaluationForm.review_period || '').trim() || !evaluationForm.review_date) {
+      setMessage('Review period and review date are required in Growth Evaluation.');
+      setSaveNotice('');
+      return;
+    }
+
+    setAddSaving(true);
+    setMessage('Saving Growth Evaluation...');
+
+    try {
+      const payload = {
+        ...evaluationForm,
+        user_id: user?.user_id,
+        admin_name: user?.full_name
+      };
+      const { data } = await api.post(`/employee/${encodeURIComponent(empCode)}/evaluations`, payload);
+
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to save evaluation.');
+      }
+
+      setAddForm((current) => ({
+        ...current,
+        evaluations: Array.isArray(data.evaluations) ? data.evaluations : current.evaluations || [],
+        evaluationSummary: data.evaluationSummary || current.evaluationSummary,
+        evaluationForm: createBlankEvaluationForm()
+      }));
+      setMessage(data.message || 'Employee evaluation saved successfully.');
+      setSaveNotice(data.message || 'Employee evaluation saved successfully.');
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to save evaluation.'));
+      setSaveNotice('');
+    } finally {
+      setAddSaving(false);
+    }
+  }
+
   function buildAddPayload() {
     const taxInsurance = addForm.taxInsurance || {};
     const systemAccount = addForm.systemAccount || {};
@@ -427,7 +603,8 @@ export default function EmployeeManagementPage() {
         user_id: systemAccount.user_id || '',
         username: String(systemAccount.username || '').trim(),
         password: systemAccount.password || '',
-        role: systemAccount.role || 'Employee'
+        role: systemAccount.role || 'Employee',
+        account_status: systemAccount.account_status || ''
       },
       user_id: user?.user_id,
       admin_name: user?.full_name,
@@ -472,6 +649,11 @@ export default function EmployeeManagementPage() {
       return;
     }
 
+    if (tabId === 'evaluations') {
+      await saveEvaluationTab();
+      return;
+    }
+
     setAddSaving(true);
     setMessage(`Saving ${ADD_EMPLOYEE_TABS.find((tab) => tab.id === tabId)?.label || 'employee'}...`);
 
@@ -509,6 +691,7 @@ export default function EmployeeManagementPage() {
             user_id: savedUserId,
             username: data.systemAccount?.username || current.systemAccount?.username || '',
             role: data.systemAccount?.role || current.systemAccount?.role || 'Employee',
+            account_status: data.systemAccount?.account_status || 'Active',
             password: '',
             confirmPassword: ''
           }
@@ -538,6 +721,7 @@ export default function EmployeeManagementPage() {
           ...(current.systemAccount || {}),
           user_id: data.systemAccountUserId || current.systemAccount?.user_id || '',
           username: current.systemAccount?.username || nextEmpCode,
+          account_status: data.systemAccount?.account_status || current.systemAccount?.account_status || '',
           password: '',
           confirmPassword: ''
         }
@@ -628,7 +812,7 @@ export default function EmployeeManagementPage() {
       }
 
       const { data, headers } = await api.get(`/employee/${encodeURIComponent(employee.emp_code)}/export`, {
-        params: { format: exportFormat },
+        params: { format: exportFormat, generated_by: user?.full_name || sessionStorage.getItem('admin_name') || 'System User' },
         responseType: 'blob'
       });
 
@@ -776,6 +960,7 @@ export default function EmployeeManagementPage() {
 
   function renderSystemAccountAddTab() {
     const account = addForm.systemAccount || createBlankEmployeeForm().systemAccount;
+    const accountStatus = account.account_status || (account.user_id ? 'Active' : 'Not Created');
     const fullName = [addForm.first_name, addForm.middle_name, addForm.last_name]
       .filter(Boolean)
       .join(' ')
@@ -802,6 +987,26 @@ export default function EmployeeManagementPage() {
                 {SYSTEM_ACCOUNT_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
               </select>
             ))}
+            {renderFormRow('Account Status:', <span className={`status ${statusClass(accountStatus)}`}>{accountStatus}</span>)}
+            {account.user_id ? (
+              <div className="account-control-panel">
+                <p className="muted">Deactivate or delete login access without deleting the employee file, payroll settings, contacts, or saved HR information.</p>
+                <div className="toolbar account-actions">
+                  {accountStatus === 'Active' ? (
+                    <button type="button" className="btn secondary" onClick={() => handleAccountStatusAction('deactivate')} disabled={addSaving}>
+                      Deactivate Account
+                    </button>
+                  ) : (
+                    <button type="button" className="btn secondary" onClick={() => handleAccountStatusAction('reactivate')} disabled={addSaving}>
+                      Reactivate Account
+                    </button>
+                  )}
+                  <button type="button" className="btn danger" onClick={() => handleAccountStatusAction('delete')} disabled={addSaving || accountStatus === 'Deleted'}>
+                    Delete Account
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div>
             <h4>Password</h4>
@@ -820,7 +1025,7 @@ export default function EmployeeManagementPage() {
                   aria-label={showAccountPassword ? 'Hide password' : 'Show password'}
                   title={showAccountPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showAccountPassword ? '🙈' : '👁'}
+                  <PasswordToggleIcon visible={showAccountPassword} />
                 </button>
               </div>
             ))}
@@ -838,7 +1043,7 @@ export default function EmployeeManagementPage() {
                   aria-label={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
                   title={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showAccountConfirmPassword ? '🙈' : '👁'}
+                  <PasswordToggleIcon visible={showAccountConfirmPassword} />
                 </button>
               </div>
             ))}
@@ -940,11 +1145,114 @@ export default function EmployeeManagementPage() {
     );
   }
 
+  function renderEvaluationTab() {
+    const evaluationForm = addForm.evaluationForm || createBlankEvaluationForm();
+    const evaluations = Array.isArray(addForm.evaluations) ? addForm.evaluations : [];
+    const summaryData = addForm.evaluationSummary || {};
+    const currentScore = evaluationOverall(evaluationForm);
+    const currentRating = evaluationRating(currentScore);
+    const growthDelta = Number(summaryData.growthDelta || 0);
+
+    return (
+      <div className="legacy-form-box employee-evaluation-panel">
+        <div className="evaluation-summary-grid">
+          <div className="evaluation-metric">
+            <span>Latest Score</span>
+            <strong>{Number(summaryData.latestScore || 0).toFixed(1)}</strong>
+            <small>{summaryData.latestRating || 'No Evaluation'}</small>
+          </div>
+          <div className="evaluation-metric">
+            <span>Average Score</span>
+            <strong>{Number(summaryData.averageScore || 0).toFixed(1)}</strong>
+            <small>{Number(summaryData.count || 0)} review(s)</small>
+          </div>
+          <div className="evaluation-metric">
+            <span>Growth Delta</span>
+            <strong className={`status ${evaluationTrendClass(growthDelta)}`}>{growthDelta > 0 ? '+' : ''}{growthDelta.toFixed(1)}</strong>
+            <small>Latest vs oldest</small>
+          </div>
+          <div className="evaluation-metric">
+            <span>Draft Rating</span>
+            <strong>{currentScore.toFixed(1)}</strong>
+            <small>{currentRating}</small>
+          </div>
+        </div>
+
+        <div className="legacy-payroll-grid">
+          <div>
+            <h4>Evaluation Scorecard</h4>
+            {renderFormRow('Review Period:', <input value={evaluationForm.review_period || ''} onChange={(event) => updateEvaluationField('review_period', event.target.value)} placeholder="Q2 2026" />)}
+            {renderFormRow('Review Date:', <input type="date" value={evaluationForm.review_date || ''} onChange={(event) => updateEvaluationField('review_date', event.target.value)} />)}
+            {renderFormRow('Evaluator:', <input value={evaluationForm.evaluator_name || ''} onChange={(event) => updateEvaluationField('evaluator_name', event.target.value)} placeholder={user?.full_name || 'Evaluator name'} />)}
+            <div className="evaluation-score-list">
+              {EVALUATION_SCORE_FIELDS.map((field) => (
+                <label key={field.key}>
+                  <span>{field.label}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={evaluationForm[field.key] ?? 0}
+                    onChange={(event) => updateEvaluationField(field.key, event.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h4>Growth Plan</h4>
+            {renderFormRow('Strengths:', <textarea value={evaluationForm.strengths || ''} onChange={(event) => updateEvaluationField('strengths', event.target.value)} />)}
+            {renderFormRow('Improvement Areas:', <textarea value={evaluationForm.improvement_areas || ''} onChange={(event) => updateEvaluationField('improvement_areas', event.target.value)} />)}
+            {renderFormRow('Growth Goals:', <textarea value={evaluationForm.goals || ''} onChange={(event) => updateEvaluationField('goals', event.target.value)} />)}
+            {renderFormRow('Action Plan:', <textarea value={evaluationForm.action_plan || ''} onChange={(event) => updateEvaluationField('action_plan', event.target.value)} />)}
+          </div>
+        </div>
+
+        <div className="toolbar employee-tab-toolbar">
+          <button type="button" className="btn" onClick={saveEvaluationTab} disabled={addSaving}>
+            {addSaving ? 'Saving...' : 'Save Evaluation'}
+          </button>
+        </div>
+
+        <div className="table-scroll compact evaluation-history-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Date</th>
+                <th>Evaluator</th>
+                <th>Overall</th>
+                <th>Rating</th>
+                <th>Growth Goals</th>
+                <th>Action Plan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {evaluations.length === 0 ? <tr><td colSpan="7">No evaluation records yet.</td></tr> : null}
+              {evaluations.map((evaluation) => (
+                <tr key={evaluation.evaluation_id || `${evaluation.review_period}-${evaluation.review_date}`}>
+                  <td>{evaluation.review_period}</td>
+                  <td>{evaluation.review_date}</td>
+                  <td>{evaluation.evaluator_name || 'N/A'}</td>
+                  <td>{Number(evaluation.overall_score || 0).toFixed(1)}</td>
+                  <td><span className={`status ${statusClass(Number(evaluation.overall_score || 0) >= 70 ? 'Active' : 'Terminated')}`}>{evaluation.rating}</span></td>
+                  <td>{evaluation.goals || 'N/A'}</td>
+                  <td>{evaluation.action_plan || 'N/A'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   function renderAddTabContent() {
     if (addActiveTab === 'basic') return renderBasicAddTab();
     if (addActiveTab === 'systemAccount') return renderSystemAccountAddTab();
     if (addActiveTab === 'payrollInfo') return renderPayrollInfoAddTab();
     if (addActiveTab === 'payrollComputation') return renderPayrollComputationAddTab();
+    if (addActiveTab === 'evaluations') return renderEvaluationTab();
     if (addActiveTab === 'allowances') {
       return (
         <div className="legacy-form-box">
@@ -999,7 +1307,7 @@ export default function EmployeeManagementPage() {
               onClick={() => handleDeleteEmployee(createdEmpCode || selectedEmpCode)}
               disabled={addSaving}
             >
-              Delete
+              Delete Employee Record
             </button>
           ) : null}
           <button type="button" className="btn secondary" onClick={detailModalOpen ? closeDetailModal : closeAddEmployeeModal} disabled={addSaving}>

@@ -69,18 +69,18 @@ module.exports = function (app, pool) {
     const templates = {
       Pending: {
         subject: `Leave request for review: ${leaveName}`,
-        intro: 'Your leave request has been submitted and is now for review.',
-        closing: 'You will receive another email once HR/Admin approves or rejects your request.'
+        intro: 'Your leave request has been successfully submitted and is currently awaiting review by the designated approver. We have received your application and it is now under evaluation. You will be notified once a decision has been made regarding your request.',
+        closing: 'Thank you for your patience. Please monitor your notifications for updates on the status of your leave request.'
       },
       Approved: {
         subject: `Leave request approved: ${leaveName}`,
-        intro: 'Good news. Your leave request has been approved.',
-        closing: 'Please coordinate with your supervisor or HR if you need any further schedule guidance.'
+        intro: 'We are pleased to inform you that your leave request has been reviewed and approved by the authorized approver. Please ensure that all necessary work handovers and responsibilities are properly coordinated before your leave date.',
+        closing: 'We wish you a pleasant and productive leave period. If you have any questions, please contact your supervisor or the Human Resources Department.'
       },
       Rejected: {
         subject: `Leave request rejected: ${leaveName}`,
-        intro: 'Your leave request has been reviewed and rejected.',
-        closing: 'Please contact HR or your supervisor if you need clarification about this decision.'
+        intro: 'We regret to inform you that your leave request has been reviewed and was not approved. This decision may be based on operational requirements, insufficient leave credits, scheduling conflicts, or other company policies.',
+        closing: 'For further clarification regarding this decision, please contact your supervisor or the Human Resources Department.'
       }
     };
 
@@ -98,7 +98,7 @@ module.exports = function (app, pool) {
       '',
       template.closing,
       '',
-      'Payroll System'
+      'Astreablue Intelligence Inc. HRIS & Payroll System'
     ].join('\n');
 
     const htmlEmployeeName = escapeMailHtml(employeeName);
@@ -119,7 +119,7 @@ module.exports = function (app, pool) {
         <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>${htmlStatus}</td></tr>
       </table>
       <p>${escapeMailHtml(template.closing)}</p>
-      <p>Payroll System</p>
+      <p>Astreablue Intelligence Inc. HRIS &  Payroll System</p>
     `;
 
     return { subject: template.subject, text, html };
@@ -473,7 +473,7 @@ module.exports = function (app, pool) {
          FROM employee_leave_requests r
          JOIN leave_types t ON t.leave_type_id = r.leave_type_id
          WHERE r.employee_id = ?
-         ORDER BY r.created_at DESC
+         ORDER BY r.updated_at DESC
          LIMIT 120`,
         [employee.employee_id]
       );
@@ -635,9 +635,7 @@ module.exports = function (app, pool) {
          LEFT JOIN employee_employment ee ON ee.employee_id = e.employee_id
          JOIN leave_types t ON t.leave_type_id = r.leave_type_id
          ${whereClause}
-         ORDER BY
-           CASE r.status WHEN 'Pending' THEN 0 WHEN 'Approved' THEN 1 WHEN 'Rejected' THEN 2 ELSE 3 END,
-           r.created_at DESC
+         ORDER BY r.updated_at DESC
          LIMIT 200`,
         params
       );

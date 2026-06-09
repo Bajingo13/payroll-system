@@ -213,7 +213,7 @@ module.exports = function (app, pool) {
       '',
       template.closing,
       '',
-      'Payroll System'
+      'Astreablue Intelligence Inc. HRIS & Payroll System'
     ];
 
     const html = `
@@ -413,9 +413,7 @@ module.exports = function (app, pool) {
          JOIN employees e ON e.employee_id = r.employee_id
          LEFT JOIN employee_employment ee ON ee.employee_id = e.employee_id
          ${whereClause}
-         ORDER BY
-           CASE r.status WHEN 'Pending' THEN 0 WHEN 'Approved' THEN 1 WHEN 'Rejected' THEN 2 ELSE 3 END,
-           r.created_at DESC
+         ORDER BY r.updated_at DESC, r.created_at DESC
          LIMIT 200`,
         params
       );
@@ -522,3 +520,4 @@ module.exports = function (app, pool) {
     }
   });
 };
+``

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 import Modal from '../components/Modal.jsx';
 import { AboutUsContent, ContactsContent, HelpContent } from '../components/InfoPopups.jsx';
+import PasswordToggleIcon from '../components/PasswordToggleIcon.jsx';
 
 function normalizeRole(rawRole) {
   const role = String(rawRole || '').trim().toLowerCase();
@@ -179,7 +180,7 @@ export default function LoginPage() {
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 title={showPassword ? 'Hide password' : 'Show password'}
               >
-                {showPassword ? '🙈' : '👁'}
+                <PasswordToggleIcon visible={showPassword} />
               </button>
             </div>
 

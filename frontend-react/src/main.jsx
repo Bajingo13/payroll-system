@@ -26,25 +26,52 @@ import AuditingPage from './pages/AuditingPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import UtilitiesPage from './pages/UtilitiesPage.jsx';
 import AdvancedModulesPage from './pages/AdvancedModulesPage.jsx';
+import SystemConfigPage from './pages/SystemConfigPage.jsx';
 import UserSettingsPage from './pages/UserSettingsPage.jsx';
 import AboutUsPage from './pages/AboutUsPage.jsx';
 import HelpPage from './pages/HelpPage.jsx';
 import ContactsPage from './pages/ContactsPage.jsx';
+import { canAccessFeature, getAccessibleFeatures, normalizeRole } from './access/roleAccess.js';
 import './styles.css';
 
-function normalizeRole(rawRole) {
-  const role = String(rawRole || '').trim().toLowerCase();
-  if (!role) return 'unknown';
-  if (role === 'employee') return 'employee';
-  if (role === 'hr' || role.includes('hr') || role.includes('human resource')) return 'hr';
-  if (role === 'admin' || role.includes('admin')) return 'admin';
-  return 'unknown';
-}
+const FEATURE_HOME_ROUTES = {
+  dashboard: '/dashboard',
+  'user-settings': '/user-settings',
+  'personal-management': '/personal-management',
+  'employee-leave-request': '/employee-leave-request',
+  'employee-overtime-request': '/employee-overtime-request',
+  'employee-payroll-information': '/employee-payroll-information',
+  'employee-schedule': '/employee-schedule',
+  'employee-management': '/employee-management',
+  'employee-documents': '/employee-documents',
+  'organization-setup': '/organization-setup',
+  'employee-attendance': '/employee-attendance',
+  'leave-management': '/leave-management',
+  'overtime-management': '/overtime-management',
+  'schedule-management': '/schedule-management',
+  'leave-calendar': '/leave-calendar',
+  'performance-management': '/performance-management',
+  'payroll-computation': '/payroll-computation',
+  reports: '/reports/payroll-journal',
+  'government-reports': '/government-reports',
+  'report-builder': '/report-builder',
+  auditing: '/auditing',
+  'year-end-payroll': '/year-end-payroll',
+  'loan-deduction-management': '/loan-deduction-management',
+  'security-backup': '/security-backup',
+  utilities: '/utilities',
+  'advanced-modules': '/advanced-modules',
+  'system-config': '/system-config',
+  'about-us': '/about-us',
+  help: '/help',
+  contacts: '/contacts'
+};
 
 function resolveHomeRoute(rawRole) {
   const role = normalizeRole(rawRole);
-  if (role === 'employee') return '/dashboard';
-  if (role === 'admin' || role === 'hr') return '/dashboard';
+  if (role === 'admin') return '/dashboard';
+  const firstFeature = getAccessibleFeatures(role).find((feature) => FEATURE_HOME_ROUTES[feature]);
+  if (firstFeature) return FEATURE_HOME_ROUTES[firstFeature];
   return '/login';
 }
 
@@ -59,9 +86,9 @@ function ProtectedRoute({ children }) {
   return user?.user_id ? children : <Navigate to="/login" replace />;
 }
 
-function RoleRoute({ roles, children }) {
+function RoleRoute({ roles, feature, children }) {
   const { user } = useAuth();
-  return hasRoleAccess(user?.role, roles)
+  return hasRoleAccess(user?.role, roles) && (!feature || canAccessFeature(user?.role, feature))
     ? children
     : <Navigate to={resolveHomeRoute(user?.role)} replace />;
 }
@@ -107,7 +134,7 @@ function AppRoutes() {
         <Route
           path="personal-management"
           element={
-            <RoleRoute roles={['employee']}>
+            <RoleRoute roles={['employee']} feature="personal-management">
               <ProfileManagementPage />
             </RoleRoute>
           }
@@ -116,7 +143,7 @@ function AppRoutes() {
         <Route
           path="employee-leave-request"
           element={
-            <RoleRoute roles={['employee']}>
+            <RoleRoute roles={['employee']} feature="employee-leave-request">
               <EmployeeLeaveRequestPage />
             </RoleRoute>
           }
@@ -125,7 +152,7 @@ function AppRoutes() {
         <Route
           path="employee-payroll-information"
           element={
-            <RoleRoute roles={['employee']}>
+            <RoleRoute roles={['employee']} feature="employee-payroll-information">
               <EmployeePayrollInformationPage />
             </RoleRoute>
           }
@@ -134,7 +161,7 @@ function AppRoutes() {
         <Route
           path="employee-schedule"
           element={
-            <RoleRoute roles={['employee']}>
+            <RoleRoute roles={['employee']} feature="employee-schedule">
               <EmployeeSchedulePage />
             </RoleRoute>
           }
@@ -143,7 +170,7 @@ function AppRoutes() {
         <Route
           path="dashboard"
           element={
-            <RoleRoute roles={['admin', 'hr', 'employee']}>
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="dashboard">
               <DashboardRoute />
             </RoleRoute>
           }
@@ -152,7 +179,7 @@ function AppRoutes() {
         <Route
           path="employee-overtime-request"
           element={
-            <RoleRoute roles={['employee']}>
+            <RoleRoute roles={['employee']} feature="employee-overtime-request">
               <EmployeeOvertimeRequestPage />
             </RoleRoute>
           }
@@ -161,7 +188,7 @@ function AppRoutes() {
         <Route
           path="user-settings"
           element={
-            <RoleRoute roles={['admin', 'hr', 'employee']}>
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="user-settings">
               <UserSettingsPage />
             </RoleRoute>
           }
@@ -175,7 +202,7 @@ function AppRoutes() {
         <Route
           path="employee-attendance"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="employee-attendance">
               <EmployeeAttendancePage />
             </RoleRoute>
           }
@@ -184,7 +211,7 @@ function AppRoutes() {
         <Route
           path="leave-management"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="leave-management">
               <LeaveManagementPage />
             </RoleRoute>
           }
@@ -193,7 +220,7 @@ function AppRoutes() {
         <Route
           path="employee-management"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="employee-management">
               <EmployeeManagementPage />
             </RoleRoute>
           }
@@ -202,7 +229,7 @@ function AppRoutes() {
         <Route
           path="schedule-management"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="schedule-management">
               <ScheduleManagementPage />
             </RoleRoute>
           }
@@ -211,7 +238,7 @@ function AppRoutes() {
         <Route
           path="payroll-computation"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="payroll-computation">
               <PayrollComputationPage />
             </RoleRoute>
           }
@@ -220,7 +247,7 @@ function AppRoutes() {
         <Route
           path="auditing"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="auditing">
               <AuditingPage />
             </RoleRoute>
           }
@@ -234,7 +261,7 @@ function AppRoutes() {
         <Route
           path="reports/:reportType"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="reports">
               <ReportsPage />
             </RoleRoute>
           }
@@ -243,7 +270,7 @@ function AppRoutes() {
         <Route
           path="advanced-modules"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="advanced-modules">
               <AdvancedModulesPage />
             </RoleRoute>
           }
@@ -252,7 +279,7 @@ function AppRoutes() {
         <Route
           path="overtime-management"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="overtime-management">
               <OvertimeManagementPage />
             </RoleRoute>
           }
@@ -261,7 +288,7 @@ function AppRoutes() {
         <Route
           path="employee-documents"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="employee-documents">
               <AdvancedModulesPage moduleKey="documents" />
             </RoleRoute>
           }
@@ -270,7 +297,7 @@ function AppRoutes() {
         <Route
           path="organization-setup"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="organization-setup">
               <AdvancedModulesPage moduleKey="organization" />
             </RoleRoute>
           }
@@ -279,7 +306,7 @@ function AppRoutes() {
         <Route
           path="year-end-payroll"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="year-end-payroll">
               <AdvancedModulesPage moduleKey="payroll" />
             </RoleRoute>
           }
@@ -288,7 +315,7 @@ function AppRoutes() {
         <Route
           path="loan-deduction-management"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="loan-deduction-management">
               <AdvancedModulesPage moduleKey="loan" />
             </RoleRoute>
           }
@@ -297,7 +324,7 @@ function AppRoutes() {
         <Route
           path="government-reports"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="government-reports">
               <AdvancedModulesPage moduleKey="compliance" />
             </RoleRoute>
           }
@@ -306,7 +333,7 @@ function AppRoutes() {
         <Route
           path="leave-calendar"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="leave-calendar">
               <AdvancedModulesPage moduleKey="leave" />
             </RoleRoute>
           }
@@ -315,7 +342,7 @@ function AppRoutes() {
         <Route
           path="performance-management"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="performance-management">
               <AdvancedModulesPage moduleKey="performance" />
             </RoleRoute>
           }
@@ -324,7 +351,7 @@ function AppRoutes() {
         <Route
           path="report-builder"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="report-builder">
               <AdvancedModulesPage moduleKey="reports" />
             </RoleRoute>
           }
@@ -333,7 +360,7 @@ function AppRoutes() {
         <Route
           path="security-backup"
           element={
-            <RoleRoute roles={['admin']}>
+            <RoleRoute roles={['admin']} feature="security-backup">
               <AdvancedModulesPage moduleKey="security" />
             </RoleRoute>
           }
@@ -341,18 +368,23 @@ function AppRoutes() {
 
         <Route
           path="analytics-dashboard"
-          element={
-            <RoleRoute roles={['admin', 'hr']}>
-              <AdvancedModulesPage moduleKey="analytics" />
-            </RoleRoute>
-          }
+          element={<Navigate to="/dashboard" replace />}
         />
 
         <Route
           path="utilities"
           element={
-            <RoleRoute roles={['admin', 'hr']}>
+            <RoleRoute roles={['admin', 'hr']} feature="utilities">
               <UtilitiesPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="system-config"
+          element={
+            <RoleRoute roles={['admin']} feature="system-config">
+              <SystemConfigPage />
             </RoleRoute>
           }
         />
@@ -360,7 +392,7 @@ function AppRoutes() {
         <Route
           path="about-us"
           element={
-            <RoleRoute roles={['admin', 'hr', 'employee']}>
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="about-us">
               <AboutUsPage />
             </RoleRoute>
           }
@@ -369,7 +401,7 @@ function AppRoutes() {
         <Route
           path="help"
           element={
-            <RoleRoute roles={['admin', 'hr', 'employee']}>
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="help">
               <HelpPage />
             </RoleRoute>
           }
@@ -378,7 +410,7 @@ function AppRoutes() {
         <Route
           path="contacts"
           element={
-            <RoleRoute roles={['admin', 'hr', 'employee']}>
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="contacts">
               <ContactsPage />
             </RoleRoute>
           }

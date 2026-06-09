@@ -57,6 +57,98 @@ module.exports = function (app, pool) {
     return normalized.includes('admin') || normalized.includes('hr') || normalized.includes('human resource');
   }
 
+  function canManagePerformance(role) {
+    const normalized = String(role || '').trim().toLowerCase();
+    return normalized.includes('admin') || normalized.includes('hr') || normalized.includes('human resource');
+  }
+
+  async function ensureEmployeeEvaluationTable(conn) {
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS employee_evaluations (
+        evaluation_id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        review_period VARCHAR(100) NOT NULL,
+        review_date DATE NOT NULL,
+        evaluator_name VARCHAR(150) NULL,
+        productivity_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+        quality_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+        teamwork_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+        attendance_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+        initiative_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+        overall_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+        rating VARCHAR(50) NOT NULL DEFAULT 'Needs Improvement',
+        strengths TEXT NULL,
+        improvement_areas TEXT NULL,
+        goals TEXT NULL,
+        action_plan TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_employee_evaluations_employee_date (employee_id, review_date),
+        CONSTRAINT fk_employee_evaluations_employee
+          FOREIGN KEY (employee_id) REFERENCES employees (employee_id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    `);
+  }
+
+  function buildEvaluationSummary(evaluations) {
+    const rows = Array.isArray(evaluations) ? evaluations : [];
+    if (!rows.length) {
+      return {
+        count: 0,
+        latestScore: null,
+        latestRating: '',
+        averageScore: null,
+        growthDelta: null
+      };
+    }
+
+    const scores = rows
+      .map((row) => Number(row.overall_score))
+      .filter((score) => Number.isFinite(score));
+    const latest = rows[0] || {};
+    const oldest = rows[rows.length - 1] || latest;
+    const latestScore = Number(latest.overall_score);
+    const oldestScore = Number(oldest.overall_score);
+
+    return {
+      count: rows.length,
+      latestScore: Number.isFinite(latestScore) ? latestScore : null,
+      latestRating: latest.rating || '',
+      averageScore: scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null,
+      growthDelta: Number.isFinite(latestScore) && Number.isFinite(oldestScore) ? latestScore - oldestScore : null
+    };
+  }
+
+  async function getEmployeeEvaluations(conn, employeeId) {
+    await ensureEmployeeEvaluationTable(conn);
+    const [rows] = await conn.execute(
+      `SELECT
+          evaluation_id,
+          review_period,
+          DATE_FORMAT(review_date, '%Y-%m-%d') AS review_date,
+          evaluator_name,
+          productivity_score,
+          quality_score,
+          teamwork_score,
+          attendance_score,
+          initiative_score,
+          overall_score,
+          rating,
+          strengths,
+          improvement_areas,
+          goals,
+          action_plan,
+          DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM employee_evaluations
+       WHERE employee_id = ?
+       ORDER BY review_date DESC, evaluation_id DESC
+       LIMIT 12`,
+      [employeeId]
+    );
+    return rows;
+  }
+
   function isDateOnly(value) {
     return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
   }
@@ -304,6 +396,28 @@ module.exports = function (app, pool) {
         }
       }
 
+      let payrollRunHistory = [];
+      try {
+        const [payrollHistoryRows] = await conn.execute(`
+          SELECT
+            pr.run_id,
+            pr.payroll_range,
+            pr.status,
+            COALESCE(SUM(ep.net_pay), 0) AS total_net_pay,
+            COALESCE(SUM(ep.gross_pay), 0) AS total_gross_pay,
+            COUNT(ep.employee_id) AS headcount
+          FROM payroll_runs pr
+          LEFT JOIN employee_payroll ep ON ep.run_id = pr.run_id
+          WHERE pr.status IN ('Completed', 'Generated', 'Locked')
+          GROUP BY pr.run_id, pr.payroll_range, pr.status
+          ORDER BY pr.run_id DESC
+          LIMIT 4
+        `);
+        payrollRunHistory = payrollHistoryRows;
+      } catch (payrollHistErr) {
+        if (payrollHistErr.code !== 'ER_NO_SUCH_TABLE') throw payrollHistErr;
+      }
+
       conn.release();
 
       res.json({
@@ -312,7 +426,8 @@ module.exports = function (app, pool) {
         systemLogs: logsToday[0].total,
         employeeStatuses,
         payrollStatuses,
-        leaveStatuses
+        leaveStatuses,
+        payrollRunHistory
       });
     } catch (err) {
       console.error("Dashboard error:", err);
@@ -320,6 +435,82 @@ module.exports = function (app, pool) {
         success: false,
         message: "Server error"
       });
+    }
+  });
+
+  app.get('/api/admin/performance-evaluations', async (req, res) => {
+    const userId = Number(req.query.user_id);
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Missing user_id' });
+    }
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+
+      const [users] = await conn.execute(
+        'SELECT user_id, full_name, role FROM users WHERE user_id = ? LIMIT 1',
+        [userId]
+      );
+      const user = users[0] || null;
+      if (!user || !canManagePerformance(user.role)) {
+        return res.status(403).json({ success: false, message: 'Only Admin or HR users can view performance ratings.' });
+      }
+
+      await ensureEmployeeEvaluationTable(conn);
+
+      const [rows] = await conn.execute(
+        `SELECT
+            e.employee_id,
+            e.emp_code,
+            CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+            COALESCE(ee.department, 'N/A') AS department,
+            COALESCE(ee.position, 'N/A') AS position,
+            ev.evaluation_id,
+            ev.review_period,
+            DATE_FORMAT(ev.review_date, '%Y-%m-%d') AS review_date,
+            ev.evaluator_name,
+            ev.overall_score,
+            ev.rating,
+            ev.goals,
+            ev.action_plan
+         FROM employee_evaluations ev
+         INNER JOIN (
+           SELECT employee_id, MAX(evaluation_id) AS evaluation_id
+           FROM employee_evaluations
+           GROUP BY employee_id
+         ) latest ON latest.evaluation_id = ev.evaluation_id
+         INNER JOIN employees e ON e.employee_id = ev.employee_id
+         LEFT JOIN employee_employment ee
+           ON ee.employment_id = (
+             SELECT employment_id
+             FROM employee_employment
+             WHERE employee_id = e.employee_id
+             ORDER BY employment_id DESC
+             LIMIT 1
+           )
+         ORDER BY ev.review_date DESC, ev.evaluation_id DESC
+         LIMIT 200`
+      );
+
+      const scores = rows
+        .map((row) => Number(row.overall_score))
+        .filter((score) => Number.isFinite(score));
+
+      return res.json({
+        success: true,
+        evaluations: rows,
+        summary: {
+          employeesWithRatings: rows.length,
+          averageScore: scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null,
+          latestRating: rows[0]?.rating || ''
+        }
+      });
+    } catch (err) {
+      console.error('Performance evaluations load error:', err);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
     }
   });
 
@@ -377,6 +568,8 @@ module.exports = function (app, pool) {
 
       let payrollSummary = null;
       let payrollHistory = [];
+      let evaluations = [];
+      let evaluationSummary = buildEvaluationSummary([]);
 
       if (employee) {
         const [summaryRows] = await conn.execute(
@@ -415,6 +608,9 @@ module.exports = function (app, pool) {
         );
 
         payrollHistory = historyRows;
+
+        evaluations = await getEmployeeEvaluations(conn, employee.employee_id);
+        evaluationSummary = buildEvaluationSummary(evaluations);
       }
 
       const todayTime = await getTodayTimeEntries(conn, userId);
@@ -435,6 +631,8 @@ module.exports = function (app, pool) {
         employee,
         payrollSummary,
         payrollHistory,
+        evaluations,
+        evaluationSummary,
         todayTime,
         attendanceLogs: attendanceRows
       });

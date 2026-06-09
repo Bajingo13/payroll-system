@@ -55,6 +55,27 @@ module.exports = function (app, pool) {
     `);
   }
 
+  async function ensureUserAccountColumns(conn) {
+    const [columns] = await conn.execute(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'users'
+         AND COLUMN_NAME IN ('account_status', 'deactivated_at', 'deleted_at')`
+    );
+    const existing = new Set(columns.map((column) => column.COLUMN_NAME));
+
+    if (!existing.has('account_status')) {
+      await conn.execute("ALTER TABLE users ADD COLUMN account_status VARCHAR(20) NOT NULL DEFAULT 'Active'");
+    }
+    if (!existing.has('deactivated_at')) {
+      await conn.execute('ALTER TABLE users ADD COLUMN deactivated_at DATETIME NULL');
+    }
+    if (!existing.has('deleted_at')) {
+      await conn.execute('ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL');
+    }
+  }
+
   async function findUserByResetUsername(conn, username) {
     const [rows] = await conn.execute(
       `SELECT u.user_id, u.username, u.full_name, ec.email
@@ -106,19 +127,19 @@ module.exports = function (app, pool) {
       text: [
         `Hi ${user.full_name || user.username || 'there'},`,
         '',
-        'We received a request to reset your payroll system password.',
+        'We received a request to reset your Astreablue Intelligence Inc. HRIS & Payroll System password.',
         `Open this link to set a new password: ${resetUrl}`,
         '',
         'This link expires in 30 minutes. If you did not request this, you can ignore this email.',
         '',
-        'Payroll System'
+        'Astreablue Intelligence Inc. HRIS & Payroll System'
       ].join('\n'),
       html: `
         <p>Hi ${displayName},</p>
-        <p>We received a request to reset your payroll system password.</p>
+        <p>We received a request to reset your Astreablue Intelligence Inc. HRIS & Payroll System password.</p>
         <p><a href="${resetUrl}">Set a new password</a></p>
         <p>This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>
-        <p>Payroll System</p>
+        <p>Astreablue Intelligence Inc. HRIS & Payroll System</p>
       `
     });
 
@@ -141,6 +162,7 @@ module.exports = function (app, pool) {
 
     try {
       conn = await pool.getConnection();
+      await ensureUserAccountColumns(conn);
       console.log('LOGIN DB CONNECTION OK');
 
       const [rows] = await conn.execute(
@@ -158,6 +180,16 @@ module.exports = function (app, pool) {
       }
 
       const user = rows[0];
+      const accountStatus = String(user.account_status || 'Active').trim();
+      if (accountStatus !== 'Active') {
+        return res.status(403).json({
+          success: false,
+          message: accountStatus === 'Deleted'
+            ? 'This account has been deleted. Please contact Admin or HR.'
+            : 'This account is deactivated. Please contact Admin or HR.'
+        });
+      }
+
       const storedPassword = user.password || '';
 
       const BCRYPT_PREFIXES = ['$2a$', '$2b$', '$2x$', '$2y$'];
@@ -533,9 +565,10 @@ module.exports = function (app, pool) {
 
       const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
       const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await ensureUserAccountColumns(conn);
 
       const [result] = await conn.execute(
-        'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)',
+        "INSERT INTO users (username, password, full_name, role, account_status) VALUES (?, ?, ?, ?, 'Active')",
         [username, hashedPassword, full_name, role]
       );
 

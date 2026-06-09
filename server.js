@@ -332,7 +332,8 @@ if (useReactFrontend) {
     '/analytics-dashboard',
     '/reports',
     '/reports/:reportType',
-    '/utilities'
+    '/utilities',
+    '/system-config'
   ].forEach((route) => {
     app.get(route, (req, res) => {
       res.sendFile(path.join(reactDistPath, 'index.html'));
@@ -424,7 +425,9 @@ if (useReactFrontend) {
     require('./backend/audit_logs')(app, pool);
     require('./backend/utilities')(app, pool);
     require('./backend/employee_documents')(app, pool);
+    require('./backend/company_calendar')(app, pool);
     require('./backend/thirteenth_month')(app, pool);
+    require('./backend/system_config')(app, pool);
 
     app.get('/api/db-test', async (req, res) => {
       let conn;

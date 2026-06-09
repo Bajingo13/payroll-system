@@ -433,7 +433,6 @@ function setupFeatureNavigation() {
         { href: "organization_setup.html", label: "Departments & Salary Grades" },
         { href: "employee_attendance.html", label: "Employee Attendance" },
         { href: "admin_leave_management.html", label: "Leave Management" },
-        { href: "leave_calendar.html", label: "Leave Calendar" },
         { href: "performance_management.html", label: "Performance" }
       ])}
 
@@ -453,6 +452,7 @@ function setupFeatureNavigation() {
       ])}
 
       <li class="nav-section-label">System Tools</li>
+      <li${currentPage === "leave_calendar.html" ? ' class="active"' : ""}>${linkHtml("leave_calendar.html", "Company Calendar")}</li>
       <li${currentPage === "security_backup.html" ? ' class="active"' : ""}>${linkHtml("security_backup.html", "Security & Backup")}</li>
       <li${currentPage === "analytics_dashboard.html" ? ' class="active"' : ""}>${linkHtml("analytics_dashboard.html", "AI Analytics")}</li>
       <li${currentPage === "utilities.html" ? ' class="active"' : ""}>${linkHtml("utilities.html", "Utilities")}</li>
@@ -471,11 +471,11 @@ function setupFeatureNavigation() {
         { href: "organization_setup.html", label: "Departments & Salary Grades" },
         { href: "employee_attendance.html", label: "Employee Attendance" },
         { href: "admin_leave_management.html", label: "Leave Management" },
-        { href: "leave_calendar.html", label: "Leave Calendar" },
         { href: "performance_management.html", label: "Performance" }
       ])}
 
       <li class="nav-section-label">HR Tools</li>
+      <li${currentPage === "leave_calendar.html" ? ' class="active"' : ""}>${linkHtml("leave_calendar.html", "Company Calendar")}</li>
       <li${currentPage === "loan_deduction_management.html" ? ' class="active"' : ""}>${linkHtml("loan_deduction_management.html", "Loan Deduction Module")}</li>
       <li${currentPage === "analytics_dashboard.html" ? ' class="active"' : ""}>${linkHtml("analytics_dashboard.html", "Workforce Analytics")}</li>
       <li${currentPage === "utilities.html" ? ' class="active"' : ""}>${linkHtml("utilities.html", "Utilities")}</li>
@@ -546,8 +546,7 @@ function setupFeatureNavigation() {
   upsertDropdownLinks(employeeMenuSelector, [
     { href: "employee_documents.html", label: "201 Files", afterHref: "employee_management.html" },
     { href: "organization_setup.html", label: "Departments & Salary Grades", afterHref: "employee_documents.html" },
-    { href: "leave_calendar.html", label: "Leave Calendar", afterHref: "admin_leave_management.html" },
-    { href: "performance_management.html", label: "Performance", afterHref: "leave_calendar.html" }
+    { href: "performance_management.html", label: "Performance", afterHref: "admin_leave_management.html" }
   ]);
 
   if (isAdmin) {
@@ -883,6 +882,24 @@ function downloadTextFile(filename, content, mimeType) {
   URL.revokeObjectURL(url);
 }
 
+function getLegacyReportMetadata(title) {
+  return {
+    companyName: "Astreablue Intelligence Inc.",
+    title: title || "Report",
+    generatedAt: new Date().toLocaleString("en-PH", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    }),
+    generatedBy: sessionStorage.getItem("admin_name") || sessionStorage.getItem("user_id") || "System User",
+    signatories: ["Prepared By:", "Checked By:", "Verified By:", "Approved By:"]
+  };
+}
+
 function excelText(value) {
   const text = String(value ?? "");
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
@@ -933,6 +950,10 @@ function renderPreviousLeaveRequests(requests) {
   const previousRequests = (requests || []).filter((request) => {
     const status = String(request.status || "").toLowerCase();
     return status === "approved" || status === "rejected";
+  }).sort((a, b) => {
+    const updatedA = new Date(String(a.updated_at || a.created_at || "").replace(" ", "T")).getTime();
+    const updatedB = new Date(String(b.updated_at || b.created_at || "").replace(" ", "T")).getTime();
+    return (Number.isNaN(updatedB) ? 0 : updatedB) - (Number.isNaN(updatedA) ? 0 : updatedA);
   });
 
   if (previousRequests.length === 0) {
@@ -1101,6 +1122,7 @@ async function exportLeaveRequestsForExcel() {
       formatDashboardDate(request.updated_at)
     ]);
 
+    const meta = getLegacyReportMetadata("Leave Management Report");
     const htmlTable = `
       <html>
       <head>
@@ -1109,9 +1131,23 @@ async function exportLeaveRequestsForExcel() {
           table { border-collapse: collapse; }
           th, td { border: 1px solid #999; padding: 6px; mso-number-format:"\\@"; }
           th { background: #e8f5e8; font-weight: bold; }
+          .report-header { text-align: center; }
+          .report-meta { margin-left: auto; margin-right: auto; }
+          .report-meta td,
+          .signatories td { border: 0; }
+          .signatories td { padding: 22px 24px 6px 0; min-width: 140px; }
         </style>
       </head>
       <body>
+        <div class="report-header">
+          <h3>${escapeHtml(meta.companyName)}</h3>
+        </div>
+        <table class="report-meta">
+          <tr><td><strong>Report</strong></td><td>${escapeHtml(meta.title)}</td></tr>
+          <tr><td><strong>Generated</strong></td><td>${escapeHtml(meta.generatedAt)}</td></tr>
+          <tr><td><strong>Generated By</strong></td><td>${escapeHtml(meta.generatedBy)}</td></tr>
+        </table>
+        <br>
         <table>
           <thead>
             <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
@@ -1121,6 +1157,10 @@ async function exportLeaveRequestsForExcel() {
               <tr>${row.map((cell) => `<td>${escapeHtml(excelText(cell))}</td>`).join("")}</tr>
             `).join("")}
           </tbody>
+        </table>
+        <br>
+        <table class="signatories">
+          <tr>${meta.signatories.map((label) => `<td><strong>${escapeHtml(label)}</strong><br><br>________________________</td>`).join("")}</tr>
         </table>
       </body>
       </html>
@@ -1453,6 +1493,7 @@ if (window.location.pathname.includes('employee_management.html')) {
     if (!printWindow) {
       throw new Error('Please allow pop-ups to print employee files.');
     }
+    const meta = getLegacyReportMetadata("Employee File Export");
 
     const rows = [
       ['Employee ID', employee.employee_id],
@@ -1480,19 +1521,31 @@ if (window.location.pathname.includes('employee_management.html')) {
           th, td { border: 1px solid #d1d5db; padding: 10px 12px; text-align: left; vertical-align: top; }
           th { width: 220px; background: #f9fafb; }
           .meta { margin-bottom: 18px; }
+          .report-header { text-align: center; }
           .print-actions { margin-top: 18px; }
           .print-actions button { padding: 10px 14px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+          .signatories { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 34px; font-size: 12px; }
+          .signatories span { display: block; border-bottom: 1px solid #333; height: 30px; }
           @media print { .print-actions { display: none; } body { margin: 0; } }
         </style>
       </head>
       <body>
-        <h1>Employee File</h1>
-        <p class="meta">Printable employee file information generated from the payroll system.</p>
+        <div class="report-header">
+          <h1>${escapePrintHtml(meta.companyName)}</h1>
+          <p class="meta">
+            <strong>${escapePrintHtml(meta.title)}</strong><br>
+            Generated: ${escapePrintHtml(meta.generatedAt)}<br>
+            Generated By: ${escapePrintHtml(meta.generatedBy)}
+          </p>
+        </div>
         <table>
           <tbody>
             ${rows.map(([label, value]) => `<tr><th>${escapePrintHtml(label)}</th><td>${escapePrintHtml(value)}</td></tr>`).join('')}
           </tbody>
         </table>
+        <div class="signatories">
+          ${meta.signatories.map((label) => `<div><strong>${escapePrintHtml(label)}</strong><span></span></div>`).join('')}
+        </div>
         <div class="print-actions">
           <button type="button" onclick="window.print()">Print</button>
         </div>
@@ -8188,8 +8241,22 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
   // PRINT HANDLER
   // ================================
   async function printPayrollJournal() {
-    const headerHtml = document.getElementById('journalHeader').outerHTML;
-    const tableHtml = document.getElementById('journalTable').outerHTML;
+    const meta = getLegacyReportMetadata("Payroll Journal Details");
+    const headerHtml = `
+      <div class="report-export-header" style="text-align:center;">
+        <h2>${escapeHtml(meta.companyName)}</h2>
+        <p><strong>Report:</strong> ${escapeHtml(meta.title)}</p>
+        <p><strong>Generated:</strong> ${escapeHtml(meta.generatedAt)}</p>
+        <p><strong>Generated By:</strong> ${escapeHtml(meta.generatedBy)}</p>
+      </div>
+      ${document.getElementById('journalHeader').outerHTML}
+    `;
+    const tableHtml = `
+      ${document.getElementById('journalTable').outerHTML}
+      <div class="report-signatories" style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:34px;font-size:12px;">
+        ${meta.signatories.map((label) => `<div><strong>${escapeHtml(label)}</strong><div style="border-bottom:1px solid #333;height:30px;"></div></div>`).join("")}
+      </div>
+    `;
 
     // Get the paper size from the modal
     const paperSize = document.getElementById("printPaperSize").value;
@@ -8258,14 +8325,23 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
         META HEADER ROWS
     ================================= */
     const now = new Date();
+    const meta = getLegacyReportMetadata("Payroll Journal Details");
     const fmtDate = d => `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`;
     const fmtTime = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
     const periodText = document.getElementById("journalCoveredDate")?.textContent?.trim() || "N/A";
 
-    sheet.getCell("A1").value = `RUNDATE: ${fmtDate(now)}`;
-    sheet.getCell("A1").font = cal8;
-    sheet.getCell("A2").value = `RUNTIME: ${fmtTime(now)}`;
+    sheet.mergeCells("A1:CP1");
+    sheet.mergeCells("A2:CP2");
+    sheet.mergeCells("A3:CP3");
+    sheet.getCell("A1").value = meta.companyName;
+    sheet.getCell("A1").font = { ...cal11, ...bold };
+    sheet.getCell("A1").alignment = center;
+    sheet.getCell("A2").value = `Generated: ${meta.generatedAt}`;
     sheet.getCell("A2").font = cal8;
+    sheet.getCell("A2").alignment = center;
+    sheet.getCell("A3").value = `Generated By: ${meta.generatedBy}`;
+    sheet.getCell("A3").font = cal8;
+    sheet.getCell("A3").alignment = center;
 
     sheet.mergeCells("A4:CP4");
     const h4 = sheet.getCell("A4");
@@ -8935,6 +9011,19 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
         noIndent: true
       }
     );
+
+    row += 2;
+    const signatoryColumns = [1, 25, 49, 73];
+    meta.signatories.forEach((label, index) => {
+      const col = signatoryColumns[index];
+      const cell = sheet.getCell(row, col);
+      cell.value = label;
+      cell.font = { ...cal11, ...bold };
+      const lineCell = sheet.getCell(row + 2, col);
+      lineCell.border = { bottom: { style: "thin" } };
+      sheet.mergeCells(row, col, row, col + 18);
+      sheet.mergeCells(row + 2, col, row + 2, col + 18);
+    });
 
     /* ================================
         DOWNLOAD XLSX

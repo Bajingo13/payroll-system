@@ -50,13 +50,16 @@ export default function EmployeePayrollInformationPage() {
   }, [history]);
 
   return (
-    <>
-      <header className="header">
+    <div className="employee-modern-page">
+      <header className="employee-hero compact">
+        <div>
+          <span>Payroll</span>
         <h2>Payroll Information</h2>
         <p>View your latest payroll details and payroll history.</p>
+        </div>
       </header>
 
-      <section className="summary">
+      <section className="summary employee-modern-summary">
         <div className="card"><span>Payroll Period</span><strong>{summary?.payroll_range || '-'}</strong></div>
         <div className="card"><span>Date Generated</span><strong>{formatDateTime(summary?.date_generated)}</strong></div>
         <div className="card"><span>Gross Pay</span><strong>{money(summary?.gross_pay)}</strong></div>
@@ -65,7 +68,7 @@ export default function EmployeePayrollInformationPage() {
         <div className="card"><span>Status</span><strong>{summary?.payroll_status || '-'}</strong></div>
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <h3>Payroll History</h3>
         <div className="table-scroll">
           <table>
@@ -95,7 +98,7 @@ export default function EmployeePayrollInformationPage() {
           </table>
         </div>
 
-        <div className="summary employee-mini-summary">
+        <div className="summary employee-mini-summary employee-metric-strip">
           <div className="card"><span>History Gross Total</span><strong>{money(totals.gross)}</strong></div>
           <div className="card"><span>History Deductions Total</span><strong>{money(totals.deductions)}</strong></div>
           <div className="card"><span>History Net Total</span><strong>{money(totals.net)}</strong></div>
@@ -103,6 +106,6 @@ export default function EmployeePayrollInformationPage() {
 
         <p className="message">{message}</p>
       </section>
-    </>
+    </div>
   );
 }

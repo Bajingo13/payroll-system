@@ -470,18 +470,14 @@ module.exports = function (app, pool) {
 
         const params = [];
 
+        query += `
+            LEFT JOIN employee_payroll ep
+            ON ep.employee_id = e.employee_id
+            ${run_id ? "AND ep.run_id = ?" : ""}
+        `;
+
         if (run_id) {
-            query += `
-                JOIN employee_payroll ep
-                ON ep.employee_id = e.employee_id
-                AND ep.run_id = ?
-            `;
             params.push(run_id);
-        } else {
-            query += `
-                LEFT JOIN employee_payroll ep
-                ON ep.employee_id = e.employee_id
-            `;
         }
 
         const normalizedSearch = (search || "").trim();
@@ -524,6 +520,38 @@ module.exports = function (app, pool) {
         try {
             const conn = await pool.getConnection();
             const [rows] = await conn.query(query, params);
+
+            if (run_id && rows.length > 0 && option !== "hold") {
+                await conn.query(
+                    `INSERT INTO employee_payroll (run_id, employee_id, payroll_status)
+                    SELECT ?, src.employee_id, 'Active'
+                    FROM (
+                        SELECT ? AS run_id, ? AS employee_id
+                    ) src
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM employee_payroll existing
+                        WHERE existing.run_id = src.run_id
+                            AND existing.employee_id = src.employee_id
+                    )`,
+                    [run_id, run_id, rows[0].employee_id]
+                );
+
+                for (const row of rows.slice(1)) {
+                    await conn.query(
+                        `INSERT INTO employee_payroll (run_id, employee_id, payroll_status)
+                        SELECT ?, ?, 'Active'
+                        WHERE NOT EXISTS (
+                            SELECT 1
+                            FROM employee_payroll
+                            WHERE run_id = ?
+                                AND employee_id = ?
+                        )`,
+                        [run_id, row.employee_id, run_id, row.employee_id]
+                    );
+                }
+            }
+
             conn.release();
 
             res.json({ success: true, employees: rows });
@@ -905,6 +933,14 @@ module.exports = function (app, pool) {
         let conn;
 
         try {
+            const numberOrZero = (value) => {
+                const number = Number(value || 0);
+                return Number.isFinite(number) ? number : 0;
+            };
+            const safeAbsenceTime = numberOrZero(absence_time);
+            const safeLateTime = numberOrZero(late_time);
+            const safeUndertime = numberOrZero(undertime);
+
             conn = await pool.getConnection();
             await conn.beginTransaction();
 
@@ -936,7 +972,7 @@ module.exports = function (app, pool) {
                         payroll_status = ?, gross_pay = ?, total_deductions = ?, net_pay = ?
                     WHERE employee_id = ? AND run_id = ?`,
                     [
-                        basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
+                        basic_salary, safeAbsenceTime, absence_deduction, safeLateTime, late_deduction, safeUndertime, undertime_deduction,
                         overtime, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
@@ -1390,7 +1426,7 @@ module.exports = function (app, pool) {
                         payroll_status, gross_pay, total_deductions, net_pay)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
-                        run_id, employeeId, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
+                        run_id, employeeId, basic_salary, safeAbsenceTime, absence_deduction, safeLateTime, late_deduction, safeUndertime, undertime_deduction,
                         overtime, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,

@@ -25,6 +25,17 @@ function statusClass(status) {
   return 'pending';
 }
 
+function updatedTime(request) {
+  const updated = new Date(String(request.updated_at || request.created_at || '').replace(' ', 'T')).getTime();
+  return Number.isNaN(updated) ? 0 : updated;
+}
+
+function previousByUpdatedAt(requests) {
+  return (requests || [])
+    .filter((request) => ['Approved', 'Rejected'].includes(request.status))
+    .sort((a, b) => updatedTime(b) - updatedTime(a));
+}
+
 export default function LeaveManagementPage() {
   const { user } = useAuth();
   const [requests, setRequests] = useState([]);
@@ -102,7 +113,7 @@ export default function LeaveManagementPage() {
   }
 
   const previousRequests = useMemo(
-    () => requests.filter((request) => ['Approved', 'Rejected'].includes(request.status)),
+    () => previousByUpdatedAt(requests),
     [requests]
   );
 
@@ -168,7 +179,7 @@ function PreviousRequestsSection({ loadRequests, fallbackRequests }) {
   useEffect(() => {
     loadRequests()
       .then((allRequests) => {
-        setRequests(allRequests.filter((request) => ['Approved', 'Rejected'].includes(request.status)));
+        setRequests(previousByUpdatedAt(allRequests));
       })
       .catch((err) => console.error('Previous leave requests failed:', err));
   }, [fallbackRequests.length]);

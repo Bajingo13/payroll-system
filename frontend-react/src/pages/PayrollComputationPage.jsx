@@ -57,9 +57,9 @@ function toNumber(value) {
 
 function makeEmptyPayroll() {
   return moneyFields.reduce((acc, field) => ({ ...acc, [field]: '' }), {
-    absence_time: '',
-    late_time: '',
-    undertime: '',
+    absence_time: 0,
+    late_time: 0,
+    undertime: 0,
     payroll_status: 'Active'
   });
 }
@@ -96,11 +96,11 @@ export default function PayrollComputationPage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const selectedGroup = meta.payrollGroups.find((item) => String(item.group_id) === String(filters.payroll_group));
   const selectedPeriod = meta.payrollPeriods.find((item) => String(item.period_id) === String(filters.payroll_period));
   const selectedMonth = meta.payrollMonths.find((item) => String(item.month_id) === String(filters.month));
   const selectedYear = meta.payrollYears.find((item) => String(item.year_id) === String(filters.year));
   const payrollRange = [selectedPeriod?.period_name, selectedMonth?.month_name, selectedYear?.year_value].filter(Boolean).join(' ');
+  const periodReady = Boolean(filters.payroll_group && filters.payroll_period && filters.month && filters.year);
 
   const totals = useMemo(() => {
     const gross =
@@ -196,7 +196,6 @@ export default function PayrollComputationPage() {
       const effectiveRunId = await ensurePayrollRun();
       const params = {
         option: filters.option,
-        payroll_period: selectedGroup?.group_name || '',
         company: filters.company || '',
         location: filters.location || '',
         branch: filters.branch || '',
@@ -242,9 +241,9 @@ export default function PayrollComputationPage() {
         nextPayroll[field] = record[field] ?? record.previousYtd?.[field] ?? '';
       });
       nextPayroll.basic_salary = record.basic_salary ?? record.main_computation ?? '';
-      nextPayroll.absence_time = record.absence_time || '';
-      nextPayroll.late_time = record.late_time || '';
-      nextPayroll.undertime = record.undertime || '';
+      nextPayroll.absence_time = record.absence_time ?? 0;
+      nextPayroll.late_time = record.late_time ?? 0;
+      nextPayroll.undertime = record.undertime ?? 0;
       nextPayroll.payroll_status = record.payroll_status || 'Active';
 
       setSelectedEmployee(employee);
@@ -271,9 +270,9 @@ export default function PayrollComputationPage() {
       const payload = {
         run_id: runId,
         ...moneyFields.reduce((acc, field) => ({ ...acc, [field]: toNumber(payroll[field]) }), {}),
-        absence_time: payroll.absence_time || '',
-        late_time: payroll.late_time || '',
-        undertime: payroll.undertime || '',
+        absence_time: toNumber(payroll.absence_time),
+        late_time: toNumber(payroll.late_time),
+        undertime: toNumber(payroll.undertime),
         payroll_status: payroll.payroll_status || 'Active',
         gross_pay: totals.gross,
         grand_total_deductions: totals.deductions,
@@ -305,10 +304,19 @@ export default function PayrollComputationPage() {
       </header>
 
       <section className="table-section payroll-setup">
-        <h3>Step 1: Setup Payroll</h3>
+        <div className="payroll-section-heading">
+          <div>
+            <h3>Step 1: Setup Payroll</h3>
+            <p>Set the payroll coverage, then narrow the employee list only when needed.</p>
+          </div>
+          <span className={periodReady ? 'payroll-ready-badge ready' : 'payroll-ready-badge'}>
+            {periodReady ? 'Ready to load' : 'Period required'}
+          </span>
+        </div>
         <div className="payroll-grid">
           <div className="form-panel">
             <h4>Payroll Period</h4>
+            <p className="panel-note">Required before loading employees.</p>
             <FormSelect label="Payroll Group" value={filters.payroll_group} onChange={(value) => updateFilter('payroll_group', value)}>
               <option value="">Select payroll group</option>
               {meta.payrollGroups.map((item) => <option key={item.group_id} value={item.group_id}>{item.group_name}</option>)}
@@ -326,10 +334,15 @@ export default function PayrollComputationPage() {
               {meta.payrollYears.map((item) => <option key={item.year_id} value={item.year_id}>{item.year_value}</option>)}
             </FormSelect>
             <FormInput label="Generated Payroll Range" value={payrollRange} readOnly />
+            <div className="payroll-period-preview">
+              <span>Selected coverage</span>
+              <strong>{payrollRange || 'Choose group, period, month, and year'}</strong>
+            </div>
           </div>
 
           <div className="form-panel">
             <h4>Filter</h4>
+            <p className="panel-note">Leave filters as All to include every eligible employee.</p>
             {SYSTEM_LISTS.map(([key, label]) => (
               <FormSelect key={key} label={label} value={filters[key] || ''} onChange={(value) => updateFilter(key, value)}>
                 {fillSelectOptions(lists[key] || [])}
@@ -351,13 +364,20 @@ export default function PayrollComputationPage() {
         <div className="table-header">
           <div>
             <h3>Step 2: Employee Payroll</h3>
-            <p>{runId ? `Payroll Run #${runId} ${payrollRange ? `(${payrollRange})` : ''}` : 'Create or select a payroll run first.'}</p>
+            <p>{runId ? `Payroll Run #${runId} ${payrollRange ? `(${payrollRange})` : ''}` : 'Load employees after selecting a payroll period.'}</p>
+          </div>
+          <div className="payroll-loaded-count">
+            <strong>{employees.length}</strong>
+            <span>employees loaded</span>
           </div>
         </div>
 
         <div className="payroll-workspace">
           <div className="employee-list-panel">
-            <h4>Employee List</h4>
+            <div className="panel-title-row">
+              <h4>Employee List</h4>
+              <span>{selectedEmployee ? selectedEmployee.emp_code : 'Select one'}</span>
+            </div>
             <div className="table-scroll compact">
               <table>
                 <thead>
@@ -398,7 +418,8 @@ export default function PayrollComputationPage() {
 
                 <div className="payroll-tabs-grid">
                   <PayrollPanel title="Gross Earnings">
-                    <MoneyInput label="Basic Salary" name="basic_salary" payroll={payroll} onChange={updatePayroll} />
+                    <p className="panel-note">Amounts that increase pay are added; absence, late, and undertime are deducted.</p>
+                    <MoneyInput label="Basic Salary" name="basic_salary" payroll={payroll} onChange={updatePayroll} placeholder="Example: 15000.00" />
                     <MoneyInput label="Absence Deduction" name="absence_deduction" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Late Deduction" name="late_deduction" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Undertime Deduction" name="undertime_deduction" payroll={payroll} onChange={updatePayroll} />
@@ -411,6 +432,7 @@ export default function PayrollComputationPage() {
                   </PayrollPanel>
 
                   <PayrollPanel title="Deductions">
+                    <p className="panel-note">Enter employee share deductions and any one-time deductions for this run.</p>
                     <MoneyInput label="GSIS Employee" name="gsis_employee" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="SSS Employee" name="sss_employee" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Pag-IBIG Employee" name="pagibig_employee" payroll={payroll} onChange={updatePayroll} />
@@ -423,6 +445,7 @@ export default function PayrollComputationPage() {
                   </PayrollPanel>
 
                   <PayrollPanel title="YTD">
+                    <p className="panel-note">Use year-to-date values for reporting continuity when available.</p>
                     <MoneyInput label="YTD SSS" name="ytd_sss" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="YTD WTax" name="ytd_wtax" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="YTD PhilHealth" name="ytd_philhealth" payroll={payroll} onChange={updatePayroll} />
@@ -487,13 +510,15 @@ function PayrollPanel({ title, children }) {
   );
 }
 
-function MoneyInput({ label, name, payroll, onChange }) {
+function MoneyInput({ label, name, payroll, onChange, placeholder = '0.00' }) {
   return (
     <label className="money-row">
       <span>{label}</span>
       <input
         type="number"
         step="0.01"
+        min="0"
+        placeholder={placeholder}
         value={payroll[name] ?? ''}
         onChange={(event) => onChange(name, event.target.value)}
       />

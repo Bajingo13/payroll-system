@@ -389,6 +389,28 @@ module.exports = function (app, pool) {
         }
     });
 
+    async function ensureEmployeesForPayrollJournal(conn, runIdArray) {
+        for (const runId of runIdArray) {
+            await conn.query(
+                `INSERT INTO employee_payroll (run_id, employee_id, payroll_status)
+                SELECT ?, e.employee_id, 'Active'
+                FROM employees e
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM employee_payroll existing
+                    WHERE existing.run_id = ?
+                        AND existing.employee_id = e.employee_id
+                )
+                AND (
+                    e.status IS NULL
+                    OR TRIM(e.status) = ''
+                    OR LOWER(TRIM(e.status)) = 'active'
+                )`,
+                [runId, runId]
+            );
+        }
+    }
+
     // GET full payroll journal data based on MULTIPLE payroll_runs
     app.get("/api/payroll_journal_employees", async (req, res) => {
         const {
@@ -470,6 +492,9 @@ module.exports = function (app, pool) {
 
         try {
             const conn = await pool.getConnection();
+            if (status !== "hold") {
+                await ensureEmployeesForPayrollJournal(conn, runIdArray);
+            }
 
             let whereClauses = [
                 "ep.run_id IN (?)"
@@ -477,9 +502,9 @@ module.exports = function (app, pool) {
 
             // Status filter
             if (status === "active") {
-                whereClauses.push("(e.status = 'Active' AND (ep.payroll_status != 'Hold' OR ep.payroll_status IS NULL))");
+                whereClauses.push("(ep.payroll_status IS NULL OR LOWER(TRIM(ep.payroll_status)) != 'hold')");
             } else if (status === "hold") {
-                whereClauses.push("ep.payroll_status = 'Hold'");
+                whereClauses.push("LOWER(TRIM(ep.payroll_status)) = 'hold'");
             }
 
             // Optional filters
@@ -597,6 +622,7 @@ module.exports = function (app, pool) {
                     SUM(ep.other_deductions) AS other_deductions,
                     SUM(ep.total_deductions) AS total_deductions,
                     SUM(ep.net_pay) AS net_pay,
+                    MAX(ep.payroll_status) AS payroll_status,
 
                     -- Computation
                     MAX(eps.main_computation) AS main_computation,

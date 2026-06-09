@@ -2,18 +2,10 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext.jsx';
+import { canAccessFeature, normalizeRole } from '../access/roleAccess.js';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 
 const SESSION_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_TIMEOUT_MS || 15 * 60 * 1000);
-
-function normalizeRole(rawRole) {
-  const role = String(rawRole || '').trim().toLowerCase();
-  if (!role) return 'unknown';
-  if (role === 'employee') return 'employee';
-  if (role === 'hr' || role.includes('hr') || role.includes('human resource')) return 'hr';
-  if (role === 'admin' || role.includes('admin')) return 'admin';
-  return 'unknown';
-}
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -27,6 +19,7 @@ export default function AppLayout() {
     payrollReports: false,
     advancedModules: false
   });
+  const [, setRoleAccessVersion] = useState(0);
 
   useEffect(() => {
     setAvatar(localStorage.getItem(avatarStorageKey) || '');
@@ -86,6 +79,19 @@ export default function AppLayout() {
     };
   }, [logout, navigate, user?.user_id]);
 
+  useEffect(() => {
+    function refreshRoleAccess() {
+      setRoleAccessVersion((current) => current + 1);
+    }
+
+    window.addEventListener('role-access-updated', refreshRoleAccess);
+    window.addEventListener('storage', refreshRoleAccess);
+    return () => {
+      window.removeEventListener('role-access-updated', refreshRoleAccess);
+      window.removeEventListener('storage', refreshRoleAccess);
+    };
+  }, []);
+
   async function handleLogout(event) {
     event.preventDefault();
     await logout();
@@ -113,6 +119,7 @@ export default function AppLayout() {
 
   const isEmployee = normalizeRole(user?.role) === 'employee';
   const isHr = normalizeRole(user?.role) === 'hr';
+  const hasFeature = (featureKey) => canAccessFeature(user?.role, featureKey);
   const accountSettingsPath = '/user-settings';
   const accountInitials = String(user?.full_name || 'User')
     .split(/\s+/)
@@ -126,7 +133,6 @@ export default function AppLayout() {
     location.pathname === '/leave-management' ||
     location.pathname === '/overtime-management' ||
     location.pathname === '/schedule-management' ||
-    location.pathname === '/leave-calendar' ||
     location.pathname === '/performance-management';
   const isPayrollReportPath = location.pathname.startsWith('/reports') ||
     location.pathname === '/government-reports' ||
@@ -136,53 +142,61 @@ export default function AppLayout() {
     '/year-end-payroll',
     '/loan-deduction-management',
     '/security-backup',
-    '/analytics-dashboard'
+    '/leave-calendar',
+    '/system-config'
   ].includes(location.pathname);
 
   const employeeNav = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/personal-management', label: 'Personal Management' },
-    { to: '/employee-leave-request', label: 'Leave Request' },
-    { to: '/employee-overtime-request', label: 'Overtime Request' },
-    { to: '/employee-payroll-information', label: 'Payroll Information' },
-    { to: '/employee-schedule', label: 'Schedule' }
+    { to: '/dashboard', label: 'Dashboard', feature: 'dashboard' },
+    { to: '/personal-management', label: 'Personal Management', feature: 'personal-management' },
+    { to: '/employee-leave-request', label: 'Leave Request', feature: 'employee-leave-request' },
+    { to: '/employee-overtime-request', label: 'Overtime Request', feature: 'employee-overtime-request' },
+    { to: '/employee-payroll-information', label: 'Payroll Information', feature: 'employee-payroll-information' },
+    { to: '/employee-schedule', label: 'Schedule', feature: 'employee-schedule' },
+    { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' }
   ];
 
   const hrWorkforceNav = [
-    { to: '/employee-management', label: 'Employee File' },
-    { to: '/employee-documents', label: '201 Files' },
-    { to: '/organization-setup', label: 'Org Setup' },
-    { to: '/employee-attendance', label: 'Employee Attendance' },
-    { to: '/leave-management', label: 'Leave Management' },
-    { to: '/overtime-management', label: 'Overtime Management' },
-    { to: '/schedule-management', label: 'Schedule Management' },
-    { to: '/leave-calendar', label: 'Leave Calendar' },
-    { to: '/performance-management', label: 'Performance' }
+    { to: '/employee-management', label: 'Employee File', feature: 'employee-management' },
+    { to: '/employee-documents', label: '201 Files', feature: 'employee-documents' },
+    { to: '/organization-setup', label: 'Org Setup', feature: 'organization-setup' },
+    { to: '/employee-attendance', label: 'Employee Attendance', feature: 'employee-attendance' },
+    { to: '/leave-management', label: 'Leave Management', feature: 'leave-management' },
+    { to: '/overtime-management', label: 'Overtime Management', feature: 'overtime-management' },
+    { to: '/schedule-management', label: 'Schedule Management', feature: 'schedule-management' },
+    { to: '/performance-management', label: 'Performance', feature: 'performance-management' }
   ];
 
   const adminReportNav = [
-    { to: '/reports/payroll-journal', label: 'Payroll Journal' },
-    { to: '/reports/gross-pay', label: 'Gross Pay' },
-    { to: '/reports/net-pay', label: 'Net Pay' },
-    { to: '/reports/payslip', label: 'Payslip' },
-    { to: '/government-reports', label: 'Government Reports' },
-    { to: '/report-builder', label: 'Report Builder' },
-    { to: '/reports/reconciliation-details', label: 'Reconciliation Details' }
+    { to: '/reports/payroll-journal', label: 'Payroll Journal', feature: 'reports' },
+    { to: '/reports/gross-pay', label: 'Gross Pay', feature: 'reports' },
+    { to: '/reports/net-pay', label: 'Net Pay', feature: 'reports' },
+    { to: '/reports/payslip', label: 'Payslip', feature: 'reports' },
+    { to: '/government-reports', label: 'Government Reports', feature: 'government-reports' },
+    { to: '/report-builder', label: 'Report Builder', feature: 'report-builder' },
+    { to: '/reports/reconciliation-details', label: 'Reconciliation Details', feature: 'reports' }
   ];
 
   const hrToolsNav = [
-    { to: '/auditing', label: 'Auditing' },
-    { to: '/analytics-dashboard', label: 'AI Analytics' },
-    { to: '/utilities', label: 'Utilities' }
+    { to: '/auditing', label: 'Auditing', feature: 'auditing' },
+    { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
+    { to: '/utilities', label: 'Utilities', feature: 'utilities' }
   ];
 
   const adminToolsNav = [
-    { to: '/year-end-payroll', label: 'Year-End Payroll' },
-    { to: '/loan-deduction-management', label: 'Loan Deductions' },
-    { to: '/security-backup', label: 'Security & Backup' },
-    { to: '/analytics-dashboard', label: 'AI Analytics' },
-    { to: '/utilities', label: 'Utilities' }
+    { to: '/year-end-payroll', label: 'Year-End Payroll', feature: 'year-end-payroll' },
+    { to: '/loan-deduction-management', label: 'Loan Deductions', feature: 'loan-deduction-management' },
+    { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
+    { to: '/security-backup', label: 'Security & Backup', feature: 'security-backup' },
+    { to: '/utilities', label: 'Utilities', feature: 'utilities' },
+    { to: '/system-config', label: 'System Configuration', feature: 'system-config' }
   ];
+
+  const visibleEmployeeNav = employeeNav.filter((item) => hasFeature(item.feature));
+  const visibleHrWorkforceNav = hrWorkforceNav.filter((item) => hasFeature(item.feature));
+  const visibleHrToolsNav = hrToolsNav.filter((item) => hasFeature(item.feature));
+  const visibleAdminReportNav = adminReportNav.filter((item) => hasFeature(item.feature));
+  const visibleAdminToolsNav = adminToolsNav.filter((item) => hasFeature(item.feature));
 
   useEffect(() => {
     setOpenGroups((current) => ({
@@ -236,33 +250,37 @@ export default function AppLayout() {
             {isEmployee ? (
               <>
                 <li className="nav-section-label">My Work</li>
-                {employeeNav.map((item) => (
+                {visibleEmployeeNav.map((item) => (
                   <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
                 ))}
               </>
             ) : isHr ? (
               <>
                 <li className="nav-section-label">Overview</li>
-                <li><NavLink to="/dashboard">HR Dashboard</NavLink></li>
+                {hasFeature('dashboard') ? <li><NavLink to="/dashboard">HR Dashboard</NavLink></li> : null}
 
-                <li className="nav-section-label">HRIS</li>
-                <li className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}>
-                  <button
-                    type="button"
-                    className="sidebar-group-trigger"
-                    onClick={() => toggleGroup('employeeManagement')}
-                  >
-                    Employee Records
-                  </button>
-                  <ul>
-                    {hrWorkforceNav.map((item) => (
-                      <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
-                    ))}
-                  </ul>
-                </li>
+                {visibleHrWorkforceNav.length ? (
+                  <>
+                    <li className="nav-section-label">HRIS</li>
+                    <li className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}>
+                      <button
+                        type="button"
+                        className="sidebar-group-trigger"
+                        onClick={() => toggleGroup('employeeManagement')}
+                      >
+                        Employee Records
+                      </button>
+                      <ul>
+                        {visibleHrWorkforceNav.map((item) => (
+                          <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                        ))}
+                      </ul>
+                    </li>
+                  </>
+                ) : null}
 
-                <li className="nav-section-label">HR Tools</li>
-                {hrToolsNav.map((item) => (
+                {visibleHrToolsNav.length ? <li className="nav-section-label">HR Tools</li> : null}
+                {visibleHrToolsNav.map((item) => (
                   <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
                 ))}
               </>
@@ -281,38 +299,34 @@ export default function AppLayout() {
                     Employee Management
                   </button>
                   <ul>
-                    <li><NavLink to="/employee-management">Employee File</NavLink></li>
-                    <li><NavLink to="/employee-documents">201 Files</NavLink></li>
-                    <li><NavLink to="/organization-setup">Org Setup</NavLink></li>
-                    <li><NavLink to="/schedule-management">Schedule Management</NavLink></li>
-                    <li><NavLink to="/employee-attendance">Employee Attendance</NavLink></li>
-                    <li><NavLink to="/leave-management">Leave Management</NavLink></li>
-                    <li><NavLink to="/overtime-management">Overtime Management</NavLink></li>
-                    <li><NavLink to="/leave-calendar">Leave Calendar</NavLink></li>
-                    <li><NavLink to="/performance-management">Performance</NavLink></li>
-                  </ul>
-                </li>
-
-                <li className="nav-section-label">Payroll & Reports</li>
-                <li><NavLink to="/payroll-computation">Payroll Computation</NavLink></li>
-                <li className={`nav-group ${openGroups.payrollReports ? 'open' : ''}`}>
-                  <button
-                    type="button"
-                    className="sidebar-group-trigger"
-                    onClick={() => toggleGroup('payrollReports')}
-                  >
-                    Payroll Summary Report
-                  </button>
-                  <ul>
-                    {adminReportNav.map((item) => (
+                    {hrWorkforceNav.map((item) => (
                       <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
                     ))}
                   </ul>
                 </li>
 
+                <li className="nav-section-label">Payroll & Reports</li>
+                <li><NavLink to="/payroll-computation">Payroll Computation</NavLink></li>
+                {visibleAdminReportNav.length ? (
+                  <li className={`nav-group ${openGroups.payrollReports ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      className="sidebar-group-trigger"
+                      onClick={() => toggleGroup('payrollReports')}
+                    >
+                      Payroll Summary Report
+                    </button>
+                    <ul>
+                      {visibleAdminReportNav.map((item) => (
+                        <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                      ))}
+                    </ul>
+                  </li>
+                ) : null}
+
                 <li className="nav-section-label">System Tools</li>
                 <li><NavLink to="/auditing">Auditing</NavLink></li>
-                {adminToolsNav.map((item) => (
+                {visibleAdminToolsNav.map((item) => (
                   <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
                 ))}
               </>

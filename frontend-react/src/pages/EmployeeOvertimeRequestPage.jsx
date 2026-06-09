@@ -109,20 +109,23 @@ export default function EmployeeOvertimeRequestPage() {
   const estimatedHours = computeHours(form.start_time, form.end_time);
 
   return (
-    <>
-      <header className="header">
+    <div className="employee-modern-page">
+      <header className="employee-hero compact">
+        <div>
+          <span>Self Service</span>
         <h2>Overtime Request</h2>
         <p>Submit and track your overtime requests.</p>
+        </div>
       </header>
 
-      <section className="summary">
+      <section className="summary employee-modern-summary">
         <div className="card"><span>Pending</span><strong>{requests.filter((request) => request.status === 'Pending').length}</strong></div>
         <div className="card"><span>Approved</span><strong>{requests.filter((request) => request.status === 'Approved').length}</strong></div>
         <div className="card"><span>Rejected</span><strong>{requests.filter((request) => request.status === 'Rejected').length}</strong></div>
         <div className="card"><span>Estimated Hours</span><strong>{estimatedHours}</strong><small>Current form</small></div>
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <h3>New Overtime Request</h3>
         <form className="employee-form-grid" onSubmit={submitRequest}>
           <label>
@@ -172,7 +175,7 @@ export default function EmployeeOvertimeRequestPage() {
         </form>
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <h3>My Overtime Requests</h3>
         <div className="table-scroll">
           <table>
@@ -204,6 +207,6 @@ export default function EmployeeOvertimeRequestPage() {
       </section>
 
       <p className="message">{message}</p>
-    </>
+    </div>
   );
 }

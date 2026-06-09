@@ -8,6 +8,120 @@ module.exports = function (app, pool) {
         return value === 'admin' || value === 'system administrator' || value.includes('admin') || value === 'hr' || value.includes('human resource');
     }
 
+    async function ensureUserAccountColumns(conn) {
+        const [columns] = await conn.execute(
+            `SELECT COLUMN_NAME
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'users'
+               AND COLUMN_NAME IN ('account_status', 'deactivated_at', 'deleted_at')`
+        );
+        const existing = new Set(columns.map((column) => column.COLUMN_NAME));
+
+        if (!existing.has('account_status')) {
+            await conn.execute("ALTER TABLE users ADD COLUMN account_status VARCHAR(20) NOT NULL DEFAULT 'Active'");
+        }
+        if (!existing.has('deactivated_at')) {
+            await conn.execute('ALTER TABLE users ADD COLUMN deactivated_at DATETIME NULL');
+        }
+        if (!existing.has('deleted_at')) {
+            await conn.execute('ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL');
+        }
+    }
+
+    async function ensureEmployeeEvaluationTable(conn) {
+        await conn.execute(`
+            CREATE TABLE IF NOT EXISTS employee_evaluations (
+                evaluation_id INT AUTO_INCREMENT PRIMARY KEY,
+                employee_id INT NOT NULL,
+                review_period VARCHAR(80) NOT NULL,
+                review_date DATE NOT NULL,
+                evaluator_name VARCHAR(160) NULL,
+                productivity_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+                quality_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+                teamwork_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+                attendance_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+                initiative_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+                overall_score DECIMAL(5,2) NOT NULL DEFAULT 0,
+                rating VARCHAR(40) NOT NULL DEFAULT 'Needs Support',
+                strengths TEXT NULL,
+                improvement_areas TEXT NULL,
+                goals TEXT NULL,
+                action_plan TEXT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_employee_evaluations_employee_date (employee_id, review_date),
+                CONSTRAINT fk_employee_evaluations_employee
+                    FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+                    ON DELETE CASCADE
+            )
+        `);
+    }
+
+    function normalizeEvaluationScore(value) {
+        const score = Number(value);
+        if (!Number.isFinite(score)) return 0;
+        return Math.max(0, Math.min(100, score));
+    }
+
+    function getEvaluationRating(score) {
+        if (score >= 90) return 'Outstanding';
+        if (score >= 80) return 'Exceeds Expectations';
+        if (score >= 70) return 'Meets Expectations';
+        if (score >= 60) return 'Developing';
+        return 'Needs Support';
+    }
+
+    function buildEvaluationSummary(evaluations) {
+        const rows = Array.isArray(evaluations) ? evaluations : [];
+        if (!rows.length) {
+            return {
+                count: 0,
+                averageScore: 0,
+                latestScore: 0,
+                latestRating: 'No Evaluation',
+                growthDelta: 0
+            };
+        }
+
+        const latest = rows[0];
+        const oldest = rows[rows.length - 1];
+        const averageScore = rows.reduce((total, row) => total + Number(row.overall_score || 0), 0) / rows.length;
+
+        return {
+            count: rows.length,
+            averageScore: Number(averageScore.toFixed(2)),
+            latestScore: Number(Number(latest.overall_score || 0).toFixed(2)),
+            latestRating: latest.rating || getEvaluationRating(latest.overall_score),
+            growthDelta: Number((Number(latest.overall_score || 0) - Number(oldest.overall_score || 0)).toFixed(2))
+        };
+    }
+
+    async function getEmployeeEvaluations(conn, employeeId) {
+        await ensureEmployeeEvaluationTable(conn);
+        const [rows] = await conn.execute(
+            `SELECT evaluation_id, review_period, DATE_FORMAT(review_date, '%Y-%m-%d') AS review_date,
+                    evaluator_name, productivity_score, quality_score, teamwork_score,
+                    attendance_score, initiative_score, overall_score, rating,
+                    strengths, improvement_areas, goals, action_plan,
+                    DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+             FROM employee_evaluations
+             WHERE employee_id = ?
+             ORDER BY review_date DESC, evaluation_id DESC`,
+            [employeeId]
+        );
+
+        return rows.map((row) => ({
+            ...row,
+            productivity_score: Number(row.productivity_score || 0),
+            quality_score: Number(row.quality_score || 0),
+            teamwork_score: Number(row.teamwork_score || 0),
+            attendance_score: Number(row.attendance_score || 0),
+            initiative_score: Number(row.initiative_score || 0),
+            overall_score: Number(row.overall_score || 0)
+        }));
+    }
+
     function normalizeSystemAccount(body, fullName, employeeCode) {
         const account = body.systemAccount || {};
         const username = String(account.username || '').trim();
@@ -29,6 +143,7 @@ module.exports = function (app, pool) {
 
     async function saveSystemAccount(conn, account, actorRole) {
         if (!account) return null;
+        await ensureUserAccountColumns(conn);
 
         if (!canManageSystemAccounts(actorRole)) {
             const err = new Error('Only Admin and HR users can create employee system accounts.');
@@ -92,12 +207,12 @@ module.exports = function (app, pool) {
                 const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
                 const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
                 await conn.execute(
-                    'UPDATE users SET username = ?, password = ?, full_name = ?, role = ? WHERE user_id = ?',
+                    "UPDATE users SET username = ?, password = ?, full_name = ?, role = ?, account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?",
                     [account.username, hashedPassword, account.fullName, account.role, targetUserId]
                 );
             } else {
                 await conn.execute(
-                    'UPDATE users SET username = ?, full_name = ?, role = ? WHERE user_id = ?',
+                    "UPDATE users SET username = ?, full_name = ?, role = ?, account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?",
                     [account.username, account.fullName, account.role, targetUserId]
                 );
             }
@@ -105,21 +220,23 @@ module.exports = function (app, pool) {
             return {
                 user_id: targetUserId,
                 username: account.username,
-                role: account.role
+                role: account.role,
+                account_status: 'Active'
             };
         }
 
         const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
         const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
         const [result] = await conn.execute(
-            'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)',
+            "INSERT INTO users (username, password, full_name, role, account_status) VALUES (?, ?, ?, ?, 'Active')",
             [account.username, hashedPassword, account.fullName, account.role]
         );
 
         return {
             user_id: result.insertId,
             username: account.username,
-            role: account.role
+            role: account.role,
+            account_status: 'Active'
         };
     }
     // Helper: For audit logs
@@ -732,6 +849,9 @@ app.get("/api/employee_details/:id", async (req, res) => {
     app.get('/api/employee/:empCode', async (req, res) => {
         try {
             const empCode = req.params.empCode;
+            const conn = await pool.getConnection();
+            await ensureUserAccountColumns(conn);
+            conn.release();
 
             const [employeeRows] = await pool.query(`
             SELECT 
@@ -812,10 +932,12 @@ app.get("/api/employee_details/:id", async (req, res) => {
 
             employee.allowances = allowances;
             employee.deductions = deductions;
+            employee.evaluations = await getEmployeeEvaluations(pool, employee.employee_id);
+            employee.evaluationSummary = buildEvaluationSummary(employee.evaluations);
 
             const employeeFullName = [employee.first_name, employee.last_name].filter(Boolean).join(" ").trim();
             const [systemAccountRows] = await pool.query(
-                `SELECT user_id, username, full_name, role
+                `SELECT user_id, username, full_name, role, account_status
                 FROM users
                 WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
                    OR LOWER(TRIM(full_name)) = LOWER(TRIM(?))
@@ -828,7 +950,8 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 ? {
                     user_id: systemAccountRows[0].user_id,
                     username: systemAccountRows[0].username || '',
-                    role: allowedSystemAccountRoles.includes(systemAccountRows[0].role) ? systemAccountRows[0].role : 'Employee'
+                    role: allowedSystemAccountRoles.includes(systemAccountRows[0].role) ? systemAccountRows[0].role : 'Employee',
+                    account_status: systemAccountRows[0].account_status || 'Active'
                 }
                 : null;
 
@@ -850,6 +973,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
         let conn;
         try {
             conn = await pool.getConnection();
+            await ensureUserAccountColumns(conn);
 
             const [employeeRows] = await conn.execute(
                 `SELECT employee_id, emp_code, first_name, last_name
@@ -897,6 +1021,201 @@ app.get("/api/employee_details/:id", async (req, res) => {
         }
     });
 
+    async function handleSystemAccountStatusAction(req, res) {
+        const empCode = String(req.params.empCode || '').trim();
+        const body = req.body || {};
+        const action = String(body.action || '').trim().toLowerCase();
+        const validActions = ['deactivate', 'reactivate', 'delete'];
+
+        if (!empCode) {
+            return res.status(400).json({ success: false, message: 'Employee ID is required.' });
+        }
+
+        if (!validActions.includes(action)) {
+            return res.status(400).json({ success: false, message: 'Select a valid account action.' });
+        }
+
+        if (!canManageSystemAccounts(body.actor_role)) {
+            return res.status(403).json({ success: false, message: 'Only Admin and HR users can manage employee accounts.' });
+        }
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            await ensureUserAccountColumns(conn);
+
+            const [employeeRows] = await conn.execute(
+                `SELECT employee_id, emp_code, first_name, last_name
+                 FROM employees
+                 WHERE emp_code = ?
+                 LIMIT 1`,
+                [empCode]
+            );
+
+            if (!employeeRows.length) {
+                return res.status(404).json({ success: false, message: 'Employee record not found.' });
+            }
+
+            const employee = employeeRows[0];
+            const employeeFullName = [employee.first_name, employee.last_name].filter(Boolean).join(' ').trim();
+            const [accountRows] = await conn.execute(
+                `SELECT user_id, username, role, account_status
+                 FROM users
+                 WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
+                    OR LOWER(TRIM(full_name)) = LOWER(TRIM(?))
+                 ORDER BY user_id DESC
+                 LIMIT 1`,
+                [employee.emp_code || '', employeeFullName]
+            );
+
+            if (!accountRows.length) {
+                return res.status(404).json({ success: false, message: 'No login account is linked to this employee.' });
+            }
+
+            const account = accountRows[0];
+            if (Number(account.user_id) === Number(body.user_id)) {
+                return res.status(400).json({ success: false, message: 'You cannot change your own login account status here.' });
+            }
+
+            let nextStatus = 'Active';
+            let sql = "UPDATE users SET account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?";
+            let message = 'Account reactivated successfully.';
+            let auditAction = `Reactivated Account for Employee ${empCode}`;
+
+            if (action === 'deactivate') {
+                nextStatus = 'Deactivated';
+                sql = "UPDATE users SET account_status = 'Deactivated', deactivated_at = NOW(), deleted_at = NULL WHERE user_id = ?";
+                message = 'Account deactivated. Employee information was kept.';
+                auditAction = `Deactivated Account for Employee ${empCode}`;
+            } else if (action === 'delete') {
+                nextStatus = 'Deleted';
+                sql = "UPDATE users SET account_status = 'Deleted', deactivated_at = NULL, deleted_at = NOW() WHERE user_id = ?";
+                message = 'Account deleted from active access. Employee information was kept.';
+                auditAction = `Deleted Account Access for Employee ${empCode}`;
+            }
+
+            await conn.execute(sql, [account.user_id]);
+            await logAudit(pool, body.user_id, body.admin_name, auditAction, 'Success');
+
+            return res.json({
+                success: true,
+                message,
+                emp_code: employee.emp_code,
+                systemAccount: {
+                    user_id: account.user_id,
+                    username: account.username || '',
+                    role: allowedSystemAccountRoles.includes(account.role) ? account.role : 'Employee',
+                    account_status: nextStatus
+                },
+                systemAccountUserId: account.user_id
+            });
+        } catch (error) {
+            console.error('Error changing employee account status:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Server error while changing employee account status',
+                error: error.message
+            });
+        } finally {
+            if (conn) conn.release();
+        }
+    }
+
+    app.patch('/api/employee/:empCode/system-account/status', handleSystemAccountStatusAction);
+    app.post('/api/employee/:empCode/system-account/status', handleSystemAccountStatusAction);
+
+    app.post('/api/employee/:empCode/evaluations', async (req, res) => {
+        const empCode = String(req.params.empCode || '').trim();
+        const body = req.body || {};
+        const safe = (value) => value === undefined || value === null ? '' : String(value).trim();
+
+        if (!empCode) {
+            return res.status(400).json({ success: false, message: 'Employee ID is required.' });
+        }
+
+        const reviewPeriod = safe(body.review_period);
+        const reviewDate = safe(body.review_date);
+
+        if (!reviewPeriod || !reviewDate) {
+            return res.status(400).json({ success: false, message: 'Review period and review date are required.' });
+        }
+
+        const scoreFields = [
+            'productivity_score',
+            'quality_score',
+            'teamwork_score',
+            'attendance_score',
+            'initiative_score'
+        ];
+        const scores = scoreFields.map((field) => normalizeEvaluationScore(body[field]));
+        const overallScore = Number((scores.reduce((total, score) => total + score, 0) / scores.length).toFixed(2));
+        const rating = getEvaluationRating(overallScore);
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            await ensureEmployeeEvaluationTable(conn);
+
+            const [employeeRows] = await conn.execute(
+                `SELECT employee_id, emp_code FROM employees WHERE emp_code = ? LIMIT 1`,
+                [empCode]
+            );
+
+            if (!employeeRows.length) {
+                return res.status(404).json({ success: false, message: 'Employee record not found.' });
+            }
+
+            const employee = employeeRows[0];
+
+            await conn.execute(
+                `INSERT INTO employee_evaluations (
+                    employee_id, review_period, review_date, evaluator_name,
+                    productivity_score, quality_score, teamwork_score, attendance_score, initiative_score,
+                    overall_score, rating, strengths, improvement_areas, goals, action_plan
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    employee.employee_id,
+                    reviewPeriod,
+                    reviewDate,
+                    safe(body.evaluator_name) || null,
+                    scores[0],
+                    scores[1],
+                    scores[2],
+                    scores[3],
+                    scores[4],
+                    overallScore,
+                    rating,
+                    safe(body.strengths) || null,
+                    safe(body.improvement_areas) || null,
+                    safe(body.goals) || null,
+                    safe(body.action_plan) || null
+                ]
+            );
+
+            const evaluations = await getEmployeeEvaluations(conn, employee.employee_id);
+            const evaluationSummary = buildEvaluationSummary(evaluations);
+
+            await logAudit(pool, body.user_id, body.admin_name, `Added Evaluation for Employee ${empCode}`, 'Success');
+
+            return res.json({
+                success: true,
+                message: 'Employee evaluation saved successfully.',
+                emp_code: employee.emp_code,
+                evaluations,
+                evaluationSummary
+            });
+        } catch (error) {
+            console.error('Error saving employee evaluation:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Server error while saving employee evaluation',
+                error: error.message
+            });
+        } finally {
+            if (conn) conn.release();
+        }
+    });
+
     function formatExportValue(value) {
         if (value === null || value === undefined || value === '') return 'N/A';
         if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -912,6 +1231,24 @@ app.get("/api/employee_details/:id", async (req, res) => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    function buildEmployeeExportMeta(title, generatedBy) {
+        return {
+            companyName: 'Astreablue Intelligence Inc.',
+            title: title || 'Employee File Export',
+            generatedAt: new Date().toLocaleString('en-PH', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            }),
+            generatedBy: String(generatedBy || '').trim() || 'System User',
+            signatories: ['Prepared By:', 'Checked By:', 'Verified By:', 'Approved By:']
+        };
     }
 
     function buildEmployeeExportSections(employee) {
@@ -1018,6 +1355,20 @@ app.get("/api/employee_details/:id", async (req, res) => {
                     : [['No deduction entries', '', '']]
             },
             {
+                title: 'Growth Evaluations',
+                type: 'evaluation',
+                rows: Array.isArray(employee.evaluations) && employee.evaluations.length
+                    ? employee.evaluations.map((row) => [
+                        row.review_period || '',
+                        row.review_date || '',
+                        row.overall_score || '',
+                        row.rating || '',
+                        row.goals || '',
+                        row.action_plan || ''
+                    ])
+                    : [['No evaluation records', '', '', '', '', '']]
+            },
+            {
                 title: 'Dependents',
                 type: 'dependent',
                 rows: Array.isArray(employee.dependents) && employee.dependents.length
@@ -1027,14 +1378,25 @@ app.get("/api/employee_details/:id", async (req, res) => {
         ];
     }
 
-    function buildEmployeeExportCsv(employee) {
-        const lines = [];
+    function buildEmployeeExportCsv(employee, meta) {
+        const lines = [
+            [meta.companyName],
+            [meta.title],
+            ['Generated', meta.generatedAt],
+            ['Generated By', meta.generatedBy],
+            ['']
+        ];
         for (const section of buildEmployeeExportSections(employee)) {
             lines.push([section.title, '']);
             if (section.type === 'entry') {
                 lines.push(['#', 'Name', 'Period', 'Amount']);
                 section.rows.forEach((row, index) => {
                     lines.push([String(index + 1), row[0], row[1], row[2]]);
+                });
+            } else if (section.type === 'evaluation') {
+                lines.push(['#', 'Period', 'Date', 'Score', 'Rating', 'Goals', 'Action Plan']);
+                section.rows.forEach((row, index) => {
+                    lines.push([String(index + 1), row[0], row[1], row[2], row[3], row[4], row[5]]);
                 });
             } else if (section.type === 'dependent') {
                 lines.push(['#', 'Name', 'Birthday']);
@@ -1050,6 +1412,8 @@ app.get("/api/employee_details/:id", async (req, res) => {
             lines.push(['', '']);
         }
 
+        meta.signatories.forEach((label) => lines.push([label]));
+
         return lines.map((line) => line.map((value) => {
             const text = String(value ?? '');
             const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
@@ -1059,14 +1423,26 @@ app.get("/api/employee_details/:id", async (req, res) => {
         }).join(',')).join('\n');
     }
 
-    function buildEmployeeExportText(employee) {
-        const lines = [];
+    function buildEmployeeExportText(employee, meta) {
+        const lines = [
+            meta.companyName,
+            meta.title,
+            `Generated: ${meta.generatedAt}`,
+            `Generated By: ${meta.generatedBy}`,
+            ''
+        ];
         for (const section of buildEmployeeExportSections(employee)) {
             lines.push(section.title);
             lines.push('='.repeat(section.title.length));
             if (section.type === 'entry') {
                 section.rows.forEach((row, index) => {
                     lines.push(`${index + 1}. ${formatExportValue(row[0])} | Period: ${formatExportValue(row[1])} | Amount: ${formatExportValue(row[2])}`);
+                });
+            } else if (section.type === 'evaluation') {
+                section.rows.forEach((row, index) => {
+                    lines.push(`${index + 1}. ${formatExportValue(row[0])} | Date: ${formatExportValue(row[1])} | Score: ${formatExportValue(row[2])} | Rating: ${formatExportValue(row[3])}`);
+                    lines.push(`Goals: ${formatExportValue(row[4])}`);
+                    lines.push(`Action Plan: ${formatExportValue(row[5])}`);
                 });
             } else if (section.type === 'dependent') {
                 section.rows.forEach((row, index) => {
@@ -1079,22 +1455,28 @@ app.get("/api/employee_details/:id", async (req, res) => {
             }
             lines.push('');
         }
+        meta.signatories.forEach((label) => lines.push(label));
         return lines.join('\n');
     }
 
-    function buildEmployeeExportHtml(employee) {
+    function buildEmployeeExportHtml(employee, meta) {
         const sections = buildEmployeeExportSections(employee);
         const sectionHtml = sections.map((section) => {
             const isEntry = section.type === 'entry';
             const isDependent = section.type === 'dependent';
+            const isEvaluation = section.type === 'evaluation';
             const rows = isEntry
                 ? section.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td><td>${escapeHtml(row[2])}</td></tr>`).join('')
+                : isEvaluation
+                    ? section.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td><td>${escapeHtml(row[2])}</td><td>${escapeHtml(row[3])}</td><td>${escapeHtml(row[4])}</td><td>${escapeHtml(row[5])}</td></tr>`).join('')
                 : isDependent
                     ? section.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td></tr>`).join('')
                     : section.rows.map(([field, value]) => `<tr><th>${escapeHtml(field)}</th><td>${escapeHtml(formatExportValue(value))}</td></tr>`).join('');
 
             const head = isEntry
                 ? '<tr><th>#</th><th>Name</th><th>Period</th><th>Amount</th></tr>'
+                : isEvaluation
+                    ? '<tr><th>#</th><th>Period</th><th>Date</th><th>Score</th><th>Rating</th><th>Goals</th><th>Action Plan</th></tr>'
                 : isDependent
                     ? '<tr><th>#</th><th>Name</th><th>Birthday</th></tr>'
                     : '';
@@ -1117,18 +1499,31 @@ app.get("/api/employee_details/:id", async (req, res) => {
                     body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
                     h1 { margin: 0 0 6px; font-size: 24px; }
                     .meta { margin: 0 0 18px; color: #6b7280; }
+                    .report-header { text-align: center; }
                     .section-block { margin-bottom: 22px; page-break-inside: avoid; }
                     .section-block h2 { font-size: 16px; margin: 0 0 10px; }
                     table { width: 100%; border-collapse: collapse; font-size: 12px; }
                     th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; vertical-align: top; }
                     th { background: #f9fafb; width: 230px; }
                     thead th { background: #e5e7eb; width: auto; }
+                    .signatories { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 34px; font-size: 12px; }
+                    .signatories span { display: block; border-bottom: 1px solid #333; height: 30px; }
                 </style>
             </head>
             <body>
-                <h1>${escapeHtml(`${employee.first_name || ''} ${employee.last_name || ''}`.trim() || employee.emp_code || 'Employee File')}</h1>
-                <p class="meta">Employee File Export - ${escapeHtml(employee.emp_code || '')}</p>
+                <div class="report-header">
+                    <h1>${escapeHtml(meta.companyName)}</h1>
+                    <p class="meta">
+                        <strong>${escapeHtml(meta.title)}</strong><br>
+                        Employee File Export - ${escapeHtml(employee.emp_code || '')}<br>
+                        Generated: ${escapeHtml(meta.generatedAt)}<br>
+                        Generated By: ${escapeHtml(meta.generatedBy)}
+                    </p>
+                </div>
                 ${sectionHtml}
+                <div class="signatories">
+                    ${meta.signatories.map((label) => `<div><strong>${escapeHtml(label)}</strong><span></span></div>`).join('')}
+                </div>
             </body>
             </html>
         `;
@@ -1201,14 +1596,16 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 ORDER BY ed.emp_deduction_id ASC
             `, [employee.employee_id]);
             employee.deductions = deductions || [];
+            employee.evaluations = await getEmployeeEvaluations(pool, employee.employee_id);
 
             const exportBase = `employee-${String(employee.emp_code || empCode).replace(/[^a-z0-9_-]+/gi, '_').toLowerCase()}`;
+            const meta = buildEmployeeExportMeta('Employee File Export', req.query.generated_by);
 
             if (format === 'pdf') {
                 const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
                 try {
                     const page = await browser.newPage();
-                    await page.setContent(buildEmployeeExportHtml(employee), { waitUntil: 'networkidle0' });
+                    await page.setContent(buildEmployeeExportHtml(employee, meta), { waitUntil: 'networkidle0' });
                     const pdfBuffer = await page.pdf({
                         format: 'legal',
                         landscape: false,
@@ -1227,12 +1624,12 @@ app.get("/api/employee_details/:id", async (req, res) => {
             if (format === 'text' || format === 'txt') {
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8');
                 res.setHeader('Content-Disposition', `attachment; filename="${exportBase}.txt"`);
-                return res.send(buildEmployeeExportText(employee));
+                return res.send(buildEmployeeExportText(employee, meta));
             }
 
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${exportBase}.csv"`);
-            return res.send(buildEmployeeExportCsv(employee));
+            return res.send(buildEmployeeExportCsv(employee, meta));
         } catch (err) {
             console.error('Employee export error:', err);
             return res.status(500).json({ success: false, message: 'Unable to export employee file.', error: err.message });
@@ -1644,8 +2041,10 @@ app.get("/api/employee_details/:id", async (req, res) => {
 
         const employeeId = rows[0].employee_id;
 
+        await ensureEmployeeEvaluationTable(conn);
         await conn.beginTransaction();
 
+        await conn.query(`DELETE FROM employee_evaluations WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_contacts WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_employment WHERE employee_id = ?`, [employeeId]);
         await conn.query(`DELETE FROM employee_accounts WHERE employee_id = ?`, [employeeId]);

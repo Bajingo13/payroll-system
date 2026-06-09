@@ -86,22 +86,25 @@ export default function EmployeeSchedulePage() {
   }
 
   return (
-    <>
-      <header className="header">
+    <div className="employee-modern-page">
+      <header className="employee-hero compact">
+        <div>
+          <span>Schedule</span>
         <h2>Schedule</h2>
         <p>View your assigned shift and payroll schedule settings.</p>
+        </div>
       </header>
 
-      <section className="summary">
+      <section className="summary employee-modern-summary">
         <div className="card"><span>Hours Per Day</span><strong>{safeValue(schedule?.hours_in_day)}</strong></div>
         <div className="card"><span>Days Per Week</span><strong>{safeValue(schedule?.days_in_week)}</strong></div>
         <div className="card"><span>Weekly Hours</span><strong>{weeklyHours}</strong></div>
         <div className="card"><span>Overtime Rule</span><strong>{schedule?.strict_no_overtime ? 'Strict No Overtime' : 'Overtime Allowed'}</strong></div>
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <h3>Shift Schedule Information</h3>
-        <div className="summary employee-mini-summary">
+        <div className="summary employee-mini-summary employee-metric-strip">
           <div className="card"><span>Employee Code</span><strong>{safeValue(employee?.emp_code)}</strong></div>
           <div className="card"><span>Payroll Period</span><strong>{safeValue(schedule?.payroll_period)}</strong></div>
           <div className="card"><span>Payroll Rate</span><strong>{safeValue(schedule?.payroll_rate)}</strong></div>
@@ -117,7 +120,7 @@ export default function EmployeeSchedulePage() {
         <p className="message">{message}</p>
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <div className="table-header">
           <div>
             <h3>Schedule Calendar</h3>
@@ -146,6 +149,6 @@ export default function EmployeeSchedulePage() {
           ))}
         </div>
       </section>
-    </>
+    </div>
   );
 }

@@ -105,13 +105,16 @@ export default function EmployeeLeaveRequestPage() {
   }
 
   return (
-    <>
-      <header className="header">
+    <div className="employee-modern-page">
+      <header className="employee-hero compact">
+        <div>
+          <span>Self Service</span>
         <h2>Leave Request</h2>
         <p>Submit and track your leave requests.</p>
+        </div>
       </header>
 
-      <section className="summary">
+      <section className="summary employee-modern-summary">
         {leaveBalances.length === 0 ? (
           <div className="card"><span>Leave Balances</span><strong>-</strong><small>No leave types available</small></div>
         ) : leaveBalances.map((balance) => (
@@ -123,7 +126,7 @@ export default function EmployeeLeaveRequestPage() {
         ))}
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <h3>New Leave Request</h3>
         <form className="employee-form-grid" onSubmit={submitRequest}>
           <label>
@@ -179,7 +182,7 @@ export default function EmployeeLeaveRequestPage() {
         </form>
       </section>
 
-      <section className="table-section">
+      <section className="table-section employee-modern-panel">
         <h3>My Leave Requests</h3>
         <div className="table-scroll">
           <table>
@@ -211,6 +214,6 @@ export default function EmployeeLeaveRequestPage() {
       </section>
 
       <p className="message">{message}</p>
-    </>
+    </div>
   );
 }
