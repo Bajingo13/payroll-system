@@ -107,7 +107,61 @@ module.exports = function (app, pool) {
       .replace(/'/g, '&#039;');
   }
 
-  async function sendPasswordResetEmail(user, token) {
+  function isRunningOnRailway() {
+    return (
+      !!process.env.RAILWAY_ENVIRONMENT ||
+      !!process.env.RAILWAY_PROJECT_ID ||
+      !!process.env.RAILWAY_SERVICE_ID ||
+      !!process.env.RAILWAY_PUBLIC_DOMAIN
+    );
+  }
+
+  function normalizePublicBaseUrl(value) {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return '';
+    const withProtocol = /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
+
+    try {
+      const url = new URL(withProtocol);
+      return `${url.protocol}//${url.host}`.replace(/\/+$/, '');
+    } catch {
+      return '';
+    }
+  }
+
+  function getRequestBaseUrl(req) {
+    const host = String(req?.get?.('host') || '').trim();
+    if (!host) return '';
+
+    const forwardedProto = String(req?.get?.('x-forwarded-proto') || '').split(',')[0].trim();
+    const protocol = forwardedProto || req?.protocol || (isRunningOnRailway() ? 'https' : 'http');
+    return normalizePublicBaseUrl(`${protocol}://${host}`);
+  }
+
+  function getPasswordResetBaseUrl(req) {
+    const configuredBaseUrl = normalizePublicBaseUrl(
+      process.env.APP_BASE_URL ||
+      process.env.PUBLIC_BASE_URL ||
+      process.env.FRONTEND_URL ||
+      process.env.CLIENT_URL ||
+      process.env.SITE_URL
+    );
+    if (configuredBaseUrl) return configuredBaseUrl;
+
+    const railwayBaseUrl = normalizePublicBaseUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
+    if (railwayBaseUrl) return railwayBaseUrl;
+
+    const requestBaseUrl = getRequestBaseUrl(req);
+    if (requestBaseUrl) return requestBaseUrl;
+
+    if (isRunningOnRailway()) {
+      throw new Error('Public app URL is not configured. Set APP_BASE_URL to your Railway app URL.');
+    }
+
+    return 'http://localhost:12687';
+  }
+
+  async function sendPasswordResetEmail(user, token, req) {
     const config = getPasswordResetMailConfig();
     const transporter = getPasswordResetTransporter();
     if (!config || !transporter) {
@@ -115,8 +169,9 @@ module.exports = function (app, pool) {
       return false;
     }
 
-    const baseUrl = String(process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:12687').replace(/\/+$/, '');
+    const baseUrl = getPasswordResetBaseUrl(req);
     const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    const escapedResetUrl = escapeMailHtml(resetUrl);
     const recipient = String(user.email || '').trim();
     const displayName = escapeMailHtml(user.full_name || user.username || 'there');
 
@@ -137,7 +192,7 @@ module.exports = function (app, pool) {
       html: `
         <p>Hi ${displayName},</p>
         <p>We received a request to reset your Astreablue Intelligence Inc. HRIS & Payroll System password.</p>
-        <p><a href="${resetUrl}">Set a new password</a></p>
+        <p><a href="${escapedResetUrl}">Set a new password</a></p>
         <p>This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>
         <p>Astreablue Intelligence Inc. HRIS & Payroll System</p>
       `
@@ -309,7 +364,7 @@ module.exports = function (app, pool) {
         [user.user_id, tokenHash, email]
       );
 
-      const emailSent = await sendPasswordResetEmail(user, rawToken);
+      const emailSent = await sendPasswordResetEmail(user, rawToken, req);
       if (!emailSent) {
         return res.status(500).json({
           success: false,
