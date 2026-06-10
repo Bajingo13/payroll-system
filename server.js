@@ -333,7 +333,11 @@ if (useReactFrontend) {
     '/reports',
     '/reports/:reportType',
     '/utilities',
-    '/system-config'
+    '/system-config',
+    '/company-settings',
+    '/about-us',
+    '/help',
+    '/contacts'
   ].forEach((route) => {
     app.get(route, (req, res) => {
       res.sendFile(path.join(reactDistPath, 'index.html'));
@@ -410,6 +414,7 @@ if (useReactFrontend) {
 
     const { pool, dbMode } = await createWorkingPool();
 
+    require('./backend/notifications')(app, pool);
     require('./backend/login')(app, pool);
     require('./backend/profile_sidebar')(app, pool);
     require('./backend/dashboard')(app, pool);
@@ -427,6 +432,7 @@ if (useReactFrontend) {
     require('./backend/employee_documents')(app, pool);
     require('./backend/company_calendar')(app, pool);
     require('./backend/thirteenth_month')(app, pool);
+    require('./backend/year_end_payroll')(app, pool);
     require('./backend/system_config')(app, pool);
 
     app.get('/api/db-test', async (req, res) => {

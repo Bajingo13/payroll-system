@@ -10,7 +10,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:12687',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('origin');
+          });
+        }
       }
     }
   },

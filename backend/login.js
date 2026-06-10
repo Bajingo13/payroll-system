@@ -61,7 +61,7 @@ module.exports = function (app, pool) {
        FROM INFORMATION_SCHEMA.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
          AND TABLE_NAME = 'users'
-         AND COLUMN_NAME IN ('account_status', 'deactivated_at', 'deleted_at')`
+         AND COLUMN_NAME IN ('account_status', 'deactivated_at', 'deleted_at', 'email')`
     );
     const existing = new Set(columns.map((column) => column.COLUMN_NAME));
 
@@ -73,6 +73,18 @@ module.exports = function (app, pool) {
     }
     if (!existing.has('deleted_at')) {
       await conn.execute('ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL');
+    }
+    if (!existing.has('email')) {
+      await conn.execute('ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL DEFAULT NULL');
+      // Pre-populate from employee_contacts for existing users who have a matching employee record
+      await conn.execute(`
+        UPDATE users u
+        JOIN employees e ON LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))
+        JOIN employee_contacts ec ON ec.employee_id = e.employee_id
+          AND ec.email IS NOT NULL AND ec.email != ''
+        SET u.email = ec.email
+        WHERE u.email IS NULL
+      `).catch(() => {});
     }
   }
 
@@ -601,6 +613,45 @@ module.exports = function (app, pool) {
         success: false,
         message: err.message || 'Unable to change password.'
       });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.get('/api/user/email', async (req, res) => {
+    const userId = Number(req.session?.user?.user_id || req.query?.user_id || 0);
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' });
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      const [rows] = await conn.execute('SELECT email FROM users WHERE user_id = ? LIMIT 1', [userId]);
+      if (!rows.length) return res.status(404).json({ success: false, message: 'User not found.' });
+      res.json({ success: true, email: rows[0].email || '' });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message || 'Server error.' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.put('/api/user/email', async (req, res) => {
+    const userId = Number(req.session?.user?.user_id || req.body?.user_id || 0);
+    const email = String(req.body?.email || '').trim().toLowerCase();
+
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: 'Invalid email address format.' });
+    }
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await conn.execute('UPDATE users SET email = ? WHERE user_id = ?', [email || null, userId]);
+      if (req.session?.user) req.session.user.email = email || null;
+      res.json({ success: true, message: 'Email updated successfully.', email: email || null });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message || 'Server error.' });
     } finally {
       if (conn) conn.release();
     }

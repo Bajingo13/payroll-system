@@ -1,4 +1,180 @@
 module.exports = function (app, pool) {
+    function toMoney(value) {
+        const number = Number(value || 0);
+        return Number.isFinite(number) ? number : 0;
+    }
+
+    function roundMoney(value) {
+        return Math.round(toMoney(value) * 100) / 100;
+    }
+
+    function normalizePayPeriod(value) {
+        const period = String(value || '').trim().toUpperCase();
+        if (period.includes('SEMI')) return 'SEMI-MONTHLY';
+        if (period.includes('WEEK')) return 'WEEKLY';
+        if (period.includes('DAY')) return 'DAILY';
+        return 'MONTHLY';
+    }
+
+    async function ensurePayrollAutomationColumns(conn) {
+        const [columns] = await conn.query(
+            `SELECT COLUMN_NAME
+             FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'employee_payroll'
+               AND COLUMN_NAME = 'holiday_pay'`
+        );
+
+        if (!columns.length) {
+            await conn.query('ALTER TABLE employee_payroll ADD COLUMN holiday_pay DECIMAL(10,2) DEFAULT 0.00 AFTER overtime');
+        }
+    }
+
+    async function lookupContribution(conn, tableName, salaryBasis) {
+        const allowedTables = new Set([
+            'sss_contribution_table',
+            'pagibig_contribution_table',
+            'philhealth_contribution_table'
+        ]);
+        if (!allowedTables.has(tableName)) return null;
+
+        const eccSelect = tableName === 'sss_contribution_table' ? 'COALESCE(ecc, 0)' : '0';
+        const [rows] = await conn.query(
+            `SELECT ee_share, er_share, ${eccSelect} AS ecc
+             FROM ${tableName}
+             WHERE ? BETWEEN salary_low AND salary_high
+               AND COALESCE(is_active, 1) = 1
+             ORDER BY date_effective DESC
+             LIMIT 1`,
+            [salaryBasis]
+        );
+
+        return rows[0] || null;
+    }
+
+    async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
+        const normalizedPeriod = normalizePayPeriod(payPeriod);
+        const status = String(taxStatus || 'Z').trim().toUpperCase();
+        const params = [normalizedPeriod, status, taxableIncome, taxableIncome];
+        let [rows] = await conn.query(
+            `SELECT tax_low, tax_high, percent_over, amount
+             FROM withholding_tax_table
+             WHERE UPPER(REPLACE(pay_period, ' ', '-')) = ?
+               AND UPPER(status) = ?
+               AND ? >= tax_low
+               AND (? <= tax_high OR tax_high = 0)
+             ORDER BY tax_low DESC
+             LIMIT 1`,
+            params
+        );
+
+        if (!rows.length) {
+            [rows] = await conn.query(
+                `SELECT tax_low, tax_high, percent_over, amount
+                 FROM withholding_tax_table
+                 WHERE UPPER(REPLACE(pay_period, ' ', '-')) = ?
+                   AND ? >= tax_low
+                   AND (? <= tax_high OR tax_high = 0)
+                 ORDER BY tax_low DESC
+                 LIMIT 1`,
+                [normalizedPeriod, taxableIncome, taxableIncome]
+            );
+        }
+
+        const bracket = rows[0];
+        if (!bracket) return { amount: 0, bracket: null };
+
+        const tax = toMoney(bracket.amount) + Math.max(0, taxableIncome - toMoney(bracket.tax_low)) * (toMoney(bracket.percent_over) / 100);
+        return { amount: roundMoney(tax), bracket };
+    }
+
+    async function computePayrollAutomation(conn, input) {
+        const basicSalary = toMoney(input.basic_salary);
+        const absenceDeduction = toMoney(input.absence_deduction);
+        const lateDeduction = toMoney(input.late_deduction);
+        const undertimeDeduction = toMoney(input.undertime_deduction);
+        const overtime = toMoney(input.overtime);
+        const holidayPay = toMoney(input.holiday_pay);
+        const taxableAllowances = toMoney(input.taxable_allowances);
+        const nonTaxableAllowances = toMoney(input.non_taxable_allowances);
+        const adjComp = toMoney(input.adj_comp);
+        const adjNonComp = toMoney(input.adj_non_comp);
+        const totalLeavesUsed = toMoney(input.total_leaves_used);
+        const additionalDeductions = toMoney(input.total_deductions);
+        const loans = toMoney(input.loans);
+        const otherDeductions = toMoney(input.other_deductions);
+        const premiumAdj = toMoney(input.premium_adj);
+
+        const salaryBasis = Math.max(0, toMoney(input.contribution_basis) || basicSalary + taxableAllowances + overtime + holidayPay);
+        const sss = await lookupContribution(conn, 'sss_contribution_table', salaryBasis);
+        const pagibig = await lookupContribution(conn, 'pagibig_contribution_table', salaryBasis);
+        const philhealth = await lookupContribution(conn, 'philhealth_contribution_table', salaryBasis);
+
+        const sssEmployee = roundMoney(sss?.ee_share || 0);
+        const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
+        const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
+        const statutoryEmployee = sssEmployee + pagibigEmployee + philhealthEmployee;
+        const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
+        const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
+        const taxWithheld = roundMoney(taxResult.amount);
+
+        const grossPay = roundMoney(
+            basicSalary -
+            absenceDeduction -
+            lateDeduction -
+            undertimeDeduction +
+            overtime +
+            holidayPay +
+            taxableAllowances +
+            nonTaxableAllowances +
+            adjComp +
+            adjNonComp +
+            totalLeavesUsed
+        );
+        const grandTotalDeductions = roundMoney(statutoryEmployee + taxWithheld + additionalDeductions + loans + otherDeductions + premiumAdj);
+        const netPay = roundMoney(grossPay - grandTotalDeductions);
+
+        return {
+            success: true,
+            salary_basis: roundMoney(salaryBasis),
+            taxable_income: roundMoney(taxableIncome),
+            sss_employee: sssEmployee,
+            sss_employer: roundMoney(sss?.er_share || 0),
+            sss_ecc: roundMoney(sss?.ecc || 0),
+            pagibig_employee: pagibigEmployee,
+            pagibig_employer: roundMoney(pagibig?.er_share || 0),
+            pagibig_ecc: 0,
+            philhealth_employee: philhealthEmployee,
+            philhealth_employer: roundMoney(philhealth?.er_share || 0),
+            philhealth_ecc: 0,
+            tax_withheld: taxWithheld,
+            gross_pay: grossPay,
+            grand_total_deductions: grandTotalDeductions,
+            net_pay: netPay,
+            tax_bracket: taxResult.bracket,
+            notes: {
+                sss: sss ? 'Matched SSS contribution table.' : 'No SSS contribution bracket matched.',
+                pagibig: pagibig ? 'Matched Pag-IBIG contribution table.' : 'No Pag-IBIG contribution bracket matched.',
+                philhealth: philhealth ? 'Matched PhilHealth contribution table.' : 'No PhilHealth contribution bracket matched.',
+                tax: taxResult.bracket ? 'Matched withholding tax table.' : 'No withholding tax bracket matched.'
+            }
+        };
+    }
+
+    app.post("/api/payroll/auto-compute", async (req, res) => {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            await ensurePayrollAutomationColumns(conn);
+            const computed = await computePayrollAutomation(conn, req.body || {});
+            res.json(computed);
+        } catch (err) {
+            console.error("Payroll auto-compute error:", err);
+            res.status(500).json({ success: false, message: err.message || "Unable to auto-compute payroll." });
+        } finally {
+            if (conn) conn.release();
+        }
+    });
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
@@ -302,6 +478,41 @@ module.exports = function (app, pool) {
         }
     });
 
+    // PUT /api/payroll_runs/:run_id/generate — mark a payroll run as Generated
+    app.put("/api/payroll_runs/:run_id/generate", async (req, res) => {
+        const { run_id } = req.params;
+        const { user_id, admin_name } = req.body;
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+
+            const [runs] = await conn.query(
+                `SELECT run_id, status, payroll_range FROM payroll_runs WHERE run_id = ? LIMIT 1`,
+                [run_id]
+            );
+
+            if (!runs.length) {
+                return res.status(404).json({ success: false, message: "Payroll run not found." });
+            }
+
+            await conn.query(
+                `UPDATE payroll_runs SET status = 'Generated' WHERE run_id = ?`,
+                [run_id]
+            );
+
+            const payrollRange = runs[0].payroll_range || "Unknown Range";
+            await logAudit(pool, user_id, admin_name, `Payroll run ${run_id} (${payrollRange}) marked as Generated`, "Success");
+
+            res.json({ success: true, message: "Payroll run marked as Generated." });
+        } catch (err) {
+            console.error("Generate payroll run error:", err);
+            res.status(500).json({ success: false, message: "Server error" });
+        } finally {
+            if (conn) conn.release();
+        }
+    });
+
     // === FETCHING AND CREATING LIST OF EMPLOYEES INSIDE employee_payroll ===
     // GET /api/payroll_runs/:run_id/employees
     app.get("/api/payroll_runs/:run_id/employees", async (req, res) => {
@@ -344,6 +555,7 @@ module.exports = function (app, pool) {
         let conn;
         try {
             conn = await pool.getConnection();
+            await ensurePayrollAutomationColumns(conn);
             await conn.beginTransaction();
 
             const insertQuery = `
@@ -371,6 +583,7 @@ module.exports = function (app, pool) {
         let conn;
         try {
             conn = await pool.getConnection();
+            await ensurePayrollAutomationColumns(conn);
 
             const [rows] = await conn.query(`
             SELECT 
@@ -461,7 +674,9 @@ module.exports = function (app, pool) {
                 ee.company,
                 ee.department,
                 ee.position,
-                e.status
+                e.status,
+                COALESCE(ep.gross_pay, 0) AS gross_pay,
+                COALESCE(ep.net_pay, 0) AS net_pay
             FROM employees e
             LEFT JOIN employee_employment ee ON e.employee_id = ee.employee_id
             LEFT JOIN employee_accounts ea ON e.employee_id = ea.employee_id
@@ -507,8 +722,11 @@ module.exports = function (app, pool) {
 
         if (option === "active") {
             query += " AND (e.status = 'Active' AND (ep.payroll_status != 'Hold' OR ep.payroll_status IS NULL))";
+        } else if (option === "hold") {
+            query += " AND ep.payroll_status = 'Hold'";
+        } else if (option === "with_data") {
+            query += " AND (ep.gross_pay IS NOT NULL AND ep.gross_pay > 0)";
         }
-        else if (option === "hold") query += " AND ep.payroll_status = 'Hold'";
 
         if (normalizedSearch && searchColumn) {
             query += ` AND ${searchColumn} LIKE ?`;
@@ -568,6 +786,7 @@ module.exports = function (app, pool) {
 
         try {
             const conn = await pool.getConnection();
+            await ensurePayrollAutomationColumns(conn);
 
             // Fetch main payroll settings
             const [rows] = await conn.query(
@@ -580,6 +799,7 @@ module.exports = function (app, pool) {
                         ep.undertime,
                         ep.undertime_deduction,
                         ep.overtime,
+                        ep.holiday_pay,
                         ep.adj_comp,
                         ep.adj_non_comp,
                         ep.total_leaves_used,
@@ -920,7 +1140,7 @@ module.exports = function (app, pool) {
         const { employeeId } = req.params;
         const {
             run_id, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction, 
-            overtime, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+            overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
             gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
             pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
             tax_withheld, total_deductions, loans, other_deductions, premium_adj,
@@ -942,6 +1162,7 @@ module.exports = function (app, pool) {
             const safeUndertime = numberOrZero(undertime);
 
             conn = await pool.getConnection();
+            await ensurePayrollAutomationColumns(conn);
             await conn.beginTransaction();
 
             // check existing
@@ -964,7 +1185,7 @@ module.exports = function (app, pool) {
                 await conn.query(
                     `UPDATE employee_payroll SET
                         basic_salary = ?, absence_time = ?, absence_deduction = ?, late_time = ?, late_deduction = ?, undertime = ?, undertime_deduction = ?, 
-                        overtime = ?, taxable_allowances = ?, non_taxable_allowances = ?, adj_comp = ?, adj_non_comp = ?, total_leaves_used = ?,
+                        overtime = ?, holiday_pay = ?, taxable_allowances = ?, non_taxable_allowances = ?, adj_comp = ?, adj_non_comp = ?, total_leaves_used = ?,
                         gsis_employee = ?, gsis_employer = ?, gsis_ecc = ?, sss_employee = ?, sss_employer = ?, sss_ecc = ?,
                         pagibig_employee = ?, pagibig_employer = ?, pagibig_ecc = ?, philhealth_employee = ?, philhealth_employer = ?, philhealth_ecc = ?,
                         tax_withheld = ?, deductions = ?, loans = ?, other_deductions = ?, premium_adj = ?,
@@ -973,7 +1194,7 @@ module.exports = function (app, pool) {
                     WHERE employee_id = ? AND run_id = ?`,
                     [
                         basic_salary, safeAbsenceTime, absence_deduction, safeLateTime, late_deduction, safeUndertime, undertime_deduction,
-                        overtime, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, total_deductions, loans, other_deductions, premium_adj,
@@ -1418,16 +1639,16 @@ module.exports = function (app, pool) {
                 const [insertedPayroll] = await conn.query(
                     `INSERT INTO employee_payroll
                         (run_id, employee_id, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction, 
-                        overtime, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, deductions, loans, other_deductions, premium_adj,
                         ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
                         payroll_status, gross_pay, total_deductions, net_pay)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         run_id, employeeId, basic_salary, safeAbsenceTime, absence_deduction, safeLateTime, late_deduction, safeUndertime, undertime_deduction,
-                        overtime, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, total_deductions, loans, other_deductions, premium_adj,
@@ -1589,7 +1810,7 @@ module.exports = function (app, pool) {
                     basic_salary, absence_time, absence_deduction,
                     late_time, late_deduction,
                     undertime, undertime_deduction,
-                    overtime,
+                    overtime, holiday_pay,
                     taxable_allowances, non_taxable_allowances,
                     adj_comp, adj_non_comp, total_leaves_used,
                     gsis_employee, gsis_employer, gsis_ecc,
@@ -1672,6 +1893,7 @@ module.exports = function (app, pool) {
                     Number(p.late_deduction || 0) -
                     Number(p.undertime_deduction || 0) +
                     Number(p.overtime || 0) +
+                    Number(p.holiday_pay || 0) +
                     Number(p.taxable_allowances || 0) +
                     Number(p.non_taxable_allowances || 0) +
                     Number(p.adj_comp || 0) +
@@ -1725,7 +1947,7 @@ module.exports = function (app, pool) {
                 await conn.query(
                     `UPDATE employee_payroll SET
                         basic_salary = ?, absence_time = ?, absence_deduction = ?, late_time = ?, late_deduction = ?, undertime = ?, undertime_deduction = ?,
-                        overtime = ?, taxable_allowances = ?, non_taxable_allowances = ?, adj_comp = ?, adj_non_comp = ?, total_leaves_used = ?,
+                        overtime = ?, holiday_pay = ?, taxable_allowances = ?, non_taxable_allowances = ?, adj_comp = ?, adj_non_comp = ?, total_leaves_used = ?,
                         gsis_employee = ?, gsis_employer = ?, gsis_ecc = ?, sss_employee = ?, sss_employer = ?, sss_ecc = ?,
                         pagibig_employee = ?, pagibig_employer = ?, pagibig_ecc = ?, philhealth_employee = ?, philhealth_employer = ?, philhealth_ecc = ?,
                         tax_withheld = ?, deductions = ?, loans = ?, other_deductions = ?, premium_adj = ?,
@@ -1734,7 +1956,7 @@ module.exports = function (app, pool) {
                     WHERE employee_id = ? AND run_id = ?`,
                     [
                         p.basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
-                        overtime, p.taxable_allowances, p.non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        overtime, holiday_pay, p.taxable_allowances, p.non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc,philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, p.total_deductions, loans, other_deductions, premium_adj,
@@ -1986,6 +2208,7 @@ module.exports = function (app, pool) {
                     ep.undertime,
                     ep.undertime_deduction,
                     ep.overtime,
+                    ep.holiday_pay,
                     ep.taxable_allowances,
                     ep.non_taxable_allowances,
                     ep.adj_comp,
@@ -2030,6 +2253,7 @@ module.exports = function (app, pool) {
                 LEFT JOIN payroll_runs pr
                     ON pr.run_id = ep.run_id
                 WHERE e.emp_code = ?
+                  AND ep.gross_pay IS NOT NULL
                 ORDER BY ep.run_id DESC
                 LIMIT 1
             `, [empCode]);

@@ -10,6 +10,67 @@ const RISK_P = {
   Stable: ['#f8fafc', '#94a3b8', '#cbd5e1'],
 };
 
+const INSIGHT_COLORS = {
+  danger:  { bg: '#fef2f2', fg: '#dc2626', border: '#fca5a5', icon_bg: '#fee2e2' },
+  warning: { bg: '#fffbeb', fg: '#d97706', border: '#fde68a', icon_bg: '#fef3c7' },
+  success: { bg: '#f0fdf4', fg: '#16a34a', border: '#86efac', icon_bg: '#dcfce7' },
+  info:    { bg: '#eff6ff', fg: '#2563eb', border: '#93c5fd', icon_bg: '#dbeafe' },
+};
+
+function generateInsights(as) {
+  const tardinessRate = Number(as.tardinessRate || 0);
+  const absenceRate = Number(as.absenceRate || 0);
+  const highRisks = Number(as.highTurnoverRisks || 0);
+  const otForecast = Number(as.nextWeekOtForecast || 0);
+  const out = [];
+  if (tardinessRate > 15)
+    out.push({ type: 'danger', icon: '⏰', title: 'High Tardiness Alert', desc: `${tardinessRate.toFixed(1)}% tardiness is well above the 10% threshold.` });
+  else if (tardinessRate > 8)
+    out.push({ type: 'warning', icon: '⏰', title: 'Tardiness Rising', desc: `Tardiness at ${tardinessRate.toFixed(1)}% — monitor and act early.` });
+  else
+    out.push({ type: 'success', icon: '⏰', title: 'Punctuality On Track', desc: `Tardiness at ${tardinessRate.toFixed(1)}% is within normal range.` });
+  if (absenceRate > 10)
+    out.push({ type: 'danger', icon: '🏥', title: 'Absence Rate Critical', desc: `${absenceRate.toFixed(1)}% absence — immediate HR review needed.` });
+  else if (absenceRate > 5)
+    out.push({ type: 'warning', icon: '🏥', title: 'Absence Rate Elevated', desc: `Absence at ${absenceRate.toFixed(1)}% — review department patterns.` });
+  else
+    out.push({ type: 'success', icon: '🏥', title: 'Absence Under Control', desc: `Absence at ${absenceRate.toFixed(1)}% is within healthy range.` });
+  if (highRisks >= 3)
+    out.push({ type: 'danger', icon: '🚨', title: `${highRisks} High-Risk Flags`, desc: 'Multiple employees at risk. Immediate retention action required.' });
+  else if (highRisks >= 1)
+    out.push({ type: 'warning', icon: '⚠️', title: `${highRisks} Turnover Risk${highRisks > 1 ? 's' : ''}`, desc: `${highRisks} employee${highRisks > 1 ? 's' : ''} showing signals — engage proactively.` });
+  else
+    out.push({ type: 'success', icon: '🎯', title: 'Retention Stable', desc: 'No high-risk turnover flags detected this period.' });
+  if (otForecast > 80)
+    out.push({ type: 'warning', icon: '⏱️', title: 'Heavy OT Projected', desc: `${otForecast.toFixed(1)} hrs OT next week — consider task redistribution.` });
+  else if (otForecast > 40)
+    out.push({ type: 'info', icon: '⏱️', title: 'Moderate OT Expected', desc: `${otForecast.toFixed(1)} hrs OT forecast — monitor workload distribution.` });
+  else
+    out.push({ type: 'success', icon: '⏱️', title: 'OT Workload Balanced', desc: `${otForecast.toFixed(1)} hrs OT is within normal operating range.` });
+  return out;
+}
+
+function generateRecommendations(as) {
+  const recs = [];
+  const highRisks = Number(as.highTurnoverRisks || 0);
+  const tardinessRate = Number(as.tardinessRate || 0);
+  const absenceRate = Number(as.absenceRate || 0);
+  if (highRisks > 0) recs.push({ priority: 'High', text: `Schedule retention interviews with ${highRisks} at-risk employee${highRisks > 1 ? 's' : ''}.` });
+  if (tardinessRate > 8) recs.push({ priority: 'Medium', text: 'Reinforce attendance policy with team leads to address tardiness.' });
+  if (absenceRate > 5) recs.push({ priority: 'Medium', text: 'Audit absence hotspots by department for wellness concerns.' });
+  if (recs.length < 2) recs.push({ priority: 'Low', text: 'Review upcoming payroll forecast and verify budget alignment.' });
+  return recs.slice(0, 3);
+}
+
+function computeHealthScore(as) {
+  let score = 100;
+  score -= Math.min(30, Number(as.tardinessRate || 0) * 2);
+  score -= Math.min(25, Number(as.absenceRate || 0) * 2.5);
+  score -= Math.min(30, Number(as.highTurnoverRisks || 0) * 10);
+  score -= Math.min(10, Math.max(0, (Number(as.nextWeekOtForecast || 0) - 40) / 5));
+  return Math.max(0, Math.round(score));
+}
+
 function normalizeRows(rows, labelKey = 'status') {
   return (rows || [])
     .map((r) => ({ label: String(r[labelKey] || r.label || 'Unspecified'), value: Number(r.total || r.value || 0) }))
@@ -88,6 +149,12 @@ export default function HRDashboardPage() {
   const activeP = pct(activeEmp, summary.totalEmployees || 0);
   const pendingLeaves = leaveItems.find((i) => i.label.toLowerCase() === 'pending')?.value || 0;
   const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  const healthScore = computeHealthScore(as);
+  const healthColor = healthScore >= 75 ? '#16a34a' : healthScore >= 50 ? '#d97706' : '#dc2626';
+  const healthLabel = healthScore >= 75 ? 'Good' : healthScore >= 50 ? 'Moderate' : 'Needs Attention';
+  const aiInsights = generateInsights(as);
+  const aiRecs = generateRecommendations(as);
 
   return (
     <>
@@ -231,25 +298,52 @@ export default function HRDashboardPage() {
           </div>
         </article>
 
-        {/* AI Analytics */}
+        {/* AI Insights */}
         <article className="dboard-card dboard-span-2">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: 'linear-gradient(135deg,#dbeafe,#ede9fe)' }}>🤖</div>
-            <div><h3>AI Analytics</h3><p>Live workforce intelligence</p></div>
+            <div><h3>AI Insights</h3><p>Workforce intelligence summary</p></div>
+            <span className="dboard-ai-badge">✦ AI</span>
           </div>
-          <div className="dboard-signals">
-            {[
-              { label: 'Tardiness Rate', value: `${Number(as.tardinessRate || 0).toFixed(2)}%`, sub: `${as.lateDays || 0} late signals`, color: '#ef4444' },
-              { label: 'Absence Rate', value: `${Number(as.absenceRate || 0).toFixed(2)}%`, sub: `${as.absentDays || 0} absent signals`, color: '#f59e0b' },
-              { label: 'Turnover Risks', value: as.highTurnoverRisks || 0, sub: 'Needs follow-up', color: '#8b5cf6' },
-              { label: 'OT Forecast', value: `${Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs`, sub: analytics?.forecast?.direction || 'Stable', color: '#0ea5e9' },
-            ].map((sig) => (
-              <div className="dboard-signal" key={sig.label} style={{ borderLeftColor: sig.color }}>
-                <span>{sig.label}</span>
-                <strong>{sig.value}</strong>
-                <small>{sig.sub}</small>
-              </div>
-            ))}
+          <div className="dboard-ai-body">
+            <div className="dboard-ai-score">
+              <svg width="76" height="76" viewBox="0 0 76 76">
+                <circle cx="38" cy="38" r="28" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                <circle cx="38" cy="38" r="28" fill="none" stroke={healthColor} strokeWidth="8"
+                  strokeDasharray={`${((healthScore / 100) * 2 * Math.PI * 28).toFixed(1)} ${(2 * Math.PI * 28).toFixed(1)}`}
+                  strokeDashoffset={(2 * Math.PI * 28 / 4).toFixed(1)}
+                  strokeLinecap="round" />
+                <text x="38" y="44" textAnchor="middle" fontSize="16" fontWeight="900" fill={healthColor}>{healthScore}</text>
+              </svg>
+              <strong style={{ color: healthColor }}>{healthLabel}</strong>
+              <small>Workforce Health</small>
+            </div>
+            <div className="dboard-ai-insight-list">
+              {aiInsights.map((ins) => {
+                const ic = INSIGHT_COLORS[ins.type];
+                return (
+                  <div key={ins.title} className="dboard-ai-insight" style={{ background: ic.bg, borderLeft: `3px solid ${ic.border}` }}>
+                    <span className="dboard-ai-insight-icon" style={{ background: ic.icon_bg }}>{ins.icon}</span>
+                    <div>
+                      <strong style={{ color: ic.fg }}>{ins.title}</strong>
+                      <small>{ins.desc}</small>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="dboard-ai-recs">
+            <p className="dboard-sub-label">Recommended Actions</p>
+            {aiRecs.map((rec, i) => {
+              const pc = rec.priority === 'High' ? '#dc2626' : rec.priority === 'Medium' ? '#d97706' : '#64748b';
+              return (
+                <div key={i} className="dboard-ai-rec">
+                  <span className="dboard-ai-rec-badge" style={{ color: pc, borderColor: `${pc}40`, background: `${pc}10` }}>{rec.priority}</span>
+                  <span>{rec.text}</span>
+                </div>
+              );
+            })}
           </div>
         </article>
 

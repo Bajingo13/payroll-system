@@ -46,28 +46,28 @@ function computeWorkedSeconds(todayState, now) {
 function ClockRing({ workedSeconds, status }) {
   const TARGET = 8 * 3600;
   const ratio = Math.min(1, workedSeconds / TARGET);
-  const r = 34;
+  const r = 42;
   const circ = 2 * Math.PI * r;
   const dash = circ * ratio;
 
   const statusClass = status === 'Clocked in' ? 'eclock--in' : status === 'On break' ? 'eclock--break' : 'eclock--out';
-  const strokeColor = status === 'Clocked in' ? '#22c55e' : status === 'On break' ? '#f59e0b' : '#475569';
+  const strokeColor = status === 'Clocked in' ? '#4ade80' : status === 'On break' ? '#fbbf24' : '#94a3b8';
 
   return (
     <div className="employee-clock-wrap">
-      <svg className="employee-clock-svg" viewBox="0 0 80 80">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="7" />
+      <svg className="employee-clock-svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="8" />
         <circle
-          cx="40" cy="40" r={r}
+          cx="50" cy="50" r={r}
           fill="none"
           stroke={strokeColor}
-          strokeWidth="7"
+          strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}
-          transform="rotate(-90 40 40)"
+          transform="rotate(-90 50 50)"
           style={{ transition: 'stroke-dasharray 1s ease' }}
         />
-        <text x="40" y="44" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800" fontFamily="Inter,sans-serif">
+        <text x="50" y="55" textAnchor="middle" fill="#fff" fontSize="14" fontWeight="800" fontFamily="Inter,sans-serif">
           {Math.round(ratio * 100)}%
         </text>
       </svg>
@@ -149,16 +149,19 @@ export default function EmployeeDashboardPage() {
     }
   }
 
+  const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
   return (
     <div className="employee-modern-page employee-dashboard-modern">
 
       {/* Hero */}
       <header className="employee-hero">
         <div>
-          <span>Employee Workspace</span>
-          <h2>Hello {employee.first_name || user?.full_name || 'there'}</h2>
+          <span className="employee-hero-kicker">Employee Workspace</span>
+          <h2>Hello, {employee.first_name || user?.full_name || 'there'}</h2>
           <p>Track today&apos;s timekeeping, payroll, and attendance.</p>
         </div>
+        <time className="employee-hero-date">{today}</time>
       </header>
 
       {/* Info strip */}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -56,6 +56,19 @@ export default function UserSettingsPage() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [email, setEmail] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailMessageType, setEmailMessageType] = useState('');
+
+  useEffect(() => {
+    const userId = user?.user_id || sessionStorage.getItem('user_id');
+    if (!userId) return;
+    api.get('/user/email', { params: { user_id: userId } })
+      .then(({ data }) => { if (data.success) setEmail(data.email || ''); })
+      .catch(() => {});
+  }, [user]);
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState('hr');
   const [roleAccess, setRoleAccess] = useState(() => getRoleAccessMap());
@@ -101,6 +114,26 @@ export default function UserSettingsPage() {
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveEmail(event) {
+    event.preventDefault();
+    setEmailMessage('');
+    setEmailMessageType('');
+    const userId = user?.user_id || sessionStorage.getItem('user_id');
+    setEmailSaving(true);
+    try {
+      const { data } = await api.put('/user/email', { user_id: userId, email });
+      if (!data.success) throw new Error(data.message || 'Unable to update email.');
+      setEmailMessage('Email updated successfully.');
+      setEmailMessageType('success');
+      toast.success('Email updated successfully.', { position: 'bottom-center', autoClose: 1500, hideProgressBar: true, closeButton: false, theme: 'colored' });
+    } catch (err) {
+      setEmailMessage(getApiMessage(err, 'Unable to update email.'));
+      setEmailMessageType('error');
+    } finally {
+      setEmailSaving(false);
+    }
   }
 
   async function changePassword(event) {
@@ -206,6 +239,39 @@ export default function UserSettingsPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="table-section user-settings-section">
+        <div className="table-header">
+          <div>
+            <h3>Email Address</h3>
+            <p>Set the email address where you will receive leave and overtime notifications.</p>
+          </div>
+        </div>
+
+        <form className="user-settings-form" onSubmit={saveEmail}>
+          <label>
+            Account
+            <input value={user?.full_name || 'User'} disabled />
+          </label>
+          <label>
+            Email Address
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="e.g. your@email.com"
+              autoComplete="email"
+            />
+          </label>
+          <div className="toolbar">
+            <button type="submit" className="btn" disabled={emailSaving}>
+              {emailSaving ? 'Saving...' : 'Save Email'}
+            </button>
+          </div>
+        </form>
+
+        {emailMessage ? <p className={`form-message ${emailMessageType}`}>{emailMessage}</p> : null}
+      </section>
 
       <section className="table-section user-settings-section">
         <div className="table-header">

@@ -42,6 +42,7 @@ export default function LeaveManagementPage() {
   const [summary, setSummary] = useState({ Pending: 0, Approved: 0, Rejected: 0, Cancelled: 0 });
   const [statusFilter, setStatusFilter] = useState('Pending');
   const [message, setMessage] = useState('');
+  const [rejectModal, setRejectModal] = useState({ open: false, requestId: null, reason: '' });
 
   async function loadRequests(filter = statusFilter) {
     const { data } = await api.get('/admin/leave-requests', {
@@ -65,18 +66,30 @@ export default function LeaveManagementPage() {
     loadRequests().catch((err) => setMessage(getApiMessage(err, 'Unable to load leave requests.')));
   }, []);
 
-  async function updateStatus(requestId, status) {
+  async function updateStatus(requestId, status, rejectionReason = '') {
     setMessage(`${status === 'Approved' ? 'Approving' : 'Rejecting'} leave request...`);
     try {
       const { data } = await api.patch(`/admin/leave-requests/${requestId}/status`, {
         user_id: user.user_id,
-        status
+        status,
+        ...(rejectionReason ? { rejection_reason: rejectionReason } : {})
       });
       setMessage(data.message || 'Leave request updated.');
       await loadRequests();
     } catch (err) {
       setMessage(getApiMessage(err, 'Unable to update leave request.'));
     }
+  }
+
+  function openRejectModal(requestId) {
+    setRejectModal({ open: true, requestId, reason: '' });
+  }
+
+  async function confirmReject() {
+    if (!rejectModal.reason.trim()) return;
+    setRejectModal((prev) => ({ ...prev, open: false }));
+    await updateStatus(rejectModal.requestId, 'Rejected', rejectModal.reason.trim());
+    setRejectModal({ open: false, requestId: null, reason: '' });
   }
 
   async function exportLeave(format) {
@@ -87,7 +100,7 @@ export default function LeaveManagementPage() {
       return;
     }
 
-    const headers = ['Request ID', 'Submitted', 'Employee ID', 'Employee Name', 'Leave Type', 'Start Date', 'End Date', 'Total Days', 'Reason', 'Status', 'Last Updated'];
+    const headers = ['Request ID', 'Submitted', 'Employee ID', 'Employee Name', 'Leave Type', 'Start Date', 'End Date', 'Total Days', 'Reason', 'Status', 'Rejection Reason', 'Last Updated'];
     const rows = allRequests.map((request) => [
         request.request_id,
         formatDateTime(request.created_at),
@@ -99,6 +112,7 @@ export default function LeaveManagementPage() {
         Number(request.total_days || 0).toFixed(2),
         request.reason || '',
         request.status || '',
+        request.rejection_reason || '',
         formatDateTime(request.updated_at)
       ]);
 
@@ -164,12 +178,49 @@ export default function LeaveManagementPage() {
           </div>
         </div>
 
-        <LeaveTable requests={visibleRequests} onApprove={(id) => updateStatus(id, 'Approved')} onReject={(id) => updateStatus(id, 'Rejected')} showActions />
+        <LeaveTable requests={visibleRequests} onApprove={(id) => updateStatus(id, 'Approved')} onReject={openRejectModal} showActions />
         {message && <p className="message">{message}</p>}
       </section>
 
       <PreviousRequestsSection loadRequests={loadAllForPrevious} fallbackRequests={previousRequests} />
+
+      {rejectModal.open && (
+        <RejectReasonModal
+          title="Reject Leave Request"
+          reason={rejectModal.reason}
+          onReasonChange={(val) => setRejectModal((prev) => ({ ...prev, reason: val }))}
+          onConfirm={confirmReject}
+          onCancel={() => setRejectModal({ open: false, requestId: null, reason: '' })}
+        />
+      )}
     </>
+  );
+}
+
+function RejectReasonModal({ title, reason, onReasonChange, onConfirm, onCancel }) {
+  const trimmed = reason.trim();
+  return (
+    <div className="reject-modal-overlay" onClick={onCancel}>
+      <div className="reject-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="reject-modal-title">{title}</h3>
+        <p className="reject-modal-desc">Please provide a reason for rejecting this request. This will be sent to the employee via email and notification.</p>
+        <label className="reject-modal-label">
+          Rejection Reason <span style={{ color: '#dc2626' }}>*</span>
+          <textarea
+            className="reject-modal-textarea"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            placeholder="e.g. Insufficient leave balance, scheduling conflict, etc."
+            rows={4}
+            autoFocus
+          />
+        </label>
+        <div className="reject-modal-actions">
+          <button type="button" className="btn" style={{ background: '#64748b' }} onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn danger" onClick={onConfirm} disabled={!trimmed}>Confirm Reject</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -225,7 +276,12 @@ function LeaveTable({ requests, onApprove, onReject, showActions = false, showUp
               <td>{request.start_date || 'N/A'} to {request.end_date || 'N/A'}</td>
               <td>{Number(request.total_days || 0).toFixed(2)}</td>
               <td className="left-cell">{request.reason || 'N/A'}</td>
-              <td><span className={`status ${statusClass(request.status)}`}>{request.status || 'Pending'}</span></td>
+              <td>
+                <span className={`status ${statusClass(request.status)}`}>{request.status || 'Pending'}</span>
+                {request.status === 'Rejected' && request.rejection_reason && (
+                  <small style={{ display: 'block', color: '#dc2626', marginTop: 3, maxWidth: 180 }}>{request.rejection_reason}</small>
+                )}
+              </td>
               {showUpdated && <td>{formatDateTime(request.updated_at)}</td>}
               {showActions && (
                 <td>

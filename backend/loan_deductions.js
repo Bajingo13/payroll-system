@@ -28,6 +28,10 @@ module.exports = function (app, pool) {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
     `);
 
+    await conn.execute(
+      `ALTER TABLE employee_loans MODIFY COLUMN loan_category VARCHAR(100) NOT NULL DEFAULT 'Company Loan'`
+    ).catch(() => {});
+
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS employee_loan_payments (
         payment_id INT NOT NULL AUTO_INCREMENT,
@@ -61,10 +65,30 @@ module.exports = function (app, pool) {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  const LOAN_CATEGORIES = new Set([
+    // Company / Internal
+    'Cash Advance',
+    'Salary Loan',
+    'Emergency Loan',
+    'Educational Loan',
+    'Medical Loan',
+    'Housing Assistance Loan',
+    'Equipment / Computer Loan',
+    'Company Loan',
+    // SSS
+    'SSS Salary Loan',
+    'SSS Calamity Loan',
+    'SSS Loan',
+    // Pag-IBIG / HDMF
+    'Pag-IBIG Multi-Purpose Loan',
+    'Pag-IBIG Calamity Loan',
+    'Pag-IBIG Housing Loan',
+    'Pag-IBIG Loan'
+  ]);
+
   function normalizeCategory(value) {
     const normalized = String(value || 'Company Loan').trim();
-    const allowed = new Set(['Company Loan', 'SSS Loan', 'Pag-IBIG Loan']);
-    return allowed.has(normalized) ? normalized : 'Company Loan';
+    return LOAN_CATEGORIES.has(normalized) ? normalized : 'Company Loan';
   }
 
   function normalizeFrequency(value) {
@@ -505,6 +529,46 @@ module.exports = function (app, pool) {
         try { await conn.rollback(); } catch { /* ignore */ }
       }
       console.error('Loan payment error:', err);
+      res.status(500).json({ success: false, message: err.message || 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.post('/api/loan_deductions/:loanId/force-close', async (req, res) => {
+    const loanId = Number(req.params.loanId);
+    const reason = String(req.body.notes || '').trim();
+
+    if (!loanId) {
+      return res.status(400).json({ success: false, message: 'Invalid loan id.' });
+    }
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await ensureLoanTables(conn);
+
+      const loan = await getLoanRowWithTotals(conn, loanId);
+      if (!loan) {
+        return res.status(404).json({ success: false, message: 'Loan not found.' });
+      }
+      if (loan.status !== 'Active') {
+        return res.status(400).json({ success: false, message: `Loan is already ${loan.status}.` });
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const forceCloseNote = `[Force Closed ${today}]${reason ? ': ' + reason : ''}`;
+      const finalNotes = loan.notes ? `${loan.notes}\n${forceCloseNote}` : forceCloseNote;
+
+      await conn.execute(
+        `UPDATE employee_loans SET status = 'Closed', balance_amount = 0, end_date = ?, notes = ? WHERE loan_id = ?`,
+        [today, finalNotes, loanId]
+      );
+
+      const updated = await getLoanRowWithTotals(conn, loanId);
+      res.json({ success: true, message: 'Loan force-closed successfully.', loan: updated });
+    } catch (err) {
+      console.error('Loan force-close error:', err);
       res.status(500).json({ success: false, message: err.message || 'Server error' });
     } finally {
       if (conn) conn.release();

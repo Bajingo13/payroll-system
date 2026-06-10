@@ -492,9 +492,6 @@ module.exports = function (app, pool) {
 
         try {
             const conn = await pool.getConnection();
-            if (status !== "hold") {
-                await ensureEmployeesForPayrollJournal(conn, runIdArray);
-            }
 
             let whereClauses = [
                 "ep.run_id IN (?)"

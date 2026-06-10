@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext.jsx';
 import { canAccessFeature, normalizeRole } from '../access/roleAccess.js';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
+import NotificationBell from './NotificationBell.jsx';
 
 const SESSION_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_TIMEOUT_MS || 15 * 60 * 1000);
 
@@ -136,13 +137,14 @@ export default function AppLayout() {
     location.pathname === '/performance-management';
   const isPayrollReportPath = location.pathname.startsWith('/reports') ||
     location.pathname === '/government-reports' ||
-    location.pathname === '/report-builder';
+    location.pathname === '/report-builder' ||
+    location.pathname === '/year-end-payroll' ||
+    location.pathname === '/loan-deduction-management';
   const isAdvancedModulesPath = [
     '/advanced-modules',
-    '/year-end-payroll',
-    '/loan-deduction-management',
     '/security-backup',
     '/leave-calendar',
+    '/company-settings',
     '/system-config'
   ].includes(location.pathname);
 
@@ -184,9 +186,8 @@ export default function AppLayout() {
   ];
 
   const adminToolsNav = [
-    { to: '/year-end-payroll', label: 'Year-End Payroll', feature: 'year-end-payroll' },
-    { to: '/loan-deduction-management', label: 'Loan Deductions', feature: 'loan-deduction-management' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
+    { to: '/company-settings', label: 'Company Settings', feature: 'company-settings' },
     { to: '/security-backup', label: 'Security & Backup', feature: 'security-backup' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' },
     { to: '/system-config', label: 'System Configuration', feature: 'system-config' }
@@ -220,7 +221,7 @@ export default function AppLayout() {
         <div className="profile">
           <div className="logo">
             <img src={astreaBlueLogo} alt="AstreaBlue" />
-            <strong>Astreablue Intelligence Inc.</strong>
+            <span className="logo-tagline">Intelligence Inc.</span>
           </div>
           <button
             type="button"
@@ -307,6 +308,8 @@ export default function AppLayout() {
 
                 <li className="nav-section-label">Payroll & Reports</li>
                 <li><NavLink to="/payroll-computation">Payroll Computation</NavLink></li>
+                <li><NavLink to="/year-end-payroll">Year-End Payroll</NavLink></li>
+                <li><NavLink to="/loan-deduction-management">Loan Deductions</NavLink></li>
                 {visibleAdminReportNav.length ? (
                   <li className={`nav-group ${openGroups.payrollReports ? 'open' : ''}`}>
                     <button
@@ -336,7 +339,10 @@ export default function AppLayout() {
       </aside>
 
       <main className="section">
-        <details className="page-account-menu">
+        <div className="page-topbar">
+          <NotificationBell />
+          <div className="topbar-divider" />
+          <details className="page-account-menu">
           <summary aria-label="Open account menu">
             <span className="page-account-avatar">
               {avatar ? <img src={avatar} alt={`${user?.full_name || 'User'} profile`} /> : <span>{accountInitials}</span>}
@@ -367,6 +373,7 @@ export default function AppLayout() {
             </button>
           </div>
         </details>
+        </div>
         <Outlet />
       </main>
     </div>

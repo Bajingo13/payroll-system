@@ -1,3 +1,5 @@
+const { createNotification } = require('./notificationHelper');
+
 module.exports = function (app, pool) {
     const puppeteer = require('puppeteer');
     const bcrypt = require('bcryptjs');
@@ -1196,6 +1198,20 @@ app.get("/api/employee_details/:id", async (req, res) => {
             const evaluationSummary = buildEvaluationSummary(evaluations);
 
             await logAudit(pool, body.user_id, body.admin_name, `Added Evaluation for Employee ${empCode}`, 'Success');
+
+            const [empUserRows] = await conn.execute(
+              'SELECT user_id FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) LIMIT 1',
+              [empCode]
+            );
+            if (empUserRows.length) {
+              await createNotification(
+                pool,
+                empUserRows[0].user_id,
+                'evaluation',
+                'Growth Evaluation Recorded',
+                `Your growth evaluation for ${reviewPeriod} has been recorded. Score: ${overallScore} (${rating}).`
+              );
+            }
 
             return res.json({
                 success: true,

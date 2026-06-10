@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { createNotification, createNotificationsForAdminHr } = require('./notificationHelper');
 
 module.exports = function (app, pool) {
   let overtimeMailTransporter = null;
@@ -74,6 +75,10 @@ module.exports = function (app, pool) {
   }
 
   async function ensureOvertimeTables(conn) {
+    try {
+      await conn.execute(`ALTER TABLE employee_overtime_requests ADD COLUMN rejection_reason TEXT NULL AFTER status`);
+    } catch { /* column already exists */ }
+
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS employee_overtime_requests (
         overtime_request_id INT NOT NULL AUTO_INCREMENT,
@@ -158,6 +163,7 @@ module.exports = function (app, pool) {
          r.end_time,
          r.total_hours,
          r.reason,
+         r.rejection_reason,
          r.status,
          e.emp_code,
          CONCAT_WS(' ', e.first_name, e.last_name) AS employee_name,
@@ -182,6 +188,7 @@ module.exports = function (app, pool) {
     const employeeName = request.employee_name || request.emp_code || 'Employee';
     const statusText = String(status || request.status || 'Pending');
     const displayStatus = statusText === 'Pending' ? 'For Review' : statusText;
+    const rejectionReason = request.rejection_reason || null;
     const templates = {
       Pending: {
         subject: 'Overtime request for review',
@@ -210,11 +217,15 @@ module.exports = function (app, pool) {
       `Total Hours: ${Number(request.total_hours || 0).toFixed(2)}`,
       `Reason: ${request.reason || 'N/A'}`,
       `Status: ${displayStatus}`,
-      '',
-      template.closing,
-      '',
-      'Astreablue Intelligence Inc. HRIS & Payroll System'
     ];
+    if (statusText === 'Rejected' && rejectionReason) {
+      lines.push(`Rejection Reason: ${rejectionReason}`);
+    }
+    lines.push('', template.closing, '', 'Astreablue Intelligence Inc. HRIS & Payroll System');
+
+    const rejectionRow = (statusText === 'Rejected' && rejectionReason)
+      ? `<tr><td style="padding:4px 12px 4px 0;"><strong>Rejection Reason</strong></td><td style="color:#dc2626;">${escapeHtml(rejectionReason)}</td></tr>`
+      : '';
 
     const html = `
       <p>Hi ${escapeHtml(employeeName)},</p>
@@ -225,12 +236,133 @@ module.exports = function (app, pool) {
         <tr><td style="padding:4px 12px 4px 0;"><strong>Total Hours</strong></td><td>${Number(request.total_hours || 0).toFixed(2)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${escapeHtml(request.reason || 'N/A')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>${escapeHtml(displayStatus)}</td></tr>
+        ${rejectionRow}
       </table>
       <p>${escapeHtml(template.closing)}</p>
-      <p>Payroll System</p>
+      <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
     `;
 
     return { subject: template.subject, text: lines.join('\n'), html };
+  }
+
+  async function getAdminHrEmails(conn) {
+    const emails = new Set();
+
+    const envEmails = (process.env.NOTIFY_ADMIN_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean);
+    console.log('[Overtime] NOTIFY_ADMIN_EMAILS from env:', envEmails);
+    envEmails.forEach((e) => emails.add(e));
+
+    try {
+      const [adminUsers] = await conn.execute(`
+        SELECT user_id, username, full_name, email FROM users
+        WHERE (LOWER(role) LIKE '%admin%' OR LOWER(role) LIKE '%hr%')
+          AND (account_status IS NULL OR LOWER(account_status) NOT IN ('deactivated','deleted'))
+          AND deleted_at IS NULL
+        LIMIT 50
+      `);
+
+      for (const u of adminUsers) {
+        // Primary: use email column on users table directly
+        if (u.email && u.email.trim()) {
+          emails.add(u.email.trim());
+          continue;
+        }
+        // Fallback: look up via employee_contacts by emp_code match
+        const [byCode] = await conn.execute(
+          `SELECT ec.email FROM employee_contacts ec
+           JOIN employees e ON e.employee_id = ec.employee_id
+           WHERE LOWER(TRIM(e.emp_code)) = LOWER(TRIM(?))
+             AND ec.email IS NOT NULL AND ec.email != ''
+           ORDER BY ec.contact_id DESC LIMIT 1`,
+          [u.username || '']
+        );
+        if (byCode.length && byCode[0].email) { emails.add(byCode[0].email.trim()); continue; }
+
+        if (u.full_name) {
+          const parts = u.full_name.trim().split(/\s+/).filter(Boolean);
+          if (parts.length >= 2) {
+            const [byName] = await conn.execute(
+              `SELECT ec.email FROM employee_contacts ec
+               JOIN employees e ON e.employee_id = ec.employee_id
+               WHERE LOWER(TRIM(e.first_name)) = LOWER(?) AND LOWER(TRIM(e.last_name)) = LOWER(?)
+                 AND ec.email IS NOT NULL AND ec.email != ''
+               ORDER BY ec.contact_id DESC LIMIT 1`,
+              [parts[0], parts[parts.length - 1]]
+            );
+            if (byName.length && byName[0].email) emails.add(byName[0].email.trim());
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('getAdminHrEmails error:', err.message);
+    }
+
+    return [...emails].filter(Boolean);
+  }
+
+  async function sendOvertimeAdminNotification(requestId) {
+    let conn;
+    try {
+      const config = getMailConfig();
+      const transporter = getMailTransporter();
+      if (!config || !transporter) return false;
+
+      conn = await pool.getConnection();
+
+      const adminEmails = await getAdminHrEmails(conn);
+      if (!adminEmails.length) {
+        console.warn('Overtime admin notification skipped: no admin/HR email addresses found.');
+        return false;
+      }
+
+      const request = await getOvertimeRequestForNotification(conn, requestId);
+      if (!request) return false;
+
+      const employeeName = request.employee_name || request.emp_code || 'Employee';
+      const dateStr = formatDate(request.overtime_date);
+      const timeRange = `${formatTime(request.start_time)} to ${formatTime(request.end_time)}`;
+      const totalHours = Number(request.total_hours || 0).toFixed(2);
+      const reason = request.reason || 'N/A';
+
+      const subject = `New Overtime Request: ${employeeName} — ${dateStr}`;
+      const text = [
+        'A new overtime request has been submitted and requires your review.',
+        '',
+        `Employee: ${employeeName}`,
+        `Date: ${dateStr}`,
+        `Time: ${timeRange}`,
+        `Total Hours: ${totalHours}`,
+        `Reason: ${reason}`,
+        `Status: Pending`,
+        '',
+        'Please log in to the HRIS system to approve or reject this request.',
+        '',
+        'Astreablue Intelligence Inc. HRIS & Payroll System'
+      ].join('\n');
+
+      const html = `
+        <p>A new overtime request has been submitted and requires your review.</p>
+        <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Employee</strong></td><td>${escapeHtml(employeeName)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Date</strong></td><td>${escapeHtml(dateStr)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Time</strong></td><td>${escapeHtml(timeRange)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Total Hours</strong></td><td>${escapeHtml(totalHours)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${escapeHtml(reason)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>Pending</td></tr>
+        </table>
+        <p>Please log in to the HRIS system to review and take action on this request.</p>
+        <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
+      `;
+
+      await transporter.sendMail({ from: config.from, to: adminEmails.join(', '), subject, text, html });
+      console.log(`Overtime admin notification sent to: ${adminEmails.join(', ')}`);
+      return true;
+    } catch (err) {
+      console.warn('Overtime admin notification error:', err.message);
+      return false;
+    } finally {
+      if (conn) conn.release();
+    }
   }
 
   async function sendOvertimeNotification(conn, requestId, status) {
@@ -357,8 +489,17 @@ module.exports = function (app, pool) {
         [employee.employee_id, overtimeDate, startTime, endTime, totalHours, reason]
       );
 
-      const emailSent = await sendOvertimeNotification(conn, insertResult.insertId, 'Pending');
-      return res.json({ success: true, message: 'Overtime request submitted successfully.', emailNotificationSent: emailSent });
+      sendOvertimeAdminNotification(insertResult.insertId).catch((err) => console.warn('Overtime admin notify error:', err.message));
+
+      const employeeDisplayName = user.full_name || user.username || 'An employee';
+      await createNotificationsForAdminHr(
+        pool,
+        'overtime_request',
+        'New Overtime Request',
+        `${employeeDisplayName} submitted an overtime request for ${overtimeDate} (${startTime}–${endTime}, ${totalHours} hrs).`
+      );
+
+      return res.json({ success: true, message: 'Overtime request submitted successfully.' });
     } catch (err) {
       console.error('Employee overtime request error:', err);
       return res.status(500).json({ success: false, message: err.message || 'Server error' });
@@ -406,6 +547,7 @@ module.exports = function (app, pool) {
            r.end_time,
            r.total_hours,
            r.reason,
+           r.rejection_reason,
            r.status,
            r.created_at,
            r.updated_at
@@ -442,6 +584,7 @@ module.exports = function (app, pool) {
     const requestId = Number(req.params.requestId);
     const userId = Number(req.body.user_id);
     const nextStatus = String(req.body.status || '').trim();
+    const rejectionReason = String(req.body.rejection_reason || '').trim();
     const allowedStatuses = ['Approved', 'Rejected'];
 
     if (!requestId || !userId || !nextStatus) {
@@ -450,6 +593,10 @@ module.exports = function (app, pool) {
 
     if (!allowedStatuses.includes(nextStatus)) {
       return res.status(400).json({ success: false, message: 'Overtime request can only be approved or rejected here.' });
+    }
+
+    if (nextStatus === 'Rejected' && !rejectionReason) {
+      return res.status(400).json({ success: false, message: 'A rejection reason is required when rejecting an overtime request.' });
     }
 
     let conn;
@@ -493,9 +640,9 @@ module.exports = function (app, pool) {
 
       await conn.execute(
         `UPDATE employee_overtime_requests
-         SET status = ?
+         SET status = ?, rejection_reason = ?
          WHERE overtime_request_id = ?`,
-        [nextStatus, requestId]
+        [nextStatus, nextStatus === 'Rejected' ? rejectionReason : null, requestId]
       );
 
       await writeOvertimeAudit(
@@ -508,6 +655,25 @@ module.exports = function (app, pool) {
       await conn.commit();
 
       const emailSent = await sendOvertimeNotification(conn, requestId, nextStatus);
+
+      let [empUserRows] = await conn.execute(
+        'SELECT user_id FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) LIMIT 1',
+        [request.emp_code || '']
+      );
+      if (!empUserRows.length && request.employee_name) {
+        [empUserRows] = await conn.execute(
+          'SELECT user_id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1',
+          [request.employee_name]
+        );
+      }
+      console.log(`[Notification] Overtime status lookup emp_code=${request.emp_code} employee_name=${request.employee_name} -> user_id=${empUserRows[0]?.user_id ?? 'NOT FOUND'}`);
+      if (empUserRows.length) {
+        const notifMsg = nextStatus === 'Rejected' && rejectionReason
+          ? `Your overtime request for ${formatDate(request.overtime_date)} was rejected. Reason: ${rejectionReason}`
+          : `Your overtime request for ${formatDate(request.overtime_date)} has been ${nextStatus.toLowerCase()}.`;
+        await createNotification(pool, empUserRows[0].user_id, 'overtime_status', `Overtime Request ${nextStatus}`, notifMsg);
+      }
+
       return res.json({ success: true, message: `Overtime request ${nextStatus.toLowerCase()} successfully.`, emailNotificationSent: emailSent });
     } catch (err) {
       if (conn) {

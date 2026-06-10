@@ -396,6 +396,30 @@ module.exports = function (app, pool) {
         }
       }
 
+      let overtimeStatuses = [
+        { status: 'Pending', total: 0 },
+        { status: 'Approved', total: 0 },
+        { status: 'Rejected', total: 0 },
+        { status: 'Cancelled', total: 0 }
+      ];
+
+      try {
+        const [otRows] = await conn.execute(`
+          SELECT status, COUNT(*) AS total
+          FROM employee_overtime_requests
+          GROUP BY status
+        `);
+
+        overtimeStatuses = overtimeStatuses.map((base) => {
+          const match = otRows.find((row) => row.status === base.status);
+          return match ? { status: base.status, total: Number(match.total || 0) } : base;
+        });
+      } catch (otErr) {
+        if (otErr.code !== 'ER_NO_SUCH_TABLE') {
+          throw otErr;
+        }
+      }
+
       let payrollRunHistory = [];
       try {
         const [payrollHistoryRows] = await conn.execute(`
@@ -427,6 +451,7 @@ module.exports = function (app, pool) {
         employeeStatuses,
         payrollStatuses,
         leaveStatuses,
+        overtimeStatuses,
         payrollRunHistory
       });
     } catch (err) {

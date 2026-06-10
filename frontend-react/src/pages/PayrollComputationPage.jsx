@@ -20,6 +20,7 @@ const moneyFields = [
   'late_deduction',
   'undertime_deduction',
   'overtime',
+  'holiday_pay',
   'taxable_allowances',
   'non_taxable_allowances',
   'adj_comp',
@@ -109,6 +110,7 @@ export default function PayrollComputationPage() {
       toNumber(payroll.late_deduction) -
       toNumber(payroll.undertime_deduction) +
       toNumber(payroll.overtime) +
+      toNumber(payroll.holiday_pay) +
       toNumber(payroll.taxable_allowances) +
       toNumber(payroll.non_taxable_allowances) +
       toNumber(payroll.adj_comp) +
@@ -162,6 +164,46 @@ export default function PayrollComputationPage() {
 
   function updatePayroll(name, value) {
     setPayroll((current) => ({ ...current, [name]: value }));
+  }
+
+  async function autoComputePayroll() {
+    if (!selectedEmployee) {
+      setMessage('Please select an employee first.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const { data } = await api.post('/payroll/auto-compute', {
+        ...moneyFields.reduce((acc, field) => ({ ...acc, [field]: toNumber(payroll[field]) }), {}),
+        payroll_period: selectedPeriod?.period_name || payroll.payroll_period || ''
+      });
+
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to auto-compute payroll.');
+      }
+
+      setPayroll((current) => ({
+        ...current,
+        sss_employee: data.sss_employee,
+        sss_employer: data.sss_employer,
+        sss_ecc: data.sss_ecc,
+        pagibig_employee: data.pagibig_employee,
+        pagibig_employer: data.pagibig_employer,
+        pagibig_ecc: data.pagibig_ecc,
+        philhealth_employee: data.philhealth_employee,
+        philhealth_employer: data.philhealth_employer,
+        philhealth_ecc: data.philhealth_ecc,
+        tax_withheld: data.tax_withheld
+      }));
+      setMessage('Payroll deductions and withholding tax computed from setup tables.');
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to auto-compute payroll.'));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function ensurePayrollRun() {
@@ -252,6 +294,30 @@ export default function PayrollComputationPage() {
       setDeductions(record.deductions || []);
     } catch (err) {
       setMessage(getApiMessage(err, 'Unable to load employee payroll.'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generatePayroll() {
+    if (!runId) {
+      setMessage('No payroll run loaded. Please proceed to computation first.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const { data } = await api.put(`/payroll_runs/${runId}/generate`, {
+        user_id: user.user_id,
+        admin_name: user.full_name
+      });
+
+      if (!data.success) throw new Error(data.message || 'Unable to generate payroll.');
+      setMessage('Payroll run marked as Generated.');
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to generate payroll.'));
     } finally {
       setLoading(false);
     }
@@ -352,6 +418,7 @@ export default function PayrollComputationPage() {
               <option value="all">All</option>
               <option value="active">Active</option>
               <option value="hold">Hold</option>
+              <option value="with_data">With Data (Gross &gt; 0)</option>
             </FormSelect>
             <button className="btn" type="button" disabled={loading} onClick={loadEmployees}>
               {loading ? 'Loading...' : 'Proceed to Computation'}
@@ -366,9 +433,16 @@ export default function PayrollComputationPage() {
             <h3>Step 2: Employee Payroll</h3>
             <p>{runId ? `Payroll Run #${runId} ${payrollRange ? `(${payrollRange})` : ''}` : 'Load employees after selecting a payroll period.'}</p>
           </div>
-          <div className="payroll-loaded-count">
-            <strong>{employees.length}</strong>
-            <span>employees loaded</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="payroll-loaded-count">
+              <strong>{employees.length}</strong>
+              <span>Employee Loaded</span>
+            </div>
+            {runId && (
+              <button className="btn" type="button" disabled={loading} onClick={generatePayroll}>
+                {loading ? 'Processing...' : 'Generate Payroll'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -386,23 +460,37 @@ export default function PayrollComputationPage() {
                     <th>Last Name</th>
                     <th>First Name</th>
                     <th>Department</th>
+                    <th>Gross Pay</th>
+                    <th>Net Pay</th>
                   </tr>
                 </thead>
                 <tbody>
                   {employees.length === 0 ? (
-                    <tr><td colSpan="4">No employees loaded.</td></tr>
-                  ) : employees.map((employee) => (
-                    <tr
-                      key={employee.employee_id}
-                      className={selectedEmployee?.employee_id === employee.employee_id ? 'selected-row' : ''}
-                      onClick={() => loadEmployeePayroll(employee)}
-                    >
-                      <td>{employee.emp_code}</td>
-                      <td>{employee.last_name}</td>
-                      <td>{employee.first_name}</td>
-                      <td>{employee.department || 'N/A'}</td>
-                    </tr>
-                  ))}
+                    <tr><td colSpan="6">No employees loaded.</td></tr>
+                  ) : employees.map((employee) => {
+                    const hasData = Number(employee.gross_pay || 0) > 0;
+                    return (
+                      <tr
+                        key={employee.employee_id}
+                        className={[
+                          selectedEmployee?.employee_id === employee.employee_id ? 'selected-row' : '',
+                          !hasData ? 'payroll-no-data' : ''
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => loadEmployeePayroll(employee)}
+                      >
+                        <td>{employee.emp_code}</td>
+                        <td>{employee.last_name}</td>
+                        <td>{employee.first_name}</td>
+                        <td>{employee.department || 'N/A'}</td>
+                        <td className={hasData ? '' : 'payroll-empty-cell'}>
+                          {hasData ? `PHP ${Number(employee.gross_pay).toFixed(2)}` : '—'}
+                        </td>
+                        <td className={hasData ? '' : 'payroll-empty-cell'}>
+                          {hasData ? `PHP ${Number(employee.net_pay).toFixed(2)}` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -424,6 +512,7 @@ export default function PayrollComputationPage() {
                     <MoneyInput label="Late Deduction" name="late_deduction" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Undertime Deduction" name="undertime_deduction" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Overtime" name="overtime" payroll={payroll} onChange={updatePayroll} />
+                    <MoneyInput label="Holiday Pay" name="holiday_pay" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Taxable Allowances" name="taxable_allowances" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Non-Taxable Allowances" name="non_taxable_allowances" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="Adjustment Compensation" name="adj_comp" payroll={payroll} onChange={updatePayroll} />
@@ -431,7 +520,14 @@ export default function PayrollComputationPage() {
                     <MoneyInput label="Leaves Used" name="total_leaves_used" payroll={payroll} onChange={updatePayroll} />
                   </PayrollPanel>
 
-                  <PayrollPanel title="Deductions">
+                  <PayrollPanel
+                    title="Deductions"
+                    action={
+                      <button className="btn secondary" type="button" disabled={loading} onClick={autoComputePayroll}>
+                        Auto Compute
+                      </button>
+                    }
+                  >
                     <p className="panel-note">Enter employee share deductions and any one-time deductions for this run.</p>
                     <MoneyInput label="GSIS Employee" name="gsis_employee" payroll={payroll} onChange={updatePayroll} />
                     <MoneyInput label="SSS Employee" name="sss_employee" payroll={payroll} onChange={updatePayroll} />
@@ -501,10 +597,17 @@ function FormInput({ label, value, readOnly = false }) {
   );
 }
 
-function PayrollPanel({ title, children }) {
+function PayrollPanel({ title, action, children }) {
   return (
     <div className="payroll-panel">
-      <h4>{title}</h4>
+      {action ? (
+        <div className="payroll-panel-header">
+          <h4>{title}</h4>
+          {action}
+        </div>
+      ) : (
+        <h4>{title}</h4>
+      )}
       {children}
     </div>
   );

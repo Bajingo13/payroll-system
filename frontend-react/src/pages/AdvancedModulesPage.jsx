@@ -38,6 +38,15 @@ const PERMISSIONS = [
   'Audit logs'
 ];
 
+const PAYROLL_PROCESSING_SCOPE = [
+  ['Gross Pay Calculation', 'Basic + OT + Allowances + Holiday Pay'],
+  ['Statutory Deductions', 'SSS, PhilHealth, Pag-IBIG contributions'],
+  ['Withholding Tax', 'BIR RR No. 11-2018, TRAIN Law rates'],
+  ['Other Deductions', 'Loans, absences, late penalties'],
+  ['Net Pay Computation', 'Gross pay - total deductions'],
+  ['13th Month Pay', 'Automated annual computation']
+];
+
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function money(value) {
@@ -277,6 +286,23 @@ function PayrollExtras() {
         <div className="card"><span>Loan Amortization</span><strong>PHP {money(loanAmortization)}</strong></div>
         <div className="card"><span>Night Diff Premium</span><strong>PHP {money(nightDiff)}</strong></div>
         <div className="card"><span>Tax Refund / Payable</span><strong>PHP {money(Math.abs(annualizationDelta))}</strong></div>
+      </section>
+      <section className="table-section">
+        <div className="table-header">
+          <div>
+            <h3>Payroll Processing</h3>
+            <p>Automated salary computation for gross pay, deductions, tax, net pay, and annual 13th month pay.</p>
+          </div>
+        </div>
+        <SimpleTable
+          headers={['No.', 'Module', 'Feature', 'Computation / Basis']}
+          rows={PAYROLL_PROCESSING_SCOPE.map(([feature, basis], index) => [
+            index === 0 ? '8' : '',
+            index === 0 ? 'Payroll Processing' : '',
+            feature,
+            basis
+          ])}
+        />
       </section>
       <section className="table-section">
         <h3>13th Month, Loans, Night Differential, and Tax Annualization</h3>

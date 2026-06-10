@@ -1,3 +1,6 @@
+const axios = require('axios');
+const AI_MICRO_URL = process.env.AI_MICRO_URL || 'http://localhost:5001';
+
 module.exports = function (app, pool) {
   function canViewAnalytics(role) {
     const normalized = String(role || '').trim().toLowerCase();
@@ -260,16 +263,55 @@ module.exports = function (app, pool) {
       const nextWeekForecast = Math.max(0, weeklyAverage + ((currentWeekHours - priorWeekHours) * 0.35));
 
       const attendanceSummary = attendanceSummaryRows[0] || {};
-      const turnoverRisks = turnoverRows.map((row) => ({
-        ...row,
-        risk_score: Number(row.risk_score || 0),
-        risk_band: riskBand(Number(row.risk_score || 0)),
-        insight: insightForRisk(row)
-      }));
+
+      // ── Python AI Microservice ────────────────────────────────────────────
+      let mlPredictions = null;
+      try {
+        const mlResp = await axios.post(`${AI_MICRO_URL}/predict`, {
+          employees: turnoverRows.map((r) => ({
+            employee_id: r.employee_id || null,
+            emp_code: r.emp_code || null,
+            employee_name: r.employee_name || null,
+            department: r.department || null,
+            tenure_days: Number(r.tenure_days || 0),
+            late_days: Number(r.late_days || 0),
+            absent_days: Number(r.absent_days || 0),
+            leave_days: Number(r.leave_days || 0),
+            approved_ot_hours: Number(r.approved_ot_hours || 0),
+          })),
+          overtime_patterns: overtimeRows.map((r) => ({
+            week_key: String(r.week_key),
+            week_start: r.week_start || null,
+            department: r.department || null,
+            total_hours: Number(r.total_hours || 0),
+            request_count: Number(r.request_count || 0),
+          })),
+        }, { timeout: 3000 });
+        mlPredictions = mlResp.data;
+      } catch (mlErr) {
+        console.warn('[AI] Python microservice unavailable, using rule-based fallback:', mlErr.message);
+      }
+
+      // Use ML predictions if available, else fall back to rule-based
+      const turnoverRisks = mlPredictions
+        ? mlPredictions.attrition_risks
+        : turnoverRows.map((row) => ({
+            ...row,
+            risk_score: Number(row.risk_score || 0),
+            risk_band: riskBand(Number(row.risk_score || 0)),
+            insight: insightForRisk(row),
+          }));
+
+      const mlOt = mlPredictions ? mlPredictions.ot_forecast : null;
+      const finalNextWeekForecast = mlOt ? mlOt.next_week_forecast : Number(nextWeekForecast.toFixed(2));
+      const finalDirection = mlOt
+        ? mlOt.direction
+        : currentWeekHours > priorWeekHours ? 'Increasing' : currentWeekHours < priorWeekHours ? 'Decreasing' : 'Stable';
 
       return res.json({
         success: true,
         generatedAt: new Date().toISOString(),
+        mlPowered: !!mlPredictions,
         summary: {
           scheduledDays: Number(attendanceSummary.scheduled_days || 0),
           absentDays: Number(attendanceSummary.absent_days || 0),
@@ -278,7 +320,7 @@ module.exports = function (app, pool) {
           absenceRate: Number(attendanceSummary.absence_rate || 0),
           tardinessRate: Number(attendanceSummary.tardiness_rate || 0),
           totalOtHours: Number(totalOtHours.toFixed(2)),
-          nextWeekOtForecast: Number(nextWeekForecast.toFixed(2)),
+          nextWeekOtForecast: finalNextWeekForecast,
           highTurnoverRisks: turnoverRisks.filter((row) => row.risk_band === 'High').length
         },
         tardinessPatterns: tardinessRows,
@@ -286,11 +328,11 @@ module.exports = function (app, pool) {
         turnoverRisks,
         overtimePatterns: overtimeRows,
         forecast: {
-          currentWeekHours: Number(currentWeekHours.toFixed(2)),
-          priorWeekHours: Number(priorWeekHours.toFixed(2)),
-          weeklyAverage: Number(weeklyAverage.toFixed(2)),
-          nextWeekHours: Number(nextWeekForecast.toFixed(2)),
-          direction: currentWeekHours > priorWeekHours ? 'Increasing' : currentWeekHours < priorWeekHours ? 'Decreasing' : 'Stable'
+          currentWeekHours: mlOt ? mlOt.current_week_hours : Number(currentWeekHours.toFixed(2)),
+          priorWeekHours: mlOt ? mlOt.prior_week_hours : Number(priorWeekHours.toFixed(2)),
+          weeklyAverage: mlOt ? mlOt.weekly_average : Number(weeklyAverage.toFixed(2)),
+          nextWeekHours: finalNextWeekForecast,
+          direction: finalDirection,
         }
       });
     } catch (err) {

@@ -127,8 +127,8 @@ export default function LoginPage() {
               <div>
                 <h2>Payroll Processing</h2>
                 <p>
-                  Compute gross pay, deductions, net pay, payroll journals, and
-                  employee payslips.
+                  Automate gross pay, statutory deductions, withholding tax,
+                  other deductions, net pay, and 13th month computation.
                 </p>
               </div>
             </article>

@@ -26,7 +26,10 @@ import AuditingPage from './pages/AuditingPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import UtilitiesPage from './pages/UtilitiesPage.jsx';
 import AdvancedModulesPage from './pages/AdvancedModulesPage.jsx';
+import YearEndPayrollPage from './pages/YearEndPayrollPage.jsx';
+import LoanDeductionPage from './pages/LoanDeductionPage.jsx';
 import SystemConfigPage from './pages/SystemConfigPage.jsx';
+import CompanySettingsPage from './pages/CompanySettingsPage.jsx';
 import UserSettingsPage from './pages/UserSettingsPage.jsx';
 import AboutUsPage from './pages/AboutUsPage.jsx';
 import HelpPage from './pages/HelpPage.jsx';
@@ -62,6 +65,7 @@ const FEATURE_HOME_ROUTES = {
   utilities: '/utilities',
   'advanced-modules': '/advanced-modules',
   'system-config': '/system-config',
+  'company-settings': '/company-settings',
   'about-us': '/about-us',
   help: '/help',
   contacts: '/contacts'
@@ -307,7 +311,7 @@ function AppRoutes() {
           path="year-end-payroll"
           element={
             <RoleRoute roles={['admin']} feature="year-end-payroll">
-              <AdvancedModulesPage moduleKey="payroll" />
+              <YearEndPayrollPage />
             </RoleRoute>
           }
         />
@@ -316,7 +320,7 @@ function AppRoutes() {
           path="loan-deduction-management"
           element={
             <RoleRoute roles={['admin']} feature="loan-deduction-management">
-              <AdvancedModulesPage moduleKey="loan" />
+              <LoanDeductionPage />
             </RoleRoute>
           }
         />
@@ -385,6 +389,15 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['admin']} feature="system-config">
               <SystemConfigPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="company-settings"
+          element={
+            <RoleRoute roles={['admin']} feature="company-settings">
+              <CompanySettingsPage />
             </RoleRoute>
           }
         />

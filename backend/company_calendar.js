@@ -1,3 +1,5 @@
+const { createNotificationsForAllUsers } = require('./notificationHelper');
+
 module.exports = function (app, pool) {
     const GOVERNMENT_HOLIDAY_DESCRIPTION = "Auto-added Philippine government holiday.";
 
@@ -165,6 +167,17 @@ module.exports = function (app, pool) {
                     is_paid_holiday ? 1 : 0
                 ]
             );
+
+            const normalizedType = String(event_type || 'Other').trim().toLowerCase();
+            if (normalizedType.includes('holiday')) {
+              const isPaid = is_paid_holiday ? 'paid' : 'non-paid';
+              await createNotificationsForAllUsers(
+                pool,
+                'holiday',
+                `Holiday: ${String(title).trim()}`,
+                `A ${isPaid} holiday has been announced on ${event_date}.`
+              );
+            }
 
             res.json({ success: true, event_id: result.insertId, message: "Calendar event added." });
         } catch (err) {

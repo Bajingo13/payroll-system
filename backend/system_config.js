@@ -81,6 +81,14 @@ module.exports = function (app, pool) {
         { bracket_order: 2, salary_from: 1500.01, salary_to: null,  employee_value: 0.02, employer_value: 0.02, label: '2% EE / 2% ER (max PHP 100 each)' }
     ];
 
+    async function safeAddColumn(conn, table, column, def) {
+        try {
+            await conn.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`);
+        } catch (e) {
+            if (e.errno !== 1060) throw e;
+        }
+    }
+
     async function ensureTables(conn) {
         await conn.query(`
             CREATE TABLE IF NOT EXISTS company_settings (
@@ -96,6 +104,19 @@ module.exports = function (app, pool) {
                 PRIMARY KEY (id)
             )
         `);
+
+        await conn.query(`ALTER TABLE company_settings MODIFY COLUMN logo_url MEDIUMTEXT`).catch(() => {});
+        await safeAddColumn(conn, 'company_settings', 'industry', "VARCHAR(255) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'website', "VARCHAR(255) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'registration_no', "VARCHAR(100) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'founded_year', "VARCHAR(10) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'logo_main', 'MEDIUMTEXT');
+        await safeAddColumn(conn, 'company_settings', 'logo_secondary', 'MEDIUMTEXT');
+        await safeAddColumn(conn, 'company_settings', 'logo_email_signature', 'MEDIUMTEXT');
+        await safeAddColumn(conn, 'company_settings', 'leave_policy', "TEXT");
+        await safeAddColumn(conn, 'company_settings', 'overtime_policy', "TEXT");
+        await safeAddColumn(conn, 'company_settings', 'code_of_conduct', "TEXT");
+        await safeAddColumn(conn, 'company_settings', 'data_privacy_policy', "TEXT");
 
         await conn.query(`
             CREATE TABLE IF NOT EXISTS bir_tax_brackets (
@@ -197,32 +218,52 @@ module.exports = function (app, pool) {
 
     app.put('/api/company_settings', async (req, res) => {
         await initReady;
-        const { company_name, address, tin, email, phone, logo_url, hr_policy } = req.body || {};
+        const {
+            company_name, address, tin, email, phone, logo_url, hr_policy,
+            industry, website, registration_no, founded_year,
+            logo_main, logo_secondary, logo_email_signature,
+            leave_policy, overtime_policy, code_of_conduct, data_privacy_policy
+        } = req.body || {};
         if (!company_name || !String(company_name).trim()) {
             return res.status(400).json({ success: false, message: 'Company name is required' });
         }
+        const effectiveLogoUrl = logo_main || logo_url || '';
         let conn;
         try {
             conn = await pool.getConnection();
             await conn.query(
-                `INSERT INTO company_settings (id, company_name, address, tin, email, phone, logo_url, hr_policy)
-                 VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO company_settings
+                   (id, company_name, address, tin, email, phone, logo_url, hr_policy,
+                    industry, website, registration_no, founded_year,
+                    logo_main, logo_secondary, logo_email_signature,
+                    leave_policy, overtime_policy, code_of_conduct, data_privacy_policy)
+                 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
-                   company_name = VALUES(company_name),
-                   address      = VALUES(address),
-                   tin          = VALUES(tin),
-                   email        = VALUES(email),
-                   phone        = VALUES(phone),
-                   logo_url     = VALUES(logo_url),
-                   hr_policy    = VALUES(hr_policy)`,
+                   company_name         = VALUES(company_name),
+                   address              = VALUES(address),
+                   tin                  = VALUES(tin),
+                   email                = VALUES(email),
+                   phone                = VALUES(phone),
+                   logo_url             = VALUES(logo_url),
+                   hr_policy            = VALUES(hr_policy),
+                   industry             = VALUES(industry),
+                   website              = VALUES(website),
+                   registration_no      = VALUES(registration_no),
+                   founded_year         = VALUES(founded_year),
+                   logo_main            = VALUES(logo_main),
+                   logo_secondary       = VALUES(logo_secondary),
+                   logo_email_signature = VALUES(logo_email_signature),
+                   leave_policy         = VALUES(leave_policy),
+                   overtime_policy      = VALUES(overtime_policy),
+                   code_of_conduct      = VALUES(code_of_conduct),
+                   data_privacy_policy  = VALUES(data_privacy_policy)`,
                 [
                     String(company_name).trim(),
-                    address || '',
-                    tin || '',
-                    email || '',
-                    phone || '',
-                    logo_url || '',
-                    hr_policy || ''
+                    address || '', tin || '', email || '', phone || '',
+                    effectiveLogoUrl, hr_policy || '',
+                    industry || '', website || '', registration_no || '', founded_year || '',
+                    logo_main || '', logo_secondary || '', logo_email_signature || '',
+                    leave_policy || '', overtime_policy || '', code_of_conduct || '', data_privacy_policy || ''
                 ]
             );
             const [rows] = await conn.query('SELECT * FROM company_settings WHERE id = 1');

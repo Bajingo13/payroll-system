@@ -99,17 +99,14 @@ function money(value) {
 
 function formatDate(value) {
   if (!value) return '-';
-  const date = new Date(String(value).replace(' ', 'T'));
+  const date = value instanceof Date ? value : new Date(String(value).replace(' ', 'T'));
   if (Number.isNaN(date.getTime())) return String(value);
 
-  return date.toLocaleString('en-PH', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
+  const month = date.toLocaleString('en-PH', { month: 'short' });
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  const time = date.toLocaleString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return `${month} ${day}, ${year} ${time}`;
 }
 
 function getValue(obj, keys, fallback = 0) {
@@ -290,7 +287,7 @@ function printHtml(title, bodyHtml) {
 }
 
 function printPayslipDocument(title, payslipText) {
-  const meta = getReportMetadata(title);
+  const meta = { ...getReportMetadata(title), signatories: ['Employee Signature:'] };
   const printWindow = window.open('', '_blank', 'width=760,height=760');
   if (!printWindow) {
     window.alert('Popup blocked. Please allow popups to print the payslip.');
@@ -329,13 +326,15 @@ function printPayslipDocument(title, payslipText) {
             background: #ffffff;
           }
           .signatories {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
             margin-top: 28px;
             font-family: Arial, sans-serif;
             font-size: 12px;
+            width: 260px;
           }
+          .signatories div { display: flex; flex-direction: column; gap: 2px; }
           .signatories span { display: block; border-bottom: 1px solid #000; height: 28px; }
         </style>
       </head>
@@ -443,7 +442,8 @@ function PayrollAggregateSection({ type, roleSettings }) {
     year: '',
     status: 'active',
     orderBy: 'department_surname',
-    employeeSearch: ''
+    employeeSearch: '',
+    hideNoData: true
   });
 
   const [rows, setRows] = useState([]);
@@ -497,21 +497,30 @@ function PayrollAggregateSection({ type, roleSettings }) {
   }, []);
 
   const visibleRows = useMemo(() => {
+    let result = rows;
+
+    if (filters.hideNoData) {
+      result = result.filter((row) =>
+        Number(row.gross_pay || 0) > 0 || Number(row.net_pay || 0) > 0
+      );
+    }
+
     const query = filters.employeeSearch.trim().toLowerCase();
-    if (!query) return rows;
+    if (query) {
+      result = result.filter((row) => {
+        const haystack = [
+          row.emp_code,
+          row.employee_id,
+          row.first_name,
+          row.last_name,
+          `${row.first_name || ''} ${row.last_name || ''}`
+        ].join(' ').toLowerCase();
+        return haystack.includes(query);
+      });
+    }
 
-    return rows.filter((row) => {
-      const haystack = [
-        row.emp_code,
-        row.employee_id,
-        row.first_name,
-        row.last_name,
-        `${row.first_name || ''} ${row.last_name || ''}`
-      ].join(' ').toLowerCase();
-
-      return haystack.includes(query);
-    });
-  }, [filters.employeeSearch, rows]);
+    return result;
+  }, [filters.employeeSearch, filters.hideNoData, rows]);
 
   const totals = useMemo(() => {
     return visibleRows.reduce(
@@ -745,14 +754,8 @@ function PayrollAggregateSection({ type, roleSettings }) {
             </select>
           </label>
 
-          <label>
-            Employee Search
-            <input
-              value={filters.employeeSearch}
-              onChange={(event) => updateFilter('employeeSearch', event.target.value)}
-              placeholder="Name or Employee ID"
-            />
-          </label>
+
+
         </div>
 
         <div className="toolbar">
@@ -986,10 +989,11 @@ function PayslipReportSection({ roleSettings }) {
   const absences = getValue(payslip, ['absences', 'absence_deduction'], 0);
   const tardiness = getValue(payslip, ['tardiness', 'late_deduction'], 0);
   const undertime = getValue(payslip, ['undertime', 'undertime_deduction'], 0);
-  const sss = getValue(payslip, ['sss', 'sss_premium', 'sss_deduction'], 0);
-  const philhealth = getValue(payslip, ['philhealth', 'philhealth_premium', 'philhealth_deduction'], 0);
-  const pagibig = getValue(payslip, ['pagibig', 'pag_ibig', 'pagibig_deduction', 'pag_ibig_deduction'], 0);
+  const sss = getValue(payslip, ['sss', 'sss_premium', 'sss_deduction', 'sss_employee'], 0);
+  const philhealth = getValue(payslip, ['philhealth', 'philhealth_premium', 'philhealth_deduction', 'philhealth_employee'], 0);
+  const pagibig = getValue(payslip, ['pagibig', 'pag_ibig', 'pagibig_deduction', 'pag_ibig_deduction', 'pagibig_employee'], 0);
   const tax = getValue(payslip, ['tax', 'tax_withheld', 'withholding_tax'], 0);
+  const loanDeductions = getValue(payslip, ['loans', 'loan_deductions', 'loan'], 0);
 
   const taxableGrossToDate = getValue(
     payslip,
@@ -1020,6 +1024,7 @@ function PayslipReportSection({ roleSettings }) {
     ['Philhealth', money(philhealth)],
     ['Pag-Ibig', money(pagibig)],
     ['Tax Withheld', money(tax)],
+    ['Loan Deductions', Number(loanDeductions) ? money(loanDeductions) : '-'],
     ['Total Deductions', money(totalDeductions)],
     ['Net Pay', money(netPay)],
     ['Taxable Gross Income To-Date', money(taxableGrossToDate)],
@@ -1051,6 +1056,7 @@ ${payslipBoxRule()}
     Philhealth                     ${pad(money(philhealth), 8)}          -     ${pad(money(philhealth), 10)}
     Pag-Ibig                       ${pad(money(pagibig), 8)}          -     ${pad(money(pagibig), 10)}
     TAX WITHHELD                   ${pad(money(tax), 8)}          -     ${pad(money(tax), 10)}
+    Loan Deductions                     -          -     ${Number(loanDeductions) ? pad(money(loanDeductions), 10) : '         -'}
 ${payslipBoxRule()}
 ${payslipBoxRow('TOTAL DEDUCTIONS', money(totalDeductions))}
 ${payslipBoxRow('NET PAY', money(netPay))}

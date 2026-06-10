@@ -26,6 +26,7 @@ export const FEATURE_OPTIONS = [
   { key: 'utilities', label: 'Utilities' },
   { key: 'advanced-modules', label: 'Advanced Modules' },
   { key: 'system-config', label: 'System Configuration' },
+  { key: 'company-settings', label: 'Company Settings' },
   { key: 'about-us', label: 'About Us' },
   { key: 'help', label: 'Help' },
   { key: 'contacts', label: 'Contacts' }

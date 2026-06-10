@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { createNotification, createNotificationsForAdminHr } = require('./notificationHelper');
 
 module.exports = function (app, pool) {
   let leaveMailTransporter = null;
@@ -64,6 +65,7 @@ module.exports = function (app, pool) {
     const dateRange = `${formatLeaveDate(request.start_date)} to ${formatLeaveDate(request.end_date)}`;
     const totalDays = Number(request.total_days || 0).toFixed(2);
     const reason = request.reason || 'N/A';
+    const rejectionReason = request.rejection_reason || null;
     const statusText = String(status || request.status || 'Pending');
 
     const templates = {
@@ -79,13 +81,13 @@ module.exports = function (app, pool) {
       },
       Rejected: {
         subject: `Leave request rejected: ${leaveName}`,
-        intro: 'We regret to inform you that your leave request has been reviewed and was not approved. This decision may be based on operational requirements, insufficient leave credits, scheduling conflicts, or other company policies.',
+        intro: 'We regret to inform you that your leave request has been reviewed and was not approved.',
         closing: 'For further clarification regarding this decision, please contact your supervisor or the Human Resources Department.'
       }
     };
 
     const template = templates[statusText] || templates.Pending;
-    const text = [
+    const textLines = [
       `Hi ${employeeName},`,
       '',
       template.intro,
@@ -95,11 +97,12 @@ module.exports = function (app, pool) {
       `Total Days: ${totalDays}`,
       `Reason: ${reason}`,
       `Status: ${statusText === 'Pending' ? 'For Review' : statusText}`,
-      '',
-      template.closing,
-      '',
-      'Astreablue Intelligence Inc. HRIS & Payroll System'
-    ].join('\n');
+    ];
+    if (statusText === 'Rejected' && rejectionReason) {
+      textLines.push(`Rejection Reason: ${rejectionReason}`);
+    }
+    textLines.push('', template.closing, '', 'Astreablue Intelligence Inc. HRIS & Payroll System');
+    const text = textLines.join('\n');
 
     const htmlEmployeeName = escapeMailHtml(employeeName);
     const htmlLeaveName = escapeMailHtml(leaveName);
@@ -107,6 +110,9 @@ module.exports = function (app, pool) {
     const htmlTotalDays = escapeMailHtml(totalDays);
     const htmlReason = escapeMailHtml(reason);
     const htmlStatus = escapeMailHtml(statusText === 'Pending' ? 'For Review' : statusText);
+    const rejectionRow = (statusText === 'Rejected' && rejectionReason)
+      ? `<tr><td style="padding:4px 12px 4px 0;"><strong>Rejection Reason</strong></td><td style="color:#dc2626;">${escapeMailHtml(rejectionReason)}</td></tr>`
+      : '';
 
     const html = `
       <p>Hi ${htmlEmployeeName},</p>
@@ -117,9 +123,10 @@ module.exports = function (app, pool) {
         <tr><td style="padding:4px 12px 4px 0;"><strong>Total Days</strong></td><td>${htmlTotalDays}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${htmlReason}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>${htmlStatus}</td></tr>
+        ${rejectionRow}
       </table>
       <p>${escapeMailHtml(template.closing)}</p>
-      <p>Astreablue Intelligence Inc. HRIS &  Payroll System</p>
+      <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
     `;
 
     return { subject: template.subject, text, html };
@@ -134,6 +141,7 @@ module.exports = function (app, pool) {
          r.end_date,
          r.total_days,
          r.reason,
+         r.rejection_reason,
          e.emp_code,
          CONCAT_WS(' ', e.first_name, e.last_name) AS employee_name,
          ec.email,
@@ -154,6 +162,126 @@ module.exports = function (app, pool) {
     );
 
     return rows[0] || null;
+  }
+
+  async function getAdminHrEmails(conn) {
+    const emails = new Set();
+
+    const envEmails = (process.env.NOTIFY_ADMIN_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean);
+    console.log('[Leave] NOTIFY_ADMIN_EMAILS from env:', envEmails);
+    envEmails.forEach((e) => emails.add(e));
+
+    try {
+      const [adminUsers] = await conn.execute(`
+        SELECT user_id, username, full_name, email FROM users
+        WHERE (LOWER(role) LIKE '%admin%' OR LOWER(role) LIKE '%hr%')
+          AND (account_status IS NULL OR LOWER(account_status) NOT IN ('deactivated','deleted'))
+          AND deleted_at IS NULL
+        LIMIT 50
+      `);
+
+      for (const u of adminUsers) {
+        // Primary: use email column on users table directly
+        if (u.email && u.email.trim()) {
+          emails.add(u.email.trim());
+          continue;
+        }
+        // Fallback: look up via employee_contacts by emp_code match
+        const [byCode] = await conn.execute(
+          `SELECT ec.email FROM employee_contacts ec
+           JOIN employees e ON e.employee_id = ec.employee_id
+           WHERE LOWER(TRIM(e.emp_code)) = LOWER(TRIM(?))
+             AND ec.email IS NOT NULL AND ec.email != ''
+           ORDER BY ec.contact_id DESC LIMIT 1`,
+          [u.username || '']
+        );
+        if (byCode.length && byCode[0].email) { emails.add(byCode[0].email.trim()); continue; }
+
+        if (u.full_name) {
+          const parts = u.full_name.trim().split(/\s+/).filter(Boolean);
+          if (parts.length >= 2) {
+            const [byName] = await conn.execute(
+              `SELECT ec.email FROM employee_contacts ec
+               JOIN employees e ON e.employee_id = ec.employee_id
+               WHERE LOWER(TRIM(e.first_name)) = LOWER(?) AND LOWER(TRIM(e.last_name)) = LOWER(?)
+                 AND ec.email IS NOT NULL AND ec.email != ''
+               ORDER BY ec.contact_id DESC LIMIT 1`,
+              [parts[0], parts[parts.length - 1]]
+            );
+            if (byName.length && byName[0].email) emails.add(byName[0].email.trim());
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('getAdminHrEmails error:', err.message);
+    }
+
+    return [...emails].filter(Boolean);
+  }
+
+  async function sendLeaveAdminNotification(requestId) {
+    let conn;
+    try {
+      const config = getLeaveMailConfig();
+      const transporter = getLeaveMailTransporter();
+      if (!config || !transporter) return false;
+
+      conn = await pool.getConnection();
+
+      const adminEmails = await getAdminHrEmails(conn);
+      if (!adminEmails.length) {
+        console.warn('Leave admin notification skipped: no admin/HR email addresses found.');
+        return false;
+      }
+
+      const request = await getLeaveRequestForNotification(conn, requestId);
+      if (!request) return false;
+
+      const employeeName = request.employee_name || request.emp_code || 'Employee';
+      const leaveName = request.leave_name || 'Leave';
+      const dateRange = `${formatLeaveDate(request.start_date)} to ${formatLeaveDate(request.end_date)}`;
+      const totalDays = Number(request.total_days || 0).toFixed(2);
+      const reason = request.reason || 'N/A';
+
+      const subject = `New Leave Request: ${employeeName} — ${leaveName}`;
+      const text = [
+        'A new leave request has been submitted and requires your review.',
+        '',
+        `Employee: ${employeeName}`,
+        `Leave Type: ${leaveName}`,
+        `Date Range: ${dateRange}`,
+        `Total Days: ${totalDays}`,
+        `Reason: ${reason}`,
+        `Status: Pending`,
+        '',
+        'Please log in to the HRIS system to approve or reject this request.',
+        '',
+        'Astreablue Intelligence Inc. HRIS & Payroll System'
+      ].join('\n');
+
+      const html = `
+        <p>A new leave request has been submitted and requires your review.</p>
+        <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Employee</strong></td><td>${escapeMailHtml(employeeName)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Leave Type</strong></td><td>${escapeMailHtml(leaveName)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Date Range</strong></td><td>${escapeMailHtml(dateRange)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Total Days</strong></td><td>${escapeMailHtml(totalDays)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${escapeMailHtml(reason)}</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>Pending</td></tr>
+        </table>
+        <p>Please log in to the HRIS system to review and take action on this request.</p>
+        <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
+      `;
+
+      await transporter.sendMail({ from: config.from, to: adminEmails.join(', '), subject, text, html });
+      console.log(`Leave admin notification sent to: ${adminEmails.join(', ')}`);
+      return true;
+    } catch (err) {
+      console.warn('Leave admin notification error:', err.message);
+      return false;
+    } finally {
+      if (conn) conn.release();
+    }
   }
 
   async function sendLeaveRequestNotification(conn, requestId, status) {
@@ -296,6 +424,10 @@ module.exports = function (app, pool) {
   }
 
   async function ensureLeaveTables(conn) {
+    try {
+      await conn.execute(`ALTER TABLE employee_leave_requests ADD COLUMN rejection_reason TEXT NULL AFTER status`);
+    } catch { /* column already exists */ }
+
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS leave_types (
         leave_type_id INT NOT NULL AUTO_INCREMENT,
@@ -469,7 +601,7 @@ module.exports = function (app, pool) {
       });
 
       const [requests] = await conn.execute(
-        `SELECT r.request_id, r.leave_type_id, t.leave_name, r.start_date, r.end_date, r.total_days, r.reason, r.status, r.created_at
+        `SELECT r.request_id, r.leave_type_id, t.leave_name, r.start_date, r.end_date, r.total_days, r.reason, r.rejection_reason, r.status, r.created_at
          FROM employee_leave_requests r
          JOIN leave_types t ON t.leave_type_id = r.leave_type_id
          WHERE r.employee_id = ?
@@ -569,12 +701,20 @@ module.exports = function (app, pool) {
         [employee.employee_id, leaveTypeId, startDate, endDate, totalDays, reason]
       );
 
-      const emailSent = await sendLeaveRequestNotification(conn, insertResult.insertId, 'Pending');
+      sendLeaveAdminNotification(insertResult.insertId).catch((err) => console.warn('Leave admin notify error:', err.message));
+
+      const leaveName = typeRows[0].leave_name || 'Leave';
+      const employeeDisplayName = users[0].full_name || users[0].username || 'An employee';
+      await createNotificationsForAdminHr(
+        pool,
+        'leave_request',
+        'New Leave Request',
+        `${employeeDisplayName} submitted a ${leaveName} request (${startDate} to ${endDate}).`
+      );
 
       return res.json({
         success: true,
-        message: 'Leave request submitted successfully.',
-        emailNotificationSent: emailSent
+        message: 'Leave request submitted successfully.'
       });
     } catch (err) {
       console.error('Leave request save error:', err);
@@ -627,6 +767,7 @@ module.exports = function (app, pool) {
            r.end_date,
            r.total_days,
            r.reason,
+           r.rejection_reason,
            r.status,
            r.created_at,
            r.updated_at
@@ -804,6 +945,7 @@ module.exports = function (app, pool) {
     const requestId = Number(req.params.requestId);
     const userId = Number(req.body.user_id);
     const nextStatus = String(req.body.status || '').trim();
+    const rejectionReason = String(req.body.rejection_reason || '').trim();
     const allowedStatuses = ['Approved', 'Rejected'];
 
     if (!requestId || !userId || !nextStatus) {
@@ -812,6 +954,10 @@ module.exports = function (app, pool) {
 
     if (!allowedStatuses.includes(nextStatus)) {
       return res.status(400).json({ success: false, message: 'Leave request can only be approved or rejected here.' });
+    }
+
+    if (nextStatus === 'Rejected' && !rejectionReason) {
+      return res.status(400).json({ success: false, message: 'A rejection reason is required when rejecting a leave request.' });
     }
 
     let conn;
@@ -855,9 +1001,9 @@ module.exports = function (app, pool) {
 
       await conn.execute(
         `UPDATE employee_leave_requests
-         SET status = ?
+         SET status = ?, rejection_reason = ?
          WHERE request_id = ?`,
-        [nextStatus, requestId]
+        [nextStatus, nextStatus === 'Rejected' ? rejectionReason : null, requestId]
       );
 
       await writeLeaveAudit(
@@ -870,6 +1016,24 @@ module.exports = function (app, pool) {
       await conn.commit();
 
       const emailSent = await sendLeaveRequestNotification(conn, requestId, nextStatus);
+
+      let [empUserRows] = await conn.execute(
+        'SELECT user_id FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) LIMIT 1',
+        [request.emp_code || '']
+      );
+      if (!empUserRows.length && request.employee_name) {
+        [empUserRows] = await conn.execute(
+          'SELECT user_id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1',
+          [request.employee_name]
+        );
+      }
+      console.log(`[Notification] Leave status lookup emp_code=${request.emp_code} employee_name=${request.employee_name} -> user_id=${empUserRows[0]?.user_id ?? 'NOT FOUND'}`);
+      if (empUserRows.length) {
+        const notifMsg = nextStatus === 'Rejected' && rejectionReason
+          ? `Your ${request.leave_name} request was rejected. Reason: ${rejectionReason}`
+          : `Your ${request.leave_name} request has been ${nextStatus.toLowerCase()}.`;
+        await createNotification(pool, empUserRows[0].user_id, 'leave_status', `Leave Request ${nextStatus}`, notifMsg);
+      }
 
       return res.json({
         success: true,
