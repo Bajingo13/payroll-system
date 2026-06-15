@@ -87,6 +87,24 @@ function buildLocalDbConfig() {
   };
 }
 
+function parseMysqlUrl(mysqlUrl) {
+  try {
+    const parsed = new URL(mysqlUrl);
+    if (parsed.protocol !== 'mysql:') {
+      console.warn('WARN > MYSQL_URL does not use mysql:// protocol, skipping parse.');
+      return;
+    }
+    if (!process.env.DB_HOST)     process.env.DB_HOST     = parsed.hostname;
+    if (!process.env.DB_PORT)     process.env.DB_PORT     = String(parsed.port || '3306');
+    if (!process.env.DB_USER)     process.env.DB_USER     = decodeURIComponent(parsed.username);
+    if (!process.env.DB_PASSWORD) process.env.DB_PASSWORD = decodeURIComponent(parsed.password);
+    if (!process.env.DB_NAME)     process.env.DB_NAME     = parsed.pathname.replace(/^\//, '');
+    console.log('OK > Parsed MYSQL_URL into DB_* environment variables.');
+  } catch (err) {
+    console.error('ERROR > Failed to parse MYSQL_URL:', err.message);
+  }
+}
+
 function buildPrimaryDbConfig() {
   return {
     host: process.env.DB_HOST,
@@ -411,6 +429,10 @@ if (useReactFrontend) {
     console.log('RAILWAY DETECTED:', isRunningOnRailway());
     console.log('APP TIMEZONE:', process.env.TZ);
     console.log('DB SESSION TIMEZONE:', getDbTimezone());
+
+    if (process.env.MYSQL_URL) {
+      parseMysqlUrl(process.env.MYSQL_URL);
+    }
 
     const { pool, dbMode } = await createWorkingPool();
 
