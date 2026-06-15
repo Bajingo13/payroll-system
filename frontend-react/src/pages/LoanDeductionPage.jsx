@@ -21,7 +21,7 @@ const CATEGORY_GROUPS = [
     options: [
       'SSS Salary Loan',
       'SSS Calamity Loan',
-      'SSS Loan',
+      'SSS Emergency Loan',
     ]
   },
   {
@@ -29,8 +29,6 @@ const CATEGORY_GROUPS = [
     options: [
       'Pag-IBIG Multi-Purpose Loan',
       'Pag-IBIG Calamity Loan',
-      'Pag-IBIG Housing Loan',
-      'Pag-IBIG Loan',
     ]
   }
 ];

@@ -394,6 +394,21 @@ export default function EmployeeManagementPage() {
       const dependents = Array.isArray(employee.dependents) ? employee.dependents : [];
       const evaluations = Array.isArray(employee.evaluations) ? employee.evaluations : [];
       const evaluationSummary = employee.evaluationSummary || createBlankEmployeeForm().evaluationSummary;
+      const payrollComputation = employee.payrollComputation || {
+        payroll_period: employee.payroll_period || '',
+        payroll_rate: employee.payroll_rate || '',
+        ot_rate: employee.ot_rate || '',
+        days_in_year: employee.days_in_year ?? '',
+        days_in_week: employee.days_in_week ?? '',
+        main_computation: employee.main_computation ?? '',
+        basis_absences: employee.basis_absences || '',
+        basis_overtime: employee.basis_overtime || '',
+        hours_in_day: employee.hours_in_day ?? '',
+        week_in_year: employee.week_in_year ?? '',
+        strict_no_overtime: !!employee.strict_no_overtime,
+        days_in_year_ot: employee.days_in_year_ot ?? '',
+        rate_basis_ot: employee.rate_basis_ot ?? ''
+      };
 
       setSelectedEmpCode(empCode);
       setDetailForm(employee);
@@ -401,7 +416,7 @@ export default function EmployeeManagementPage() {
         ...createBlankEmployeeForm(),
         ...employee,
         taxInsurance: employee.taxInsurance || createBlankEmployeeForm().taxInsurance,
-        payrollComputation: employee.payrollComputation || createBlankEmployeeForm().payrollComputation,
+        payrollComputation,
         systemAccount: {
           ...createBlankEmployeeForm().systemAccount,
           ...(employee.systemAccount || {}),
@@ -1070,7 +1085,7 @@ export default function EmployeeManagementPage() {
                 {PAYROLL_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             ))}
-            {renderFormRow('Amount Rate:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
+            {renderFormRow('Employee Salary:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
             <hr className="divider" />
             <h4>Basis of Computation for Absences, Late and Undertime</h4>
             {renderFormRow('Days in a Year:', <input type="number" value={comp.days_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year', event.target.value)} />)}

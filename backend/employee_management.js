@@ -865,7 +865,8 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 ea.atm_no, ea.bank_name, ea.bank_branch, ea.projects, ea.salary_type, 
                 eps.payroll_period, eps.payroll_rate,
                 eps.main_computation, eps.days_in_year, eps.days_in_week, eps.hours_in_day, eps.week_in_year, 
-                eps.ot_rate, eps.days_in_year_ot, eps.rate_basis_ot, eps.strict_no_overtime
+                eps.ot_rate, eps.days_in_year_ot, eps.rate_basis_ot, eps.strict_no_overtime,
+                eps.basis_absences, eps.basis_overtime
             FROM employees e
             LEFT JOIN employee_contacts ec ON e.employee_id = ec.employee_id
             LEFT JOIN employee_employment ee ON e.employee_id = ee.employee_id
@@ -880,6 +881,22 @@ app.get("/api/employee_details/:id", async (req, res) => {
             }
 
             const employee = employeeRows[0];
+
+            employee.payrollComputation = {
+                payroll_period: employee.payroll_period,
+                payroll_rate: employee.payroll_rate,
+                ot_rate: employee.ot_rate,
+                days_in_year: employee.days_in_year,
+                days_in_week: employee.days_in_week,
+                main_computation: employee.main_computation,
+                basis_absences: employee.basis_absences,
+                basis_overtime: employee.basis_overtime,
+                hours_in_day: employee.hours_in_day,
+                week_in_year: employee.week_in_year,
+                strict_no_overtime: employee.strict_no_overtime,
+                days_in_year_ot: employee.days_in_year_ot,
+                rate_basis_ot: employee.rate_basis_ot
+            };
 
             // Get dependents by employee_id
             const [dependents] = await pool.query(
@@ -2106,4 +2123,3 @@ app.get("/api/employee_details/:id", async (req, res) => {
     });
 
 };
-

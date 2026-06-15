@@ -341,7 +341,7 @@ module.exports = function (app, pool) {
 
   // ========== DASHBOARD SUMMARY ==========
   app.get("/api/dashboard", async (req, res) => {
-    try {
+    try { 
       const conn = await pool.getConnection();
 
       const [employees] = await conn.execute(
@@ -638,6 +638,32 @@ module.exports = function (app, pool) {
         evaluationSummary = buildEvaluationSummary(evaluations);
       }
 
+      let attendanceSummary = null;
+      if (employee) {
+        try {
+          const [[adjRow]] = await conn.execute(
+            `SELECT paa.late_time, paa.late_amt, paa.undertime_time, paa.undertime_amt,
+                    pr.payroll_range
+             FROM payroll_attendance_adjustments paa
+             JOIN payroll_runs pr ON pr.run_id = paa.run_id
+             WHERE paa.employee_id = ?
+             ORDER BY paa.adj_id DESC LIMIT 1`,
+            [employee.employee_id]
+          );
+          if (adjRow) {
+            attendanceSummary = {
+              late_minutes: Number(adjRow.late_time || 0),
+              late_amt: Number(adjRow.late_amt || 0),
+              undertime_minutes: Number(adjRow.undertime_time || 0),
+              undertime_amt: Number(adjRow.undertime_amt || 0),
+              period_range: adjRow.payroll_range || null
+            };
+          }
+        } catch {
+          // payroll_attendance_adjustments may not exist in all environments
+        }
+      }
+
       const todayTime = await getTodayTimeEntries(conn, userId);
 
       const [attendanceRows] = await conn.execute(
@@ -658,6 +684,7 @@ module.exports = function (app, pool) {
         payrollHistory,
         evaluations,
         evaluationSummary,
+        attendanceSummary,
         todayTime,
         attendanceLogs: attendanceRows
       });
@@ -1179,7 +1206,26 @@ module.exports = function (app, pool) {
                 0
               ),
               2
-            ) AS ot_hours
+            ) AS ot_hours,
+            CASE
+              WHEN ls.time_in IS NOT NULL
+              THEN GREATEST(0, TIMESTAMPDIFF(MINUTE,
+                   CONCAT(DATE_FORMAT(sd.attendance_date, '%Y-%m-%d'), ' 08:00:00'),
+                   ls.time_in))
+              ELSE 0
+            END AS late_minutes,
+            CASE
+              WHEN ls.time_in IS NOT NULL AND ls.time_out IS NOT NULL
+              THEN GREATEST(0, 480 - (
+                TIMESTAMPDIFF(MINUTE, ls.time_in, ls.time_out) -
+                CASE
+                  WHEN ls.break_out IS NOT NULL AND ls.break_in IS NOT NULL AND ls.break_in > ls.break_out
+                  THEN TIMESTAMPDIFF(MINUTE, ls.break_out, ls.break_in)
+                  ELSE 0
+                END
+              ))
+              ELSE 0
+            END AS undertime_minutes
          FROM selected_dates sd
          CROSS JOIN employee_users eu
          LEFT JOIN log_summary ls
@@ -1336,6 +1382,54 @@ module.exports = function (app, pool) {
           `Edited attendance for ${employeeUser.full_name} (${originalDate}${originalDate === attendanceDate ? '' : ` to ${attendanceDate}`})`
         ]
       );
+
+      // Save pre-computed values to hris_attendance so payroll can use them directly
+      const [[empRecordForHris]] = await conn.execute(
+        `SELECT e.employee_id FROM users u
+         JOIN employees e ON LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))
+         WHERE u.user_id = ? LIMIT 1`,
+        [employeeUserId]
+      );
+      if (empRecordForHris) {
+        // Compute late, undertime, OT from the edited attendance times
+        const shiftStartMin = 8 * 60; // 08:00 = 480 min
+        let hrisLateMin = 0, hrisUndertimeMin = 0, hrisOtHours = 0;
+        const hrisStatus = normalizedTimes.time_in ? (normalizedTimes.time_out ? 'Present' : 'Incomplete') : 'Absent';
+
+        if (normalizedTimes.time_in) {
+          const [inH, inM] = normalizedTimes.time_in.split(':').map(Number);
+          const timeInMin = inH * 60 + inM;
+          if (timeInMin > shiftStartMin) hrisLateMin = timeInMin - shiftStartMin;
+        }
+
+        if (normalizedTimes.time_in && normalizedTimes.time_out) {
+          const [inH, inM]   = normalizedTimes.time_in.split(':').map(Number);
+          const [outH, outM] = normalizedTimes.time_out.split(':').map(Number);
+          let workedMin = (outH * 60 + outM) - (inH * 60 + inM);
+          if (normalizedTimes.break_out && normalizedTimes.break_in) {
+            const [boH, boM] = normalizedTimes.break_out.split(':').map(Number);
+            const [biH, biM] = normalizedTimes.break_in.split(':').map(Number);
+            workedMin -= (biH * 60 + biM) - (boH * 60 + boM);
+          }
+          if (workedMin < 480) hrisUndertimeMin = 480 - workedMin;
+          else if (workedMin > 480) hrisOtHours = Math.round((workedMin - 480) / 60 * 100) / 100;
+        }
+
+        await conn.execute(
+          `INSERT INTO hris_attendance
+             (employee_id, attendance_date, time_in, time_out, late_minutes, undertime_minutes, overtime_hours, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             time_in = VALUES(time_in), time_out = VALUES(time_out),
+             late_minutes = VALUES(late_minutes), undertime_minutes = VALUES(undertime_minutes),
+             overtime_hours = VALUES(overtime_hours), status = VALUES(status)`,
+          [
+            empRecordForHris.employee_id, attendanceDate,
+            normalizedTimes.time_in || null, normalizedTimes.time_out || null,
+            hrisLateMin, hrisUndertimeMin, hrisOtHours, hrisStatus
+          ]
+        );
+      }
 
       await conn.commit();
 

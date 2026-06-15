@@ -2,629 +2,1142 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const SYSTEM_LISTS = [
-  ['company', 'Company'],
-  ['location', 'Location'],
-  ['branch', 'Branch'],
-  ['division', 'Division'],
-  ['department', 'Department'],
-  ['class', 'Class'],
-  ['position', 'Position'],
-  ['empType', 'Employee Type', 'employee_type'],
-  ['salaryType', 'Salary Type', 'salary_type']
+const FILTER_CATS = [
+  ['company','Company'], ['location','Location'], ['branch','Branch'],
+  ['division','Division'], ['department','Department'], ['class','Class'],
+  ['position','Position'], ['employee_type','Employee Type','empType'],
+  ['salary_type','Salary Type','salaryType'],
 ];
 
-const moneyFields = [
-  'basic_salary',
-  'absence_deduction',
-  'late_deduction',
-  'undertime_deduction',
-  'overtime',
-  'holiday_pay',
-  'taxable_allowances',
-  'non_taxable_allowances',
-  'adj_comp',
-  'adj_non_comp',
-  'total_leaves_used',
-  'gsis_employee',
-  'gsis_employer',
-  'gsis_ecc',
-  'sss_employee',
-  'sss_employer',
-  'sss_ecc',
-  'pagibig_employee',
-  'pagibig_employer',
-  'pagibig_ecc',
-  'philhealth_employee',
-  'philhealth_employer',
-  'philhealth_ecc',
-  'tax_withheld',
-  'total_deductions',
-  'loans',
-  'other_deductions',
-  'premium_adj',
-  'ytd_sss',
-  'ytd_wtax',
-  'ytd_philhealth',
-  'ytd_gsis',
-  'ytd_pagibig',
-  'ytd_gross'
+const OT_TYPES = [
+  { key:'rg', label:'Regular' }, { key:'rd', label:'Rest Day' },
+  { key:'sd', label:'Special Day' }, { key:'sdrd', label:'Sp. Day Rest Day' },
+  { key:'hd', label:'Holiday' }, { key:'hdrd', label:'Holiday Rest Day' },
 ];
 
-function toNumber(value) {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? number : 0;
+const ATT_ROWS = [
+  { key:'basic_salary', label:'Basic Salary', hasTime:true },
+  { key:'absences',     label:'Absences',     hasTime:true },
+  { key:'late',         label:'Late',          hasTime:true },
+  { key:'undertime',    label:'Undertime',     hasTime:true },
+  { key:'others',       label:'Others',        hasTime:false },
+];
+
+const PREM_ROWS = [
+  { key:'gsis', label:'GSIS' }, { key:'sss', label:'SSS' },
+  { key:'pagibig', label:'Pag-ibig' }, { key:'philhealth', label:'Philhealth' },
+];
+
+function toNum(v) { const n = Number(v||0); return isFinite(n)?n:0; }
+function fmt(v)   { return toNum(v).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function sumAllowanceRows(rows = []) {
+  return rows.reduce((acc, row) => {
+    if (Number(row.is_taxable) === 1) acc.taxable += toNum(row.amount);
+    else acc.nontaxable += toNum(row.amount);
+    return acc;
+  }, { taxable: 0, nontaxable: 0 });
+}
+function effectiveAllowanceTotals(payroll, rows = []) {
+  const rowTotals = sumAllowanceRows(rows);
+  return {
+    taxable: rows.length ? rowTotals.taxable : toNum(payroll.taxable_allowances),
+    nontaxable: rows.length ? rowTotals.nontaxable : toNum(payroll.non_taxable_allowances)
+  };
+}
+function effectiveDeductionTotal(payroll, rows = []) {
+  return rows.length ? rows.reduce((sum, row) => sum + toNum(row.amount), 0) : toNum(payroll.total_deductions);
 }
 
 function makeEmptyPayroll() {
-  return moneyFields.reduce((acc, field) => ({ ...acc, [field]: '' }), {
-    absence_time: 0,
-    late_time: 0,
-    undertime: 0,
-    payroll_status: 'Active'
-  });
+  return {
+    basic_salary:'', absence_time:'', absence_deduction:'',
+    late_time:'', late_deduction:'', undertime:'', undertime_deduction:'',
+    overtime:'', holiday_pay:'', taxable_allowances:'', non_taxable_allowances:'',
+    adj_comp:'', adj_non_comp:'', total_leaves_used:'',
+    gsis_employee:'', gsis_employer:'', gsis_ecc:'',
+    sss_employee:'', sss_employer:'', sss_ecc:'',
+    pagibig_employee:'', pagibig_employer:'', pagibig_ecc:'',
+    philhealth_employee:'', philhealth_employer:'', philhealth_ecc:'',
+    tax_withheld:'', total_deductions:'', loans:'', other_deductions:'', premium_adj:'',
+    ytd_sss:'', ytd_wtax:'', ytd_philhealth:'', ytd_gsis:'', ytd_pagibig:'', ytd_gross:'',
+    payroll_status:'Active',
+  };
 }
 
-function fillSelectOptions(rows, placeholder = 'All') {
-  return [
-    <option value="" key="empty">{placeholder}</option>,
-    ...rows.map((row) => (
-      <option key={row.value || row.group_id || row.period_id || row.month_id || row.year_id} value={row.value}>
-        {row.value}
-      </option>
-    ))
-  ];
+function makeEmptyOtNd() {
+  const d={};
+  OT_TYPES.forEach(({key}) => {
+    d[`${key}_rate`]=''; d[`${key}_ot`]='';
+    d[`${key}_rate_nd`]=''; d[`${key}_ot_nd`]='';
+    d[`${key}_rate_time`]=''; d[`${key}_ot_time`]='';
+    d[`${key}_rate_nd_time`]=''; d[`${key}_ot_nd_time`]='';
+  });
+  return d;
+}
+
+function makeEmptyOtNdAdj() {
+  const d={};
+  OT_TYPES.forEach(({key}) => {
+    d[`ot_adj_${key}_rate`]=''; d[`ot_adj_${key}_ot`]='';
+    d[`nd_adj_${key}_rate`]=''; d[`nd_adj_${key}_ot`]='';
+    d[`ot_adj_${key}_rate_time`]=''; d[`ot_adj_${key}_ot_time`]='';
+    d[`nd_adj_${key}_rate_time`]=''; d[`nd_adj_${key}_ot_time`]='';
+  });
+  return d;
+}
+
+function makeEmptyAttAdj() {
+  const d={ tax_withheld:'' };
+  ATT_ROWS.forEach(({key,hasTime}) => {
+    if(hasTime) d[`${key}_time`]='';
+    d[`${key}_amt`]='';
+  });
+  PREM_ROWS.forEach(({key}) => {
+    d[`${key}_emp`]=''; d[`${key}_employer`]=''; d[`${key}_ecc`]='';
+  });
+  return d;
 }
 
 export default function PayrollComputationPage() {
   const { user } = useAuth();
-  const [meta, setMeta] = useState({ payrollGroups: [], payrollPeriods: [], payrollMonths: [], payrollYears: [] });
+
+  const [step, setStep]   = useState('setup');
+  const [meta, setMeta]   = useState({ payrollGroups:[], payrollPeriods:[], payrollMonths:[], payrollYears:[] });
   const [lists, setLists] = useState({});
   const [filters, setFilters] = useState({
-    payroll_group: '',
-    payroll_period: '',
-    month: '',
-    year: '',
-    option: 'active',
-    employee: ''
+    payroll_group:'', payroll_period:'', month:'', year:'',
+    option:'active',
+    company:'', location:'', branch:'', division:'', department:'',
+    class:'', position:'', empType:'', salaryType:'',
   });
-  const [employees, setEmployees] = useState([]);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [runId, setRunId] = useState(null);
-  const [payroll, setPayroll] = useState(makeEmptyPayroll);
+
+  const [runId, setRunId]             = useState(null);
+  const [employees, setEmployees]     = useState([]);
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [activeTab, setActiveTab]     = useState('payroll');
+  const [isEditing, setIsEditing]     = useState(false);
+
+  const [payroll, setPayroll]   = useState(makeEmptyPayroll);
+  const [otNd, setOtNd]         = useState(makeEmptyOtNd);
+  const [otNdAdj, setOtNdAdj]   = useState(makeEmptyOtNdAdj);
+  const [attAdj, setAttAdj]     = useState(makeEmptyAttAdj);
   const [allowances, setAllowances] = useState([]);
   const [deductions, setDeductions] = useState([]);
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [empDataMap, setEmpDataMap] = useState({});
 
-  const selectedPeriod = meta.payrollPeriods.find((item) => String(item.period_id) === String(filters.payroll_period));
-  const selectedMonth = meta.payrollMonths.find((item) => String(item.month_id) === String(filters.month));
-  const selectedYear = meta.payrollYears.find((item) => String(item.year_id) === String(filters.year));
-  const payrollRange = [selectedPeriod?.period_name, selectedMonth?.month_name, selectedYear?.year_value].filter(Boolean).join(' ');
-  const periodReady = Boolean(filters.payroll_group && filters.payroll_period && filters.month && filters.year);
+  const [showEmpModal, setShowEmpModal]       = useState(false);
+  const [availableEmps, setAvailableEmps]     = useState([]);
+  const [selectedForModal, setSelectedForModal] = useState(new Set());
+  const [modalSearch, setModalSearch]         = useState('');
+  const [modalSearchBy, setModalSearchBy]     = useState('employee_id');
+  const [showSaveModal, setShowSaveModal]     = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showBackModal, setShowBackModal]     = useState(false);
 
+  const [hrisData, setHrisData]       = useState(null);
+  const [hrisLoading, setHrisLoading] = useState(false);
+
+  const [searchBy, setSearchBy]       = useState('employee_id');
+  const [searchInput, setSearchInput] = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [toast, setToast]             = useState('');
+  const [toastType, setToastType]     = useState('success');
+
+  const selectedPeriod = meta.payrollPeriods.find(p => String(p.period_id) === String(filters.payroll_period));
+  const selectedMonth  = meta.payrollMonths.find(m => String(m.month_id)   === String(filters.month));
+  const selectedYear   = meta.payrollYears.find(y  => String(y.year_id)    === String(filters.year));
+  const payrollRange   = [selectedPeriod?.period_name, selectedMonth?.month_name, selectedYear?.year_value].filter(Boolean).join(' ');
+  const periodReady    = Boolean(filters.payroll_group && filters.payroll_period && filters.month && filters.year);
+
+  const allowanceTotals = useMemo(() => effectiveAllowanceTotals(payroll, allowances), [payroll, allowances]);
+  const deductionRowsTotal = useMemo(() => effectiveDeductionTotal(payroll, deductions), [payroll, deductions]);
   const totals = useMemo(() => {
     const gross =
-      toNumber(payroll.basic_salary) -
-      toNumber(payroll.absence_deduction) -
-      toNumber(payroll.late_deduction) -
-      toNumber(payroll.undertime_deduction) +
-      toNumber(payroll.overtime) +
-      toNumber(payroll.holiday_pay) +
-      toNumber(payroll.taxable_allowances) +
-      toNumber(payroll.non_taxable_allowances) +
-      toNumber(payroll.adj_comp) +
-      toNumber(payroll.adj_non_comp) +
-      toNumber(payroll.total_leaves_used);
+      toNum(payroll.basic_salary) - toNum(payroll.absence_deduction) -
+      toNum(payroll.late_deduction) - toNum(payroll.undertime_deduction) +
+      toNum(payroll.overtime) + allowanceTotals.taxable +
+      allowanceTotals.nontaxable + toNum(payroll.adj_comp) +
+      toNum(payroll.adj_non_comp) + toNum(payroll.total_leaves_used);
+    const ded =
+      toNum(payroll.gsis_employee) + toNum(payroll.sss_employee) +
+      toNum(payroll.pagibig_employee) + toNum(payroll.philhealth_employee) +
+      toNum(payroll.tax_withheld) + deductionRowsTotal +
+      toNum(payroll.loans) + toNum(payroll.other_deductions) + toNum(payroll.premium_adj);
+    return { gross, ded, net: gross - ded };
+  }, [payroll, allowanceTotals, deductionRowsTotal]);
 
-    const deductionsTotal =
-      toNumber(payroll.gsis_employee) +
-      toNumber(payroll.sss_employee) +
-      toNumber(payroll.pagibig_employee) +
-      toNumber(payroll.philhealth_employee) +
-      toNumber(payroll.tax_withheld) +
-      toNumber(payroll.total_deductions) +
-      toNumber(payroll.loans) +
-      toNumber(payroll.other_deductions) +
-      toNumber(payroll.premium_adj);
+  const filteredEmps = useMemo(() => {
+    if (!searchInput) return employees;
+    const q = searchInput.toLowerCase();
+    return employees.filter(e => {
+      if (searchBy === 'employee_id') return (e.emp_code||'').toLowerCase().includes(q);
+      if (searchBy === 'last_name')   return (e.last_name||'').toLowerCase().includes(q);
+      if (searchBy === 'first_name')  return (e.first_name||'').toLowerCase().includes(q);
+      return true;
+    });
+  }, [employees, searchInput, searchBy]);
 
-    return {
-      gross,
-      deductions: deductionsTotal,
-      net: gross - deductionsTotal
-    };
-  }, [payroll]);
+  const filteredModalEmps = useMemo(() => {
+    if (!modalSearch) return availableEmps;
+    const q = modalSearch.toLowerCase();
+    return availableEmps.filter(e => {
+      if (modalSearchBy === 'employee_id') return (e.emp_code||'').toLowerCase().includes(q);
+      if (modalSearchBy === 'last_name')   return (e.last_name||'').toLowerCase().includes(q);
+      if (modalSearchBy === 'first_name')  return (e.first_name||'').toLowerCase().includes(q);
+      return true;
+    });
+  }, [availableEmps, modalSearch, modalSearchBy]);
 
   useEffect(() => {
-    async function loadInitialData() {
-      const payrollRes = await api.get('/payroll_periods');
-      const payload = payrollRes.data?.data || {};
+    async function load() {
+      const { data } = await api.get('/payroll_periods');
+      const p = data.data || {};
       setMeta({
-        payrollGroups: payload.payrollGroups || [],
-        payrollPeriods: payload.payrollPeriods || [],
-        payrollMonths: payload.payrollMonths || [],
-        payrollYears: payload.payrollYears || []
+        payrollGroups: p.payrollGroups || [],
+        payrollPeriods: p.payrollPeriods || [],
+        payrollMonths: p.payrollMonths || [],
+        payrollYears: p.payrollYears || [],
       });
-
-      const listEntries = await Promise.all(
-        SYSTEM_LISTS.map(async ([key, , category = key]) => {
-          const { data } = await api.get(`/system_lists/${category}`);
-          return [key, data || []];
-        })
-      );
-      setLists(Object.fromEntries(listEntries));
+      const entries = await Promise.all(FILTER_CATS.map(async ([cat]) => {
+        const { data:d } = await api.get(`/system_lists/${cat}`);
+        return [cat, d || []];
+      }));
+      setLists(Object.fromEntries(entries));
     }
-
-    loadInitialData().catch((err) => setMessage(getApiMessage(err, 'Unable to load payroll setup data.')));
+    load().catch(err => flash(getApiMessage(err,'Failed to load data.'),'warning'));
   }, []);
 
-  function updateFilter(name, value) {
-    setFilters((current) => ({ ...current, [name]: value }));
+  function flash(msg, type='success') {
+    setToast(msg); setToastType(type);
+    setTimeout(() => setToast(''), 3500);
   }
+  function upFilter(k,v) { setFilters(f=>({...f,[k]:v})); }
+  function upPayroll(k,v) { setPayroll(p=>({...p,[k]:v})); }
+  function upOtNd(k,v)    { setOtNd(p=>({...p,[k]:v})); }
+  function upOtNdAdj(k,v) { setOtNdAdj(p=>({...p,[k]:v})); }
+  function upAttAdj(k,v)  { setAttAdj(p=>({...p,[k]:v})); }
 
-  function updatePayroll(name, value) {
-    setPayroll((current) => ({ ...current, [name]: value }));
-  }
-
-  async function autoComputePayroll() {
-    if (!selectedEmployee) {
-      setMessage('Please select an employee first.');
-      return;
-    }
-
-    setLoading(true);
-    setMessage('');
-
-    try {
-      const { data } = await api.post('/payroll/auto-compute', {
-        ...moneyFields.reduce((acc, field) => ({ ...acc, [field]: toNumber(payroll[field]) }), {}),
-        payroll_period: selectedPeriod?.period_name || payroll.payroll_period || ''
-      });
-
-      if (!data.success) {
-        throw new Error(data.message || 'Unable to auto-compute payroll.');
+  async function loadRunEmployees(rid) {
+    const { data } = await api.get('/employees_for_payroll_run', {
+      params: {
+        run_id:rid, status:filters.option,
+        company:filters.company||'', location:filters.location||'',
+        branch:filters.branch||'', division:filters.division||'',
+        department:filters.department||'', class:filters.class||'',
+        position:filters.position||'', empType:filters.empType||'',
+        salaryType:filters.salaryType||'',
       }
-
-      setPayroll((current) => ({
-        ...current,
-        sss_employee: data.sss_employee,
-        sss_employer: data.sss_employer,
-        sss_ecc: data.sss_ecc,
-        pagibig_employee: data.pagibig_employee,
-        pagibig_employer: data.pagibig_employer,
-        pagibig_ecc: data.pagibig_ecc,
-        philhealth_employee: data.philhealth_employee,
-        philhealth_employer: data.philhealth_employer,
-        philhealth_ecc: data.philhealth_ecc,
-        tax_withheld: data.tax_withheld
-      }));
-      setMessage('Payroll deductions and withholding tax computed from setup tables.');
-    } catch (err) {
-      setMessage(getApiMessage(err, 'Unable to auto-compute payroll.'));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function ensurePayrollRun() {
-    if (!filters.payroll_group || !filters.payroll_period || !filters.month || !filters.year) {
-      throw new Error('Please select payroll group, period, month, and year.');
-    }
-
-    const { data } = await api.post('/payroll_runs', {
-      group_id: filters.payroll_group,
-      period_id: filters.payroll_period,
-      month_id: filters.month,
-      year_id: filters.year,
-      payroll_range: payrollRange,
-      user_id: user.user_id,
-      admin_name: user.full_name
     });
-
-    if (!data.success || !data.run_id) {
-      throw new Error(data.message || 'Unable to create payroll run.');
-    }
-
-    setRunId(data.run_id);
-    return data.run_id;
+    setEmployees(data.employees || []);
   }
 
-  async function loadEmployees() {
-    setLoading(true);
-    setMessage('');
-    setSelectedEmployee(null);
-
+  async function openEmpModal() {
     try {
-      const effectiveRunId = await ensurePayrollRun();
-      const params = {
-        option: filters.option,
-        company: filters.company || '',
-        location: filters.location || '',
-        branch: filters.branch || '',
-        division: filters.division || '',
-        department: filters.department || '',
-        class: filters.class || '',
-        position: filters.position || '',
-        empType: filters.empType || '',
-        salaryType: filters.salaryType || '',
-        employee: filters.employee || '',
-        run_id: effectiveRunId
-      };
-
-      const { data } = await api.get('/employees_for_payroll', { params });
-      if (!data.success) throw new Error(data.message || 'Unable to load employees.');
-      setEmployees(data.employees || []);
-    } catch (err) {
-      setMessage(getApiMessage(err, 'Unable to load employees.'));
-      setEmployees([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadEmployeePayroll(employee) {
-    if (!runId) return;
-    setLoading(true);
-    setMessage('');
-
-    try {
-      const { data } = await api.get(`/employee_payroll_settings/${employee.employee_id}`, {
+      const { data } = await api.get('/employees_for_payroll', {
         params: {
-          run_id: runId,
-          periodOption: selectedPeriod?.period_name || ''
+          option:'active',
+          company:filters.company||'', location:filters.location||'',
+          branch:filters.branch||'', division:filters.division||'',
+          department:filters.department||'', class:filters.class||'',
+          position:filters.position||'', empType:filters.empType||'',
+          salaryType:filters.salaryType||'',
         }
       });
+      setAvailableEmps(data.employees||[]);
+      setSelectedForModal(new Set());
+      setModalSearch('');
+      setShowEmpModal(true);
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to load employees.'),'warning');
+    }
+  }
 
-      if (!data.success) throw new Error(data.message || 'Unable to load employee payroll.');
-
-      const record = data.data || {};
-      const nextPayroll = makeEmptyPayroll();
-      moneyFields.forEach((field) => {
-        nextPayroll[field] = record[field] ?? record.previousYtd?.[field] ?? '';
+  async function proceedToComputation() {
+    if (!periodReady) { flash('Select Payroll Group, Period, Month, and Year first.','warning'); return; }
+    setLoading(true);
+    try {
+      const { data:runData } = await api.post('/payroll_runs', {
+        group_id:filters.payroll_group, period_id:filters.payroll_period,
+        month_id:filters.month, year_id:filters.year, payroll_range:payrollRange,
+        user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
-      nextPayroll.basic_salary = record.basic_salary ?? record.main_computation ?? '';
-      nextPayroll.absence_time = record.absence_time ?? 0;
-      nextPayroll.late_time = record.late_time ?? 0;
-      nextPayroll.undertime = record.undertime ?? 0;
-      nextPayroll.payroll_status = record.payroll_status || 'Active';
-
-      setSelectedEmployee(employee);
-      setPayroll(nextPayroll);
-      setAllowances(record.allowances || []);
-      setDeductions(record.deductions || []);
-    } catch (err) {
-      setMessage(getApiMessage(err, 'Unable to load employee payroll.'));
+      if (!runData.success) throw new Error(runData.message||'Failed to create payroll run.');
+      const rid = runData.run_id;
+      setRunId(rid);
+      const { data:empCheck } = await api.get(`/payroll_runs/${rid}/employees`);
+      if (!empCheck.exists || !(empCheck.employees||[]).length) {
+        const { data:empData } = await api.get('/employees_for_payroll', {
+          params: {
+            option:'active',
+            company:filters.company||'', location:filters.location||'',
+            branch:filters.branch||'', division:filters.division||'',
+            department:filters.department||'', class:filters.class||'',
+            position:filters.position||'', empType:filters.empType||'',
+            salaryType:filters.salaryType||'',
+          }
+        });
+        setAvailableEmps(empData.employees||[]);
+        setSelectedForModal(new Set());
+        setModalSearch('');
+        setShowEmpModal(true);
+      } else {
+        await loadRunEmployees(rid);
+        setStep('computation');
+      }
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to proceed.'),'warning');
     } finally {
       setLoading(false);
     }
   }
 
-  async function generatePayroll() {
-    if (!runId) {
-      setMessage('No payroll run loaded. Please proceed to computation first.');
+  async function confirmAddEmployees() {
+    if (selectedForModal.size === 0) { flash('Select at least one employee.','warning'); return; }
+    setLoading(true);
+    try {
+      await api.post(`/payroll_runs/${runId}/employees`, { employees:Array.from(selectedForModal) });
+      setShowEmpModal(false);
+      await loadRunEmployees(runId);
+      setStep('computation');
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to add employees.'),'warning');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadEmpData(empId, rid) {
+    const effectiveRunId = rid || runId;
+    const [settingsResp, hrisResp] = await Promise.all([
+      api.get(`/employee_payroll_settings/${empId}`, {
+        params:{ run_id:effectiveRunId, periodOption:selectedPeriod?.period_name||'' }
+      }),
+      (filters.month && filters.year && filters.payroll_period)
+        ? api.get('/payroll/hris-data', {
+            params:{ employee_id:empId, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:effectiveRunId||'', group_id:filters.payroll_group||'' }
+          }).catch(() => ({ data: null }))
+        : Promise.resolve({ data: null }),
+    ]);
+    const { data } = settingsResp;
+    if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
+    const rec = data.data || {};
+    const hris = hrisResp?.data?.success ? hrisResp.data : null;
+
+    const nextP = makeEmptyPayroll();
+    Object.keys(nextP).forEach(k => { if(rec[k]!=null) nextP[k]=rec[k]; });
+    if (!nextP.basic_salary && rec.main_computation) nextP.basic_salary = rec.main_computation;
+    if (rec.previousYtd) {
+      const ytd = rec.previousYtd;
+      if (!nextP.ytd_sss)        nextP.ytd_sss        = ytd.ytd_sss||'';
+      if (!nextP.ytd_wtax)       nextP.ytd_wtax       = ytd.ytd_wtax||'';
+      if (!nextP.ytd_philhealth) nextP.ytd_philhealth = ytd.ytd_philhealth||'';
+      if (!nextP.ytd_gsis)       nextP.ytd_gsis       = ytd.ytd_gsis||'';
+      if (!nextP.ytd_pagibig)    nextP.ytd_pagibig    = ytd.ytd_pagibig||'';
+      if (!nextP.ytd_gross)      nextP.ytd_gross      = ytd.ytd_gross||'';
+    }
+    const allowList = rec.allowances||[];
+    if (!toNum(nextP.taxable_allowances)) {
+      const tx = allowList.filter(a=>Number(a.is_taxable)===1).reduce((s,a)=>s+toNum(a.amount),0);
+      if (tx>0) nextP.taxable_allowances = tx;
+    }
+    if (!toNum(nextP.non_taxable_allowances)) {
+      const nt = allowList.filter(a=>Number(a.is_taxable)!==1).reduce((s,a)=>s+toNum(a.amount),0);
+      if (nt>0) nextP.non_taxable_allowances = nt;
+    }
+    const deductionList = rec.deductions || [];
+    if (!toNum(nextP.total_deductions)) {
+      const totalDeductionRows = deductionList.reduce((s, d) => s + toNum(d.amount), 0);
+      if (totalDeductionRows > 0) nextP.total_deductions = totalDeductionRows;
+    }
+
+    // Auto-populate attendance fields from HRIS when values are not yet saved
+    const attendanceUnset =
+      !toNum(nextP.absence_time) && !toNum(nextP.absence_deduction) &&
+      !toNum(nextP.late_time)    && !toNum(nextP.late_deduction) &&
+      !toNum(nextP.undertime)    && !toNum(nextP.undertime_deduction) &&
+      !toNum(nextP.overtime);
+    if (hris && attendanceUnset) {
+      nextP.absence_time        = Math.round((hris.absences?.total_days || 0) * 480);
+      nextP.absence_deduction   = hris.absences?.computed_deduction || 0;
+      nextP.late_time           = hris.attendance?.late_minutes || 0;
+      nextP.late_deduction      = hris.attendance?.late_deduction || 0;
+      nextP.undertime           = hris.attendance?.undertime_minutes || 0;
+      nextP.undertime_deduction = hris.attendance?.undertime_deduction || 0;
+      nextP.overtime            = hris.ot?.computed_amount || 0;
+    }
+
+    const nextOt  = makeEmptyOtNd();    const otR = rec.ot_nd||{};       Object.keys(nextOt).forEach(k=>{if(otR[k]!=null)nextOt[k]=otR[k];});
+    const nextAdj = makeEmptyOtNdAdj(); const aR  = rec.ot_nd_adj||{};   Object.keys(nextAdj).forEach(k=>{if(aR[k]!=null)nextAdj[k]=aR[k];});
+    const nextAtt = makeEmptyAttAdj();  const atR = rec.attendance_adj||{}; Object.keys(nextAtt).forEach(k=>{if(atR[k]!=null)nextAtt[k]=atR[k];});
+    return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
+  }
+
+  async function selectEmployee(emp) {
+    if (isEditing) { flash('Save or cancel current changes first.','warning'); return; }
+    if (empDataMap[emp.employee_id]) {
+      const d = empDataMap[emp.employee_id];
+      setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
+      setAllowances(d.allowances); setDeductions(d.deductions);
+      setHrisData(d.hrisData || null);
+      setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
       return;
     }
-
     setLoading(true);
-    setMessage('');
-
     try {
-      const { data } = await api.put(`/payroll_runs/${runId}/generate`, {
-        user_id: user.user_id,
-        admin_name: user.full_name
+      const d = await loadEmpData(emp.employee_id);
+      setEmpDataMap(prev=>({...prev,[emp.employee_id]:d}));
+      setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
+      setAllowances(d.allowances); setDeductions(d.deductions);
+      setHrisData(d.hrisData || null);
+      setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to load employee payroll.'),'warning');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function syncFromHris() {
+    if (!selectedEmp) return;
+    setHrisLoading(true);
+    try {
+      const { data } = await api.get('/payroll/hris-data', {
+        params:{ employee_id:selectedEmp.employee_id, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:runId||'', group_id:filters.payroll_group||'', basic_salary:toNum(payroll.basic_salary)||'' }
       });
-
-      if (!data.success) throw new Error(data.message || 'Unable to generate payroll.');
-      setMessage('Payroll run marked as Generated.');
-    } catch (err) {
-      setMessage(getApiMessage(err, 'Unable to generate payroll.'));
+      if (!data.success) { flash(data.message||'Failed to fetch HRIS data.','warning'); return; }
+      setHrisData(data);
+      upPayroll('absence_time',        Math.round((data.absences?.total_days || 0) * 480));
+      upPayroll('absence_deduction',   data.absences?.computed_deduction || 0);
+      upPayroll('late_time',           data.attendance?.late_minutes || 0);
+      upPayroll('late_deduction',      data.attendance?.late_deduction || 0);
+      upPayroll('undertime',           data.attendance?.undertime_minutes || 0);
+      upPayroll('undertime_deduction', data.attendance?.undertime_deduction || 0);
+      upPayroll('overtime',            data.ot?.computed_amount || 0);
+      flash('Attendance data synced from HRIS records.','success');
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to sync HRIS data.'),'warning');
     } finally {
-      setLoading(false);
+      setHrisLoading(false);
     }
   }
 
-  async function savePayroll() {
-    if (!selectedEmployee || !runId) {
-      setMessage('Please select an employee first.');
-      return;
-    }
-
+  async function doSaveAll() {
+    if (!runId) { flash('No payroll run loaded.','warning'); return; }
     setLoading(true);
-    setMessage('');
-
     try {
-      const payload = {
-        run_id: runId,
-        ...moneyFields.reduce((acc, field) => ({ ...acc, [field]: toNumber(payroll[field]) }), {}),
-        absence_time: toNumber(payroll.absence_time),
-        late_time: toNumber(payroll.late_time),
-        undertime: toNumber(payroll.undertime),
-        payroll_status: payroll.payroll_status || 'Active',
-        gross_pay: totals.gross,
-        grand_total_deductions: totals.deductions,
-        net_pay: totals.net,
-        periodOption: selectedPeriod?.period_name || '',
-        allowances,
-        deductions,
-        user_id: user.user_id,
-        admin_name: user.full_name
-      };
-
-      const { data } = await api.put(`/update_employee_payroll/${selectedEmployee.employee_id}`, payload);
-      if (!data.success) throw new Error(data.message || 'Unable to save payroll.');
-
-      setMessage('Payroll saved successfully.');
-      await loadEmployeePayroll(selectedEmployee);
-    } catch (err) {
-      setMessage(getApiMessage(err, 'Unable to save payroll.'));
+      const cache = {...empDataMap};
+      if (selectedEmp) cache[selectedEmp.employee_id] = { payroll, otNd, otNdAdj, attAdj, allowances, deductions };
+      for (const emp of filteredEmps) {
+        if (!cache[emp.employee_id]) {
+          cache[emp.employee_id] = await loadEmpData(emp.employee_id);
+        }
+      }
+      const payrolls = filteredEmps.map(emp => {
+        const d = cache[emp.employee_id];
+        const p = d.payroll;
+        const allowTotals = effectiveAllowanceTotals(p, d.allowances);
+        const rowDeductions = effectiveDeductionTotal(p, d.deductions);
+        const gross = toNum(p.basic_salary)-toNum(p.absence_deduction)-toNum(p.late_deduction)-toNum(p.undertime_deduction)+toNum(p.overtime)+toNum(p.holiday_pay)+allowTotals.taxable+allowTotals.nontaxable+toNum(p.adj_comp)+toNum(p.adj_non_comp)+toNum(p.total_leaves_used);
+        const ded   = toNum(p.gsis_employee)+toNum(p.sss_employee)+toNum(p.pagibig_employee)+toNum(p.philhealth_employee)+toNum(p.tax_withheld)+rowDeductions+toNum(p.loans)+toNum(p.other_deductions)+toNum(p.premium_adj);
+        return {
+          employee_id:emp.employee_id,
+          basic_salary:toNum(p.basic_salary), absence_time:toNum(p.absence_time), absence_deduction:toNum(p.absence_deduction),
+          late_time:toNum(p.late_time), late_deduction:toNum(p.late_deduction),
+          undertime:toNum(p.undertime), undertime_deduction:toNum(p.undertime_deduction),
+          overtime:toNum(p.overtime), holiday_pay:toNum(p.holiday_pay),
+          taxable_allowances:allowTotals.taxable, non_taxable_allowances:allowTotals.nontaxable,
+          adj_comp:toNum(p.adj_comp), adj_non_comp:toNum(p.adj_non_comp), total_leaves_used:toNum(p.total_leaves_used),
+          gsis_employee:toNum(p.gsis_employee), gsis_employer:toNum(p.gsis_employer), gsis_ecc:toNum(p.gsis_ecc),
+          sss_employee:toNum(p.sss_employee), sss_employer:toNum(p.sss_employer), sss_ecc:toNum(p.sss_ecc),
+          pagibig_employee:toNum(p.pagibig_employee), pagibig_employer:toNum(p.pagibig_employer), pagibig_ecc:toNum(p.pagibig_ecc),
+          philhealth_employee:toNum(p.philhealth_employee), philhealth_employer:toNum(p.philhealth_employer), philhealth_ecc:toNum(p.philhealth_ecc),
+          tax_withheld:toNum(p.tax_withheld), total_deductions:rowDeductions,
+          loans:toNum(p.loans), other_deductions:toNum(p.other_deductions), premium_adj:toNum(p.premium_adj),
+          ytd_sss:toNum(p.ytd_sss), ytd_wtax:toNum(p.ytd_wtax), ytd_philhealth:toNum(p.ytd_philhealth),
+          ytd_gsis:toNum(p.ytd_gsis), ytd_pagibig:toNum(p.ytd_pagibig), ytd_gross:toNum(p.ytd_gross),
+          payroll_status:p.payroll_status||'Active',
+          gross_pay:gross, grand_total_deductions:ded, net_pay:gross-ded,
+          allowances:d.allowances, deductions:d.deductions,
+          periodOption:selectedPeriod?.period_name||'',
+        };
+      });
+      const { data } = await api.post('/save_all_employee_payroll', {
+        run_id:runId, payrolls, user_id:user?.user_id, admin_name:user?.full_name||user?.username,
+      });
+      if (!data.success) throw new Error(data.message||'Failed to save.');
+      setEmpDataMap(cache);
+      flash(`${payrolls.length} employee payroll(s) saved successfully.`,'success');
+      setShowSaveModal(false); setIsEditing(false);
+      await loadRunEmployees(runId);
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to save payroll.'),'warning');
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <>
-      <header className="header">
-        <h2>Payroll Computation</h2>
-        <p>Compute employee payroll with automated deductions and payroll record saving.</p>
-      </header>
+  async function doSave() {
+    if (!selectedEmp||!runId) return;
+    setLoading(true);
+    try {
+      const { data } = await api.put(`/update_employee_payroll/${selectedEmp.employee_id}`, {
+        run_id:runId,
+        basic_salary:toNum(payroll.basic_salary),
+        absence_time:toNum(payroll.absence_time), absence_deduction:toNum(payroll.absence_deduction),
+        late_time:toNum(payroll.late_time), late_deduction:toNum(payroll.late_deduction),
+        undertime:toNum(payroll.undertime), undertime_deduction:toNum(payroll.undertime_deduction),
+        overtime:toNum(payroll.overtime), holiday_pay:toNum(payroll.holiday_pay), taxable_allowances:allowanceTotals.taxable,
+        non_taxable_allowances:allowanceTotals.nontaxable,
+        adj_comp:toNum(payroll.adj_comp), adj_non_comp:toNum(payroll.adj_non_comp),
+        total_leaves_used:toNum(payroll.total_leaves_used),
+        gsis_employee:toNum(payroll.gsis_employee), gsis_employer:toNum(payroll.gsis_employer), gsis_ecc:toNum(payroll.gsis_ecc),
+        sss_employee:toNum(payroll.sss_employee), sss_employer:toNum(payroll.sss_employer), sss_ecc:toNum(payroll.sss_ecc),
+        pagibig_employee:toNum(payroll.pagibig_employee), pagibig_employer:toNum(payroll.pagibig_employer), pagibig_ecc:toNum(payroll.pagibig_ecc),
+        philhealth_employee:toNum(payroll.philhealth_employee), philhealth_employer:toNum(payroll.philhealth_employer), philhealth_ecc:toNum(payroll.philhealth_ecc),
+        tax_withheld:toNum(payroll.tax_withheld), total_deductions:deductionRowsTotal,
+        loans:toNum(payroll.loans), other_deductions:toNum(payroll.other_deductions), premium_adj:toNum(payroll.premium_adj),
+        ytd_sss:toNum(payroll.ytd_sss), ytd_wtax:toNum(payroll.ytd_wtax), ytd_philhealth:toNum(payroll.ytd_philhealth),
+        ytd_gsis:toNum(payroll.ytd_gsis), ytd_pagibig:toNum(payroll.ytd_pagibig), ytd_gross:toNum(payroll.ytd_gross),
+        payroll_status:payroll.payroll_status||'Active',
+        gross_pay:totals.gross, grand_total_deductions:totals.ded, net_pay:totals.net,
+        ot_nd:otNd, ot_nd_adj:otNdAdj, att_adj:attAdj,
+        periodOption:selectedPeriod?.period_name||'',
+        allowances, deductions,
+        user_id:user?.user_id, admin_name:user?.full_name||user?.username,
+      });
+      if (!data.success) throw new Error(data.message||'Failed to save.');
+      flash('Payroll saved successfully.','success');
+      setIsEditing(false); setShowSaveModal(false);
+      await loadRunEmployees(runId);
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to save payroll.'),'warning');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      <section className="table-section payroll-setup">
-        <div className="payroll-section-heading">
-          <div>
-            <h3>Step 1: Setup Payroll</h3>
-            <p>Set the payroll coverage, then narrow the employee list only when needed.</p>
-          </div>
-          <span className={periodReady ? 'payroll-ready-badge ready' : 'payroll-ready-badge'}>
-            {periodReady ? 'Ready to load' : 'Period required'}
-          </span>
-        </div>
-        <div className="payroll-grid">
-          <div className="form-panel">
-            <h4>Payroll Period</h4>
-            <p className="panel-note">Required before loading employees.</p>
-            <FormSelect label="Payroll Group" value={filters.payroll_group} onChange={(value) => updateFilter('payroll_group', value)}>
-              <option value="">Select payroll group</option>
-              {meta.payrollGroups.map((item) => <option key={item.group_id} value={item.group_id}>{item.group_name}</option>)}
-            </FormSelect>
-            <FormSelect label="Period" value={filters.payroll_period} onChange={(value) => updateFilter('payroll_period', value)}>
-              <option value="">Select period</option>
-              {meta.payrollPeriods.map((item) => <option key={item.period_id} value={item.period_id}>{item.period_name}</option>)}
-            </FormSelect>
-            <FormSelect label="Month" value={filters.month} onChange={(value) => updateFilter('month', value)}>
-              <option value="">Select month</option>
-              {meta.payrollMonths.map((item) => <option key={item.month_id} value={item.month_id}>{item.month_name}</option>)}
-            </FormSelect>
-            <FormSelect label="Year" value={filters.year} onChange={(value) => updateFilter('year', value)}>
-              <option value="">Select year</option>
-              {meta.payrollYears.map((item) => <option key={item.year_id} value={item.year_id}>{item.year_value}</option>)}
-            </FormSelect>
-            <FormInput label="Generated Payroll Range" value={payrollRange} readOnly />
-            <div className="payroll-period-preview">
-              <span>Selected coverage</span>
-              <strong>{payrollRange || 'Choose group, period, month, and year'}</strong>
+  async function doDelete() {
+    if (!selectedEmp||!runId) return;
+    setLoading(true);
+    try {
+      const { data } = await api.post('/delete-employee', {
+        employeeId:selectedEmp.employee_id, runId,
+        user_id:user?.user_id, admin_name:user?.full_name||user?.username,
+      });
+      if (!data.success) throw new Error(data.message||'Failed to delete.');
+      flash('Employee payroll record deleted.','success');
+      setShowDeleteModal(false); setSelectedEmp(null); setPayroll(makeEmptyPayroll());
+      await loadRunEmployees(runId);
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to delete.'),'warning');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function goBackToSetup() {
+    setStep('setup'); setSelectedEmp(null); setEmployees([]);
+    setRunId(null); setIsEditing(false); setPayroll(makeEmptyPayroll()); setShowBackModal(false);
+  }
+
+  function handleCancelEdit() {
+    if (selectedEmp) selectEmployee(selectedEmp);
+    else { setPayroll(makeEmptyPayroll()); setIsEditing(false); }
+    setShowCancelModal(false);
+  }
+
+  const TABS = [
+    {id:'payroll',label:'Payroll'},{id:'ot-nd',label:'OT / ND'},
+    {id:'allowances',label:'Allowances'},{id:'deductions',label:'Deductions'},
+    {id:'loans',label:'Loans'},{id:'attendanceAdj',label:'Attendance Adj'},
+    {id:'ot-adj',label:'Overtime Adj'},{id:'otherDeductions',label:'Other Deductions'},
+    {id:'leaves',label:'Leaves'},
+  ];
+
+  function toggleModal(empId) {
+    setSelectedForModal(prev => {
+      const n = new Set(prev);
+      n.has(empId) ? n.delete(empId) : n.add(empId);
+      return n;
+    });
+  }
+
+  // ============================================================
+  // STEP 1: Setup
+  // ============================================================
+  if (step === 'setup') {
+    return (
+      <main className="section">
+        <header className="header">
+          <h2>Payroll Computation</h2>
+          <p>Compute employee payroll with automated deductions and real-time payslip generation.</p>
+        </header>
+
+        <section>
+          <h3>Step 1: Setup Payroll</h3>
+          <div className="setup-container">
+
+            <div className="payroll-period-panel">
+              <h4>Payroll Period</h4>
+              <div className="form-grid">
+                <div className="payroll-period-row">
+                  <label>Payroll Group:</label>
+                  <select value={filters.payroll_group} onChange={e=>upFilter('payroll_group',e.target.value)}>
+                    <option value="">-- Select Group --</option>
+                    {meta.payrollGroups.map(g=><option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}
+                  </select>
+                </div>
+                <div className="payroll-period-row">
+                  <label>Period:</label>
+                  <select value={filters.payroll_period} onChange={e=>upFilter('payroll_period',e.target.value)}>
+                    <option value="">-- Select Period --</option>
+                    {meta.payrollPeriods.map(p=><option key={p.period_id} value={p.period_id}>{p.period_name}</option>)}
+                  </select>
+                </div>
+                <div className="payroll-period-row">
+                  <label>Month:</label>
+                  <select value={filters.month} onChange={e=>upFilter('month',e.target.value)}>
+                    <option value="">-- Select Month --</option>
+                    {meta.payrollMonths.map(m=><option key={m.month_id} value={m.month_id}>{m.month_name}</option>)}
+                  </select>
+                </div>
+                <div className="payroll-period-row">
+                  <label>Year:</label>
+                  <select value={filters.year} onChange={e=>upFilter('year',e.target.value)}>
+                    <option value="">-- Select Year --</option>
+                    {meta.payrollYears.map(y=><option key={y.year_id} value={y.year_id}>{y.year_value}</option>)}
+                  </select>
+                </div>
+                <div className="payroll-period-row">
+                  <label>Generated Payroll Range:</label>
+                  <input type="text" value={payrollRange} readOnly />
+                </div>
+              </div>
+            </div>
+
+            <div className="filter-panel">
+              <h4>Filter</h4>
+              <div className="form-grid">
+                {FILTER_CATS.map(([cat,label,fk])=>{
+                  const key=fk||cat;
+                  return (
+                    <div key={cat} className="filter-row">
+                      <label>{label}:</label>
+                      <select value={filters[key]||''} onChange={e=>upFilter(key,e.target.value)}>
+                        <option value=""></option>
+                        {(lists[cat]||[]).map(r=><option key={r.value} value={r.value}>{r.value}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{marginTop:15}}>
+                <button type="button" className="btn" style={{float:'right'}} onClick={()=>setFilters(f=>({
+                  ...f, company:'',location:'',branch:'',division:'',department:'',
+                  class:'',position:'',empType:'',salaryType:'',
+                }))}>Clear Filters</button>
+                <label>Option:</label><br/>
+                <label><input type="radio" name="option" value="all" checked={filters.option==='all'} onChange={()=>upFilter('option','all')} /> All</label>{' '}
+                <label><input type="radio" name="option" value="active" checked={filters.option==='active'} onChange={()=>upFilter('option','active')} /> Active</label>{' '}
+                <label><input type="radio" name="option" value="hold" checked={filters.option==='hold'} onChange={()=>upFilter('option','hold')} /> Hold</label>
+              </div>
             </div>
           </div>
 
-          <div className="form-panel">
-            <h4>Filter</h4>
-            <p className="panel-note">Leave filters as All to include every eligible employee.</p>
-            {SYSTEM_LISTS.map(([key, label]) => (
-              <FormSelect key={key} label={label} value={filters[key] || ''} onChange={(value) => updateFilter(key, value)}>
-                {fillSelectOptions(lists[key] || [])}
-              </FormSelect>
-            ))}
-            <FormSelect label="Option" value={filters.option} onChange={(value) => updateFilter('option', value)}>
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="hold">Hold</option>
-              <option value="with_data">With Data (Gross &gt; 0)</option>
-            </FormSelect>
-            <button className="btn" type="button" disabled={loading} onClick={loadEmployees}>
-              {loading ? 'Loading...' : 'Proceed to Computation'}
+          <div style={{marginTop:25, textAlign:'right'}}>
+            <button type="button" className="btn" disabled={loading||!periodReady} onClick={proceedToComputation}>
+              {loading?'Loading...':'Proceed to Computation'}
             </button>
+          </div>
+        </section>
+
+        {showEmpModal && (
+          <div className="payroll-modal">
+            <div className="modal-content large-modal">
+              <h3>Select Employees to Add to Payroll</h3>
+              <p>Choose the employees you want to include in this payroll run.</p>
+              <div className="helper-tools" style={{margin:'10px 0'}}>
+                <label><input type="radio" name="ms" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)))} /> Select All</label>
+                <label style={{marginLeft:5}}><input type="radio" name="ms" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set())} /> Clear All</label>
+                <label style={{marginLeft:10}}>Quick Search:</label>
+                <select value={modalSearchBy} onChange={e=>setModalSearchBy(e.target.value)}>
+                  <option value="employee_id">Employee ID</option>
+                  <option value="last_name">Last Name</option>
+                  <option value="first_name">First Name</option>
+                </select>
+                <input type="text" value={modalSearch} onChange={e=>setModalSearch(e.target.value)} placeholder="Type to search..." style={{marginLeft:5}} />
+              </div>
+              <div className="employee-select-container">
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead>
+                    <tr>
+                      <th style={{padding:8,borderBottom:'1px solid #ddd'}}>Select</th>
+                      <th style={{padding:8,borderBottom:'1px solid #ddd'}}>Employee ID</th>
+                      <th style={{padding:8,borderBottom:'1px solid #ddd'}}>Last Name</th>
+                      <th style={{padding:8,borderBottom:'1px solid #ddd'}}>First Name</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredModalEmps.length===0
+                      ? <tr><td colSpan="4" style={{padding:8}}>No employees found.</td></tr>
+                      : filteredModalEmps.map(e=>(
+                        <tr key={e.employee_id} style={{cursor:'pointer'}} onClick={()=>toggleModal(e.employee_id)}>
+                          <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}><input type="checkbox" readOnly checked={selectedForModal.has(e.employee_id)} /></td>
+                          <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}>{e.emp_code}</td>
+                          <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}>{e.last_name}</td>
+                          <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}>{e.first_name}</td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <div className="modal-buttons">
+                <button className="btn proceed" disabled={loading} onClick={confirmAddEmployees}>{loading?'Adding...':'Proceed'}</button>
+                <button className="btn cancel-select" onClick={()=>setShowEmpModal(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {toast && <div className={toastType==='success'?'toastSuccess':'toastWarning'}>{toast}</div>}
+      </main>
+    );
+  }
+
+  // ============================================================
+  // STEP 2: Computation
+  // ============================================================
+  return (
+    <main className="section">
+      <header className="header">
+        <h2>Payroll Computation</h2>
+        <p>Compute employee payroll with automated deductions and real-time payslip generation.</p>
+      </header>
+
+      <section className="section-content">
+        <h3>Step 2: Payroll Computation</h3>
+
+        {selectedEmp && (
+          <div className="profile-header">
+            <div className="profile-photo">
+              <div className="pic-placeholder">No Image</div>
+            </div>
+            <div className="profile-info">
+              <h2>{selectedEmp.first_name} {selectedEmp.last_name}</h2>
+              <p><strong>Employee ID:</strong> {selectedEmp.emp_code}</p>
+              <p><strong>Department:</strong> {selectedEmp.department||'—'}</p>
+              <p><strong>Position:</strong> {selectedEmp.position||'—'}</p>
+              <p><strong>Status:</strong> {selectedEmp.status||'—'}</p>
+            </div>
+            <div className="details-actions">
+              {!isEditing ? (
+                <>
+                  <button className="btn edit-btn" type="button" onClick={()=>setIsEditing(true)}>Edit</button>
+                  <button className="btn delete-btn" type="button" onClick={()=>setShowDeleteModal(true)}>Delete</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn save-btn" type="button" disabled={loading} onClick={()=>setShowSaveModal(true)}>Save</button>
+                  <button className="btn cancel-btn" type="button" onClick={()=>setShowCancelModal(true)}>Cancel</button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="table-section">
+          <h3 style={{marginBottom:8}}>{payrollRange}</h3>
+          <div className="table-header">
+            <h4>Employee List</h4>
+            <div className="quick-search">
+              <label>Quick Search:</label>
+              <select value={searchBy} onChange={e=>setSearchBy(e.target.value)}>
+                <option value="employee_id">Employee ID</option>
+                <option value="last_name">Last Name</option>
+                <option value="first_name">First Name</option>
+              </select>
+              <input type="text" value={searchInput} onChange={e=>setSearchInput(e.target.value)} placeholder="Type to search..." />
+            </div>
+          </div>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+            <thead>
+              <tr style={{background:'#f0f0f0'}}>
+                <th style={th}>No.</th><th style={th}>Company</th><th style={th}>Department</th>
+                <th style={th}>Last Name</th><th style={th}>First Name</th><th style={th}>Employee ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEmps.length===0
+                ? <tr><td colSpan="6" style={{padding:8,textAlign:'center',border:'1px solid #ddd'}}>No employees loaded.</td></tr>
+                : filteredEmps.map((e,i)=>(
+                  <tr key={e.employee_id} onClick={()=>selectEmployee(e)} style={{cursor:'pointer',background:selectedEmp?.employee_id===e.employee_id?'#d0e8ff':i%2===0?'#fff':'#f9f9f9'}}>
+                    <td style={td}>{i+1}</td><td style={td}>{e.company||'—'}</td><td style={td}>{e.department||'—'}</td>
+                    <td style={td}>{e.last_name}</td><td style={td}>{e.first_name}</td><td style={td}>{e.emp_code}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+          {!selectedEmp && <p style={{margin:'8px 0 0',fontSize:13,color:'#666'}}>Click an employee row to load their payroll details.</p>}
+        </div>
+
+        {selectedEmp && (
+          <>
+            <div className="tab-buttons">
+              {TABS.map(t=>(
+                <button key={t.id} className={`tab-btn${activeTab===t.id?' active':''}`} type="button" onClick={()=>setActiveTab(t.id)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Payroll Tab */}
+            {activeTab==='payroll' && (
+              <div className="summary-input payroll-entry-surface">
+                <div className="payroll-entry-grid">
+                  <div className="payroll-entry-card gross-panel">
+                    <h4>Gross Earnings</h4>
+                    <div className="payroll-entry-head payroll-entry-gross-row"><span>Description</span><span>Time</span><span>Amount</span></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Basic Salary</span><span></span><Ni dis={!isEditing} v={payroll.basic_salary} set={v=>upPayroll('basic_salary',v)} /></div>
+                    {/* HRIS attendance banner */}
+                    <div style={{gridColumn:'1/-1',background:'#f0f7ff',border:'1px solid #bdd7f5',borderRadius:5,padding:'6px 10px',margin:'2px 0',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:12}}>
+                      <span style={{fontWeight:600,color:'#1a6fba'}}>HRIS Attendance</span>
+                      {hrisData ? (
+                        <>
+                          <span style={{color:'#444'}}>{hrisData.period_range}</span>
+                          <span style={{color:'#bbb'}}>|</span>
+                          <span style={{color:'#555'}}>
+                            {hrisData.attendance?.source==='computed_from_attendance'
+                              ? 'Source: Time Records'
+                              : hrisData.attendance?.source==='payroll_adjustment'
+                                ? 'Source: Manual Adj.'
+                                : 'Source: HRIS'}
+                          </span>
+                          <span style={{color:'#bbb'}}>|</span>
+                          <span style={{color:'#333'}}>
+                            Absent: <strong>{hrisData.absences?.total_days ?? 0}</strong> day(s)
+                            {toNum(hrisData.absences?.computed_deduction) > 0 && <span style={{color:'#c00',marginLeft:3}}>(-₱{fmt(hrisData.absences.computed_deduction)})</span>}
+                          </span>
+                          <span style={{color:'#333'}}>
+                            Late: <strong>{hrisData.attendance?.late_minutes ?? 0}</strong> min
+                            {toNum(hrisData.attendance?.late_deduction) > 0 && <span style={{color:'#c00',marginLeft:3}}>(-₱{fmt(hrisData.attendance.late_deduction)})</span>}
+                          </span>
+                          <span style={{color:'#333'}}>
+                            Undertime: <strong>{hrisData.attendance?.undertime_minutes ?? 0}</strong> min
+                            {toNum(hrisData.attendance?.undertime_deduction) > 0 && <span style={{color:'#c00',marginLeft:3}}>(-₱{fmt(hrisData.attendance.undertime_deduction)})</span>}
+                          </span>
+                          <span style={{color:'#333'}}>
+                            OT: <strong>{hrisData.ot?.total_hours ?? 0}</strong> hr(s)
+                            {toNum(hrisData.ot?.computed_amount) > 0 && <span style={{color:'#080',marginLeft:3}}>(+₱{fmt(hrisData.ot.computed_amount)})</span>}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{color:'#999',fontStyle:'italic'}}>No HRIS data loaded</span>
+                      )}
+                      {isEditing && (
+                        <button type="button" disabled={hrisLoading} onClick={syncFromHris}
+                          style={{marginLeft:'auto',padding:'3px 10px',fontSize:12,cursor:'pointer',background:'#1a6fba',color:'#fff',border:'none',borderRadius:4,opacity:hrisLoading?0.7:1}}>
+                          {hrisLoading ? 'Syncing…' : '↻ Sync from HRIS'}
+                        </button>
+                      )}
+                    </div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Absences (-)</span><Ti dis={!isEditing} v={payroll.absence_time} set={v=>upPayroll('absence_time',v)} /><Ni dis={!isEditing} v={payroll.absence_deduction} set={v=>upPayroll('absence_deduction',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Late (-)</span><Ti dis={!isEditing} v={payroll.late_time} set={v=>upPayroll('late_time',v)} /><Ni dis={!isEditing} v={payroll.late_deduction} set={v=>upPayroll('late_deduction',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Undertime (-)</span><Ti dis={!isEditing} v={payroll.undertime} set={v=>upPayroll('undertime',v)} /><Ni dis={!isEditing} v={payroll.undertime_deduction} set={v=>upPayroll('undertime_deduction',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Total Overtime (+)</span><span></span><Ni dis={!isEditing} v={payroll.overtime} set={v=>upPayroll('overtime',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Holiday Pay (+)</span><span></span><Ni dis={!isEditing} v={payroll.holiday_pay} set={v=>upPayroll('holiday_pay',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Taxable Allowances (+)</span><span></span><Ni dis={!isEditing} v={payroll.taxable_allowances} set={v=>upPayroll('taxable_allowances',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Non-Taxable Allow. (+)</span><span></span><Ni dis={!isEditing} v={payroll.non_taxable_allowances} set={v=>upPayroll('non_taxable_allowances',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Adj. Compensation (+)</span><span></span><Ni dis={!isEditing} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Adj. Non-Comp. (+)</span><span></span><Ni dis={!isEditing} v={payroll.adj_non_comp} set={v=>upPayroll('adj_non_comp',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Total Leaves Used (+)</span><span></span><Ni dis={!isEditing} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></div>
+                    <div className="payroll-entry-total payroll-entry-gross-row"><span>Gross Pay</span><span></span><strong>₱{fmt(totals.gross)}</strong></div>
+                  </div>
+                  <div className="payroll-entry-card deduction-panel">
+                    <h4>Deductions</h4>
+                    <div className="payroll-entry-head payroll-entry-ded-row"><span>Description</span><span>Employee</span><span>Employer</span><span>ECC</span></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>GSIS</span><Ni dis={!isEditing} v={payroll.gsis_employee} set={v=>upPayroll('gsis_employee',v)} /><Ni dis={!isEditing} v={payroll.gsis_employer} set={v=>upPayroll('gsis_employer',v)} /><Ni dis={!isEditing} v={payroll.gsis_ecc} set={v=>upPayroll('gsis_ecc',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>SSS</span><Ni dis={!isEditing} v={payroll.sss_employee} set={v=>upPayroll('sss_employee',v)} /><Ni dis={!isEditing} v={payroll.sss_employer} set={v=>upPayroll('sss_employer',v)} /><Ni dis={!isEditing} v={payroll.sss_ecc} set={v=>upPayroll('sss_ecc',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Pag-ibig</span><Ni dis={!isEditing} v={payroll.pagibig_employee} set={v=>upPayroll('pagibig_employee',v)} /><Ni dis={!isEditing} v={payroll.pagibig_employer} set={v=>upPayroll('pagibig_employer',v)} /><Ni dis={!isEditing} v={payroll.pagibig_ecc} set={v=>upPayroll('pagibig_ecc',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Philhealth</span><Ni dis={!isEditing} v={payroll.philhealth_employee} set={v=>upPayroll('philhealth_employee',v)} /><Ni dis={!isEditing} v={payroll.philhealth_employer} set={v=>upPayroll('philhealth_employer',v)} /><Ni dis={!isEditing} v={payroll.philhealth_ecc} set={v=>upPayroll('philhealth_ecc',v)} /></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Tax Withheld</span><Ni dis={!isEditing} v={payroll.tax_withheld} set={v=>upPayroll('tax_withheld',v)} /><span></span><span></span></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Total Deductions</span><Ni dis={!isEditing} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /><span></span><span></span></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Loans</span><Ni dis={!isEditing} v={payroll.loans} set={v=>upPayroll('loans',v)} /><span></span><span></span></div>
+                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Other Deductions</span><Ni dis={!isEditing} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /><span>Premium Adj.</span><Ni dis={!isEditing} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></div>
+                    <div className="payroll-entry-total payroll-entry-ded-row"><span>Total Deductions</span><span></span><span></span><strong>₱{fmt(totals.ded)}</strong></div>
+                    <div className="payroll-ytd-title">Year-to-Date (YTD)</div>
+                    <div className="payroll-ytd-grid">
+                      <span>YTD SSS</span><Ni dis={!isEditing} v={payroll.ytd_sss} set={v=>upPayroll('ytd_sss',v)} />
+                      <span>YTD Wtax</span><Ni dis={!isEditing} v={payroll.ytd_wtax} set={v=>upPayroll('ytd_wtax',v)} />
+                      <span>YTD Philhealth</span><Ni dis={!isEditing} v={payroll.ytd_philhealth} set={v=>upPayroll('ytd_philhealth',v)} />
+                      <span>YTD GSIS</span><Ni dis={!isEditing} v={payroll.ytd_gsis} set={v=>upPayroll('ytd_gsis',v)} />
+                      <span>YTD Pag-ibig</span><Ni dis={!isEditing} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} />
+                      <span>YTD Gross</span><Ni dis={!isEditing} v={payroll.ytd_gross} set={v=>upPayroll('ytd_gross',v)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab==='ot-nd' && (
+              <div className="summary-input">
+                <div className="ot-nd-payroll-grid">
+                  <div className="form-box">
+                    <h4>Overtime</h4>
+                    <table className="ot-nd-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
+                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNd[`${key}_rate`]} set={v=>upOtNd(`${key}_rate`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_rate_time`]} set={v=>upOtNd(`${key}_rate_time`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_ot`]} set={v=>upOtNd(`${key}_ot`,v)} /></td></tr>)}</tbody>
+                    </table>
+                  </div>
+                  <div className="form-box">
+                    <h4>Night Differential</h4>
+                    <table className="ot-nd-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
+                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNd[`${key}_rate_nd`]} set={v=>upOtNd(`${key}_rate_nd`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_rate_nd_time`]} set={v=>upOtNd(`${key}_rate_nd_time`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_ot_nd`]} set={v=>upOtNd(`${key}_ot_nd`,v)} /></td></tr>)}</tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab==='allowances' && (
+              <div className="summary-input">
+                <div className="allowance-payroll-grid">
+                  {[{taxable:true,title:'Taxable Allowances'},{taxable:false,title:'Non-Taxable Allowances'}].map(({taxable,title})=>{
+                    const rows = allowances.filter(a=>taxable?Number(a.is_taxable)===1:Number(a.is_taxable)!==1);
+                    return (
+                      <div key={title} className="form-box">
+                        <h4>{title}</h4>
+                        <table className="allowance-table">
+                          <thead><tr><th style={{width:30}}>#</th><th>Allowance</th><th style={{width:120}}>Amount</th><th style={{width:80}}>Action</th></tr></thead>
+                          <tbody>
+                            {rows.length===0 ? <tr><td colSpan="4" style={{padding:8}}>None.</td></tr>
+                              : rows.map((a,i)=>(
+                                <tr key={i}>
+                                  <td>{i+1}</td>
+                                  <td>{a.allowance_name||`Type ${a.allowance_type_id}`}</td>
+                                  <td><Ni dis={!isEditing} v={a.amount} set={v=>{
+                                    let idx=0;let count=0;
+                                    for(let j=0;j<allowances.length;j++){
+                                      const isTax=Number(allowances[j].is_taxable)===1;
+                                      if(taxable?isTax:!isTax){if(count===i){idx=j;break;}count++;}
+                                    }
+                                    const n=[...allowances];n[idx]={...n[idx],amount:v};setAllowances(n);
+                                  }} /></td>
+                                  <td></td>
+                                </tr>
+                              ))
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {activeTab==='deductions' && (
+              <div className="summary-input">
+                <div className="deduction-payroll-grid">
+                  <div className="deduction-box-container">
+                    <div className="form-box">
+                      <h4>Deductions</h4>
+                      <table className="deduction-table">
+                        <thead><tr><th style={{width:30}}>#</th><th>Deductions</th><th style={{width:120}}>Amount</th><th style={{width:80}}>Action</th></tr></thead>
+                        <tbody>
+                          {deductions.length===0 ? <tr><td colSpan="4" style={{padding:8}}>No deductions.</td></tr>
+                            : deductions.map((d,i)=>(
+                              <tr key={i}>
+                                <td>{i+1}</td>
+                                <td>{d.deduction_name||`Type ${d.deduction_type_id}`}</td>
+                                <td><Ni dis={!isEditing} v={d.amount} set={v=>{const n=[...deductions];n[i]={...n[i],amount:v};setDeductions(n);}} /></td>
+                                <td></td>
+                              </tr>
+                            ))
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab==='loans' && <div className="summary-input" style={{padding:10,color:'#888'}}>Loan records will appear here.</div>}
+
+            {activeTab==='attendanceAdj' && (
+              <div className="summary-input">
+                <div className="attendance-adj-grid">
+                  <div className="form-box attendance-box">
+                    <h4>Attendance Adjustments</h4>
+                    <table className="ot-nd-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Time</th><th style={{width:120}}>Amount</th></tr></thead>
+                      <tbody>
+                        {ATT_ROWS.map(({key,label,hasTime})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td>{hasTime?<Ti dis={!isEditing} v={attAdj[`${key}_time`]} set={v=>upAttAdj(`${key}_time`,v)} />:null}</td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_amt`]} set={v=>upAttAdj(`${key}_amt`,v)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="form-box premium-box">
+                    <h4>Premium Adjustments</h4>
+                    <table className="ot-nd-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Employee Share</th><th style={{width:120}}>Employer Share</th><th style={{width:120}}>ECC</th></tr></thead>
+                      <tbody>
+                        {PREM_ROWS.map(({key,label})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_emp`]} set={v=>upAttAdj(`${key}_emp`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_employer`]} set={v=>upAttAdj(`${key}_employer`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_ecc`]} set={v=>upAttAdj(`${key}_ecc`,v)} /></td>
+                          </tr>
+                        ))}
+                        <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td colSpan="2"></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab==='ot-adj' && (
+              <div className="summary-input">
+                <div className="ot-adj-payroll-grid">
+                  <div className="form-box">
+                    <h4>Overtime</h4>
+                    <table className="ot-adj-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
+                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}_rate`]} set={v=>upOtNdAdj(`ot_adj_${key}_rate`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}_rate_time`]} set={v=>upOtNdAdj(`ot_adj_${key}_rate_time`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}_ot`]} set={v=>upOtNdAdj(`ot_adj_${key}_ot`,v)} /></td></tr>)}</tbody>
+                    </table>
+                  </div>
+                  <div className="form-box">
+                    <h4>Night Differential</h4>
+                    <table className="ot-adj-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
+                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}_rate`]} set={v=>upOtNdAdj(`nd_adj_${key}_rate`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}_rate_time`]} set={v=>upOtNdAdj(`nd_adj_${key}_rate_time`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}_ot`]} set={v=>upOtNdAdj(`nd_adj_${key}_ot`,v)} /></td></tr>)}</tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab==='otherDeductions' && <div className="summary-input" style={{padding:10,color:'#888'}}>Other deductions will appear here.</div>}
+            {activeTab==='leaves'           && <div className="summary-input" style={{padding:10,color:'#888'}}>Leave records will appear here.</div>}
+
+            <div className="summary-bar">
+              <label>
+                <input type="checkbox" disabled={!isEditing}
+                  checked={payroll.payroll_status==='Hold'}
+                  onChange={e=>upPayroll('payroll_status',e.target.checked?'Hold':'Active')}
+                /> Hold
+              </label>
+              <div><strong>Gross Pay:</strong> ₱{fmt(totals.gross)}</div>
+              <div><strong>Grand Total Ded.:</strong> ₱{fmt(totals.ded)}</div>
+              <div><strong>Net Pay:</strong> ₱{fmt(totals.net)}</div>
+            </div>
+          </>
+        )}
+
+        <div className="payroll-buttons">
+          <button type="button" className="add-employee-btn" onClick={openEmpModal}>+ Add New Employee</button>
+          <div className="right-buttons">
+            <button type="button" className="btn" onClick={()=>isEditing?setShowBackModal(true):goBackToSetup()}>← Back to Filters</button>
+            <button type="button" className="btn save-payroll-btn" disabled={loading} onClick={()=>setShowSaveModal(true)}>&#128190; Save Payroll</button>
           </div>
         </div>
       </section>
 
-      <section className="table-section">
-        <div className="table-header">
-          <div>
-            <h3>Step 2: Employee Payroll</h3>
-            <p>{runId ? `Payroll Run #${runId} ${payrollRange ? `(${payrollRange})` : ''}` : 'Load employees after selecting a payroll period.'}</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="payroll-loaded-count">
-              <strong>{employees.length}</strong>
-              <span>Employee Loaded</span>
+      {showEmpModal && (
+        <div className="payroll-modal">
+          <div className="modal-content large-modal">
+            <h3>Add Employees to Payroll Run</h3>
+            <p>Choose the employees you want to include in this payroll run.</p>
+            <div className="helper-tools" style={{margin:'10px 0'}}>
+              <label><input type="radio" name="ms2" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)))} /> Select All</label>
+              <label style={{marginLeft:5}}><input type="radio" name="ms2" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set())} /> Clear All</label>
+              <label style={{marginLeft:10}}>Quick Search:</label>
+              <select value={modalSearchBy} onChange={e=>setModalSearchBy(e.target.value)}>
+                <option value="employee_id">Employee ID</option>
+                <option value="last_name">Last Name</option>
+                <option value="first_name">First Name</option>
+              </select>
+              <input type="text" value={modalSearch} onChange={e=>setModalSearch(e.target.value)} placeholder="Type to search..." style={{marginLeft:5}} />
             </div>
-            {runId && (
-              <button className="btn" type="button" disabled={loading} onClick={generatePayroll}>
-                {loading ? 'Processing...' : 'Generate Payroll'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="payroll-workspace">
-          <div className="employee-list-panel">
-            <div className="panel-title-row">
-              <h4>Employee List</h4>
-              <span>{selectedEmployee ? selectedEmployee.emp_code : 'Select one'}</span>
-            </div>
-            <div className="table-scroll compact">
-              <table>
+            <div className="employee-select-container">
+              <table style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead>
                   <tr>
-                    <th>Employee ID</th>
-                    <th>Last Name</th>
-                    <th>First Name</th>
-                    <th>Department</th>
-                    <th>Gross Pay</th>
-                    <th>Net Pay</th>
+                    <th style={{padding:8,borderBottom:'1px solid #ddd'}}>Select</th>
+                    <th style={{padding:8,borderBottom:'1px solid #ddd'}}>Employee ID</th>
+                    <th style={{padding:8,borderBottom:'1px solid #ddd'}}>Last Name</th>
+                    <th style={{padding:8,borderBottom:'1px solid #ddd'}}>First Name</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.length === 0 ? (
-                    <tr><td colSpan="6">No employees loaded.</td></tr>
-                  ) : employees.map((employee) => {
-                    const hasData = Number(employee.gross_pay || 0) > 0;
-                    return (
-                      <tr
-                        key={employee.employee_id}
-                        className={[
-                          selectedEmployee?.employee_id === employee.employee_id ? 'selected-row' : '',
-                          !hasData ? 'payroll-no-data' : ''
-                        ].filter(Boolean).join(' ')}
-                        onClick={() => loadEmployeePayroll(employee)}
-                      >
-                        <td>{employee.emp_code}</td>
-                        <td>{employee.last_name}</td>
-                        <td>{employee.first_name}</td>
-                        <td>{employee.department || 'N/A'}</td>
-                        <td className={hasData ? '' : 'payroll-empty-cell'}>
-                          {hasData ? `PHP ${Number(employee.gross_pay).toFixed(2)}` : '—'}
-                        </td>
-                        <td className={hasData ? '' : 'payroll-empty-cell'}>
-                          {hasData ? `PHP ${Number(employee.net_pay).toFixed(2)}` : '—'}
-                        </td>
+                  {filteredModalEmps.length===0
+                    ? <tr><td colSpan="4" style={{padding:8}}>No employees found.</td></tr>
+                    : filteredModalEmps.map(e=>(
+                      <tr key={e.employee_id} style={{cursor:'pointer'}} onClick={()=>toggleModal(e.employee_id)}>
+                        <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}><input type="checkbox" readOnly checked={selectedForModal.has(e.employee_id)} /></td>
+                        <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}>{e.emp_code}</td>
+                        <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}>{e.last_name}</td>
+                        <td style={{padding:'8px',borderBottom:'1px solid #ddd'}}>{e.first_name}</td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  }
                 </tbody>
               </table>
             </div>
-          </div>
-
-          <div className="payroll-detail-panel">
-            {selectedEmployee ? (
-              <>
-                <div className="payroll-profile">
-                  <h3>{selectedEmployee.first_name} {selectedEmployee.last_name}</h3>
-                  <p>{selectedEmployee.emp_code} · {selectedEmployee.department || 'No department'}</p>
-                </div>
-
-                <div className="payroll-tabs-grid">
-                  <PayrollPanel title="Gross Earnings">
-                    <p className="panel-note">Amounts that increase pay are added; absence, late, and undertime are deducted.</p>
-                    <MoneyInput label="Basic Salary" name="basic_salary" payroll={payroll} onChange={updatePayroll} placeholder="Example: 15000.00" />
-                    <MoneyInput label="Absence Deduction" name="absence_deduction" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Late Deduction" name="late_deduction" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Undertime Deduction" name="undertime_deduction" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Overtime" name="overtime" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Holiday Pay" name="holiday_pay" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Taxable Allowances" name="taxable_allowances" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Non-Taxable Allowances" name="non_taxable_allowances" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Adjustment Compensation" name="adj_comp" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Adjustment Non-Comp." name="adj_non_comp" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Leaves Used" name="total_leaves_used" payroll={payroll} onChange={updatePayroll} />
-                  </PayrollPanel>
-
-                  <PayrollPanel
-                    title="Deductions"
-                    action={
-                      <button className="btn secondary" type="button" disabled={loading} onClick={autoComputePayroll}>
-                        Auto Compute
-                      </button>
-                    }
-                  >
-                    <p className="panel-note">Enter employee share deductions and any one-time deductions for this run.</p>
-                    <MoneyInput label="GSIS Employee" name="gsis_employee" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="SSS Employee" name="sss_employee" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Pag-IBIG Employee" name="pagibig_employee" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="PhilHealth Employee" name="philhealth_employee" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Tax Withheld" name="tax_withheld" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Other Deductions" name="other_deductions" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Loans" name="loans" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Premium Adjustment" name="premium_adj" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="Additional Deductions" name="total_deductions" payroll={payroll} onChange={updatePayroll} />
-                  </PayrollPanel>
-
-                  <PayrollPanel title="YTD">
-                    <p className="panel-note">Use year-to-date values for reporting continuity when available.</p>
-                    <MoneyInput label="YTD SSS" name="ytd_sss" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="YTD WTax" name="ytd_wtax" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="YTD PhilHealth" name="ytd_philhealth" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="YTD GSIS" name="ytd_gsis" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="YTD Pag-IBIG" name="ytd_pagibig" payroll={payroll} onChange={updatePayroll} />
-                    <MoneyInput label="YTD Gross" name="ytd_gross" payroll={payroll} onChange={updatePayroll} />
-                  </PayrollPanel>
-                </div>
-
-                <div className="summary-bar react-summary">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={payroll.payroll_status === 'Hold'}
-                      onChange={(event) => updatePayroll('payroll_status', event.target.checked ? 'Hold' : 'Active')}
-                    /> Hold
-                  </label>
-                  <div><strong>Gross Pay:</strong> PHP {totals.gross.toFixed(2)}</div>
-                  <div><strong>Grand Total Ded.:</strong> PHP {totals.deductions.toFixed(2)}</div>
-                  <div><strong>Net Pay:</strong> PHP {totals.net.toFixed(2)}</div>
-                  <button className="btn" type="button" disabled={loading} onClick={savePayroll}>Save Payroll</button>
-                </div>
-              </>
-            ) : (
-              <p className="muted">Select an employee to view and edit payroll computation.</p>
-            )}
+            <div className="modal-buttons">
+              <button className="btn proceed" disabled={loading} onClick={confirmAddEmployees}>{loading?'Adding...':'Proceed'}</button>
+              <button className="btn cancel-select" onClick={()=>setShowEmpModal(false)}>Cancel</button>
+            </div>
           </div>
         </div>
-
-        {message && <p className="message">{message}</p>}
-      </section>
-    </>
-  );
-}
-
-function FormSelect({ label, value, onChange, children }) {
-  return (
-    <label className="form-row-react">
-      <span>{label}</span>
-      <select value={value || ''} onChange={(event) => onChange(event.target.value)}>
-        {children}
-      </select>
-    </label>
-  );
-}
-
-function FormInput({ label, value, readOnly = false }) {
-  return (
-    <label className="form-row-react">
-      <span>{label}</span>
-      <input value={value || ''} readOnly={readOnly} />
-    </label>
-  );
-}
-
-function PayrollPanel({ title, action, children }) {
-  return (
-    <div className="payroll-panel">
-      {action ? (
-        <div className="payroll-panel-header">
-          <h4>{title}</h4>
-          {action}
-        </div>
-      ) : (
-        <h4>{title}</h4>
       )}
-      {children}
-    </div>
+
+      <PConfirm open={showSaveModal} title="Save All Payroll" msg={`Save payroll for all ${filteredEmps.length} employee(s) in this run?`}
+        onOk={doSaveAll} onCancel={()=>setShowSaveModal(false)} okLabel={loading?'Saving...':'Yes, Save All'} okCls="btn proceed" />
+      <PConfirm open={showDeleteModal} title="Confirm Delete" msg="Are you sure you want to delete the Payroll record of this employee?"
+        onOk={doDelete} onCancel={()=>setShowDeleteModal(false)} okLabel="Yes, Delete" okCls="btn confirm-delete" />
+      <PConfirm open={showCancelModal} title="Confirm Cancel" msg="Discard unsaved changes?"
+        onOk={handleCancelEdit} onCancel={()=>setShowCancelModal(false)} okLabel="OK" okCls="btn confirm-delete" />
+      <PConfirm open={showBackModal} title="Unsaved Changes" msg="You haven't saved this payroll yet. Going back will discard your changes."
+        onOk={goBackToSetup} onCancel={()=>setShowBackModal(false)} okLabel="Yes, Go Back" okCls="btn confirm-delete" />
+
+      {toast && <div className={toastType==='success'?'toastSuccess':'toastWarning'}>{toast}</div>}
+    </main>
   );
 }
 
-function MoneyInput({ label, name, payroll, onChange, placeholder = '0.00' }) {
+const th = {padding:'8px 10px',border:'1px solid #ddd',textAlign:'left',fontWeight:600};
+const td = {padding:'7px 10px',border:'1px solid #ddd'};
+
+function Ni({ v, set, dis=false }) {
+  return <input type="number" step="0.01" disabled={dis} value={v??''} onChange={e=>set&&set(e.target.value)} />;
+}
+function Ti({ v, set, dis=false }) {
+  return <input type="text" disabled={dis} value={v??''} onChange={e=>set&&set(e.target.value)} style={{width:80}} />;
+}
+function PConfirm({ open, title, msg, onOk, onCancel, okLabel='Confirm', okCls='btn' }) {
+  if (!open) return null;
   return (
-    <label className="money-row">
-      <span>{label}</span>
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        placeholder={placeholder}
-        value={payroll[name] ?? ''}
-        onChange={(event) => onChange(name, event.target.value)}
-      />
-    </label>
+    <div className="payroll-modal">
+      <div className="modal-content">
+        <h3>{title}</h3>
+        <p>{msg}</p>
+        <div className="modal-buttons">
+          <button className={okCls} type="button" onClick={onOk}>{okLabel}</button>
+          <button className="btn cancel-delete" type="button" onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }

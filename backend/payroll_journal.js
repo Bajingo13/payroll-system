@@ -21,6 +21,154 @@ module.exports = function (app, pool) {
         }
     }
 
+    function normalizeSelectorValue(value) {
+        return String(value ?? "").trim().toLowerCase();
+    }
+
+    function addCandidate(candidates, value) {
+        const normalized = normalizeSelectorValue(value);
+        if (normalized) candidates.add(normalized);
+    }
+
+    async function getSelectorCandidates(conn, table, idColumn, labelColumn, value) {
+        const candidates = new Set();
+        addCandidate(candidates, value);
+
+        const [rows] = await conn.query(
+            `SELECT ${idColumn} AS id_value, ${labelColumn} AS label_value
+             FROM ${table}
+             WHERE CAST(${idColumn} AS CHAR) = ?
+                OR CONVERT(LOWER(TRIM(CAST(${labelColumn} AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                   CONVERT(LOWER(TRIM(CAST(? AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci`,
+            [value, value]
+        );
+
+        rows.forEach((row) => {
+            addCandidate(candidates, row.id_value);
+            addCandidate(candidates, row.label_value);
+        });
+
+        return Array.from(candidates);
+    }
+
+    async function getPayrollRunCandidates(conn, filters) {
+        const groupCandidates = await getSelectorCandidates(conn, "payroll_groups", "group_id", "group_name", filters.payroll_group);
+        const periodCandidates = await getSelectorCandidates(conn, "payroll_periods", "period_id", "period_name", filters.payroll_period);
+        const monthCandidates = await getSelectorCandidates(conn, "payroll_months", "month_id", "month_name", filters.month);
+        const yearCandidates = await getSelectorCandidates(conn, "payroll_years", "year_id", "year_value", filters.year);
+
+        const [rows] = await conn.query(
+            `SELECT
+                pr.run_id,
+                pr.status,
+                pr.payroll_range,
+                COUNT(ep.employee_id) AS employee_count
+            FROM payroll_runs pr
+            LEFT JOIN employee_payroll ep ON ep.run_id = pr.run_id
+            WHERE LOWER(TRIM(CAST(pr.group_id AS CHAR))) IN (?)
+                AND LOWER(TRIM(CAST(pr.period_id AS CHAR))) IN (?)
+                AND LOWER(TRIM(CAST(pr.month_id AS CHAR))) IN (?)
+                AND LOWER(TRIM(CAST(pr.year_id AS CHAR))) IN (?)
+            GROUP BY pr.run_id, pr.status, pr.payroll_range
+            ORDER BY
+                CASE WHEN pr.status = 'Pending' THEN 1 ELSE 0 END,
+                employee_count DESC,
+                pr.run_id DESC`,
+            [groupCandidates, periodCandidates, monthCandidates, yearCandidates]
+        );
+
+        return rows;
+    }
+
+    async function getPayrollRunSortIndex(conn, filters) {
+        const [periodRows] = await conn.query(
+            `SELECT period_id
+             FROM payroll_periods
+             WHERE CAST(period_id AS CHAR) = ?
+                OR CONVERT(LOWER(TRIM(period_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                   CONVERT(LOWER(TRIM(CAST(? AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+             LIMIT 1`,
+            [filters.period, filters.period]
+        );
+        const [monthRows] = await conn.query(
+            `SELECT month_id
+             FROM payroll_months
+             WHERE CAST(month_id AS CHAR) = ?
+                OR CONVERT(LOWER(TRIM(month_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
+                   CONVERT(LOWER(TRIM(CAST(? AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+             LIMIT 1`,
+            [filters.month, filters.month]
+        );
+        const [yearRows] = await conn.query(
+            "SELECT year_value FROM payroll_years WHERE CAST(year_id AS CHAR) = ? OR CAST(year_value AS CHAR) = ? LIMIT 1",
+            [filters.year, filters.year]
+        );
+
+        return {
+            period: Number(periodRows[0]?.period_id || filters.period),
+            month: Number(monthRows[0]?.month_id || filters.month),
+            year: Number(yearRows[0]?.year_value || filters.year)
+        };
+    }
+
+    async function getPayrollRunsInRange(conn, filters) {
+        const groupCandidates = await getSelectorCandidates(conn, "payroll_groups", "group_id", "group_name", filters.payroll_group);
+        const fromIndex = await getPayrollRunSortIndex(conn, {
+            period: filters.from_period,
+            month: filters.from_month,
+            year: filters.from_year
+        });
+        const toIndex = await getPayrollRunSortIndex(conn, {
+            period: filters.to_period,
+            month: filters.to_month,
+            year: filters.to_year
+        });
+
+        const [rows] = await conn.query(
+            `SELECT
+                pr.run_id,
+                pr.group_id,
+                pr.period_id,
+                pr.month_id,
+                pr.year_id,
+                pr.status,
+                COALESCE(pg_by_id.group_id, pg_by_name.group_id) AS normalized_group_id,
+                COALESCE(pp_by_id.period_id, pp_by_name.period_id) AS normalized_period_id,
+                COALESCE(pm_by_id.month_id, pm_by_name.month_id) AS normalized_month_id,
+                COALESCE(py_by_id.year_value, py_by_value.year_value) AS normalized_year_value
+            FROM payroll_runs pr
+            LEFT JOIN payroll_groups pg_by_id ON CONVERT(TRIM(CAST(pg_by_id.group_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(pr.group_id) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_groups pg_by_name ON CONVERT(LOWER(TRIM(pg_by_name.group_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(LOWER(TRIM(pr.group_id)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_periods pp_by_id ON CONVERT(TRIM(CAST(pp_by_id.period_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(pr.period_id) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_periods pp_by_name ON CONVERT(LOWER(TRIM(pp_by_name.period_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(LOWER(TRIM(pr.period_id)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_months pm_by_id ON CONVERT(TRIM(CAST(pm_by_id.month_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(pr.month_id) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_months pm_by_name ON CONVERT(LOWER(TRIM(pm_by_name.month_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(LOWER(TRIM(pr.month_id)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_years py_by_id ON CONVERT(TRIM(CAST(py_by_id.year_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(pr.year_id) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN payroll_years py_by_value ON CONVERT(TRIM(CAST(py_by_value.year_value AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(pr.year_id) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            WHERE CONVERT(LOWER(TRIM(CAST(pr.group_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci IN (?)
+            ORDER BY
+                COALESCE(py_by_id.year_value, py_by_value.year_value),
+                COALESCE(pm_by_id.month_id, pm_by_name.month_id),
+                COALESCE(pp_by_id.period_id, pp_by_name.period_id)`,
+            [groupCandidates]
+        );
+
+        const key = (item) => (Number(item.year) * 10000) + (Number(item.month) * 100) + Number(item.period);
+        const fromKey = key(fromIndex);
+        const toKey = key(toIndex);
+        const minKey = Math.min(fromKey, toKey);
+        const maxKey = Math.max(fromKey, toKey);
+
+        return rows.filter((row) => {
+            const rowKey = key({
+                year: row.normalized_year_value,
+                month: row.normalized_month_id,
+                period: row.normalized_period_id
+            });
+            return Number.isFinite(rowKey) && rowKey >= minKey && rowKey <= maxKey;
+        });
+    }
+
 
 
     // === EMPLOYEE PAYROLL === 
@@ -100,73 +248,21 @@ module.exports = function (app, pool) {
 
         let conn;
         try {
-            const query = `
-                SELECT
-                    pr.run_id,
-                    COUNT(ep.employee_id) AS employee_count
-                FROM payroll_runs pr
-                LEFT JOIN employee_payroll ep ON ep.run_id = pr.run_id
-                WHERE pr.status != 'Pending'
-                    AND (
-                                                CONVERT(TRIM(CAST(pr.group_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
-                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                                                OR CONVERT(LOWER(TRIM(CAST(pr.group_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
-                                                    SELECT CONVERT(LOWER(TRIM(group_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                          FROM payroll_groups
-                          WHERE CAST(group_id AS CHAR) = ?
-                          LIMIT 1
-                        )
-                    )
-                    AND (
-                                                CONVERT(TRIM(CAST(pr.period_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
-                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                                                OR CONVERT(LOWER(TRIM(CAST(pr.period_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
-                                                    SELECT CONVERT(LOWER(TRIM(period_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                          FROM payroll_periods
-                          WHERE CAST(period_id AS CHAR) = ?
-                          LIMIT 1
-                        )
-                    )
-                    AND (
-                                                CONVERT(TRIM(CAST(pr.month_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
-                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                                                OR CONVERT(LOWER(TRIM(CAST(pr.month_id AS CHAR))) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
-                                                    SELECT CONVERT(LOWER(TRIM(month_name)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                          FROM payroll_months
-                          WHERE CAST(month_id AS CHAR) = ?
-                          LIMIT 1
-                        )
-                    )
-                    AND (
-                                                CONVERT(TRIM(CAST(pr.year_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci =
-                                                    CONVERT(TRIM(CAST(? AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                                                OR CONVERT(TRIM(CAST(pr.year_id AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci = (
-                                                        SELECT CONVERT(TRIM(CAST(year_value AS CHAR)) USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                            FROM payroll_years
-                            WHERE CAST(year_id AS CHAR) = ?
-                            LIMIT 1
-                        )
-                    )
-                GROUP BY pr.run_id
-                ORDER BY employee_count DESC, pr.run_id DESC
-                LIMIT 1
-            `;
-            
-            const params = [
-                payroll_group,
-                payroll_group,
-                payroll_period,
-                payroll_period,
-                month,
-                month,
-                year,
-                year
-            ];
             conn = await pool.getConnection();
-            const [rows] = await conn.query(query, params);
+            const rows = await getPayrollRunCandidates(conn, {
+                payroll_group,
+                payroll_period,
+                month,
+                year
+            });
 
             if (rows.length > 0) {
-                res.json({ success: true, run_id: rows[0].run_id }); // Return the first found run_id
+                res.json({
+                    success: true,
+                    run_id: rows[0].run_id,
+                    status: rows[0].status,
+                    payroll_range: rows[0].payroll_range
+                });
             } else {
                 res.json({ success: false, message: "No matching payroll run found" });
             }
@@ -182,55 +278,47 @@ module.exports = function (app, pool) {
     app.get("/api/get_run_ids_range", async (req, res) => {
         const {
             payroll_group,
-            from_period, from_month, from_year,
-            to_period, to_month, to_year
+            from_period,
+            from_month,
+            from_year,
+            to_period,
+            to_month,
+            to_year,
+            start_period,
+            start_month,
+            start_year,
+            end_period,
+            end_month,
+            end_year
         } = req.query;
+
+        const rangeFromPeriod = from_period || start_period;
+        const rangeFromMonth = from_month || start_month;
+        const rangeFromYear = from_year || start_year;
+        const rangeToPeriod = to_period || end_period;
+        const rangeToMonth = to_month || end_month;
+        const rangeToYear = to_year || end_year;
 
         if (
             !payroll_group ||
-            !from_period || !from_month || !from_year ||
-            !to_period || !to_month || !to_year
+            !rangeFromPeriod || !rangeFromMonth || !rangeFromYear ||
+            !rangeToPeriod || !rangeToMonth || !rangeToYear
         ) {
             return res.status(400).json({ success: false, message: "All filters are required" });
         }
 
+        let conn;
         try {
-            const conn = await pool.getConnection();
-
-            const query = `
-                SELECT run_id
-                FROM payroll_runs
-                WHERE group_id = ?
-                    AND status != 'Pending'
-                    AND (
-                        (year_id > ? OR (year_id = ? AND month_id > ?) OR (year_id = ? AND month_id = ? AND period_id >= ?))
-                        AND
-                        (year_id < ? OR (year_id = ? AND month_id < ?) OR (year_id = ? AND month_id = ? AND period_id <= ?))
-                    )
-                ORDER BY year_id, month_id, period_id;
-            `;
-
-            const params = [
-                payroll_group,   // 1 -> group_id
-
-                from_year,       // 2 -> year_id >
-                from_year,       // 3 -> year_id =
-                from_month,      // 4 -> month_id >
-                from_year,       // 5 -> year_id =
-                from_month,      // 6 -> month_id =
-                from_period,     // 7 -> period_id >=
-
-                to_year,         // 8 -> year_id <
-                to_year,         // 9 -> year_id =
-                to_month,        // 10 -> month_id <
-                to_year,         // 11 -> year_id =
-                to_month,        // 12 -> month_id =
-                to_period        // 13 -> period_id <=
-            ];
-
-            const [rows] = await conn.query(query, params);
-            conn.release();
-
+            conn = await pool.getConnection();
+            const rows = await getPayrollRunsInRange(conn, {
+                payroll_group,
+                from_period: rangeFromPeriod,
+                from_month: rangeFromMonth,
+                from_year: rangeFromYear,
+                to_period: rangeToPeriod,
+                to_month: rangeToMonth,
+                to_year: rangeToYear
+            });
             res.json({
             success: true,
             run_ids: rows.map(r => r.run_id)
@@ -239,6 +327,8 @@ module.exports = function (app, pool) {
         } catch (err) {
             console.error("Error fetching run_ids by range:", err);
             res.status(500).json({ success: false, message: "Server error" });
+        } finally {
+            if (conn) conn.release();
         }
     });
 
@@ -512,12 +602,12 @@ module.exports = function (app, pool) {
             if (department) whereClauses.push("ee.department = ?");
             if (empClass) whereClauses.push("ee.class = ?");
             if (position) whereClauses.push("ee.position = ?");
-            if (empType) whereClauses.push("ee.emp_type = ?");
+            if (empType) whereClauses.push("ee.employee_type = ?");
             if (salaryType) whereClauses.push("ea.salary_type = ?");
             if (employeeId) whereClauses.push("e.employee_id = ?");
 
             const queryValues = [runIdArray];
-            [company, branch, division, department, empClass, position, empType, salaryType, employeeId]
+            [company, location, branch, division, department, empClass, position, empType, salaryType, employeeId]
             .forEach(v => { if (v) queryValues.push(v); });
 
             const query = `
@@ -528,11 +618,11 @@ module.exports = function (app, pool) {
                     tet.code AS tax_exemption_code,
 
                     -- Payroll totals
-                    SUM(ep.basic_salary) AS basic_salary,
-                    SUM(ep.absence_deduction) AS absence_deduction,
-                    SUM(ep.late_deduction) AS late_deduction,
-                    SUM(ep.undertime_deduction) AS undertime_deduction,
-                    SUM(ep.overtime) AS overtime,
+                    SUM(COALESCE(ep.basic_salary, CAST(NULLIF(eps.main_computation, '') AS DECIMAL(10,2)), 0)) AS basic_salary,
+                    SUM(COALESCE(ep.absence_deduction, 0)) AS absence_deduction,
+                    SUM(COALESCE(ep.late_deduction, 0)) AS late_deduction,
+                    SUM(COALESCE(ep.undertime_deduction, 0)) AS undertime_deduction,
+                    SUM(COALESCE(ep.overtime, 0)) AS overtime,
                     SUM(paa.basic_salary_amt) AS basic_salary_adj,
                     SUM(paa.absences_amt) AS absence_deduction_adj,
                     SUM(paa.late_amt) AS late_deduction_adj,
@@ -594,17 +684,47 @@ module.exports = function (app, pool) {
                     SUM(pona.nd_adj_hdrd_rate) AS nd_adj_hdrd_rate,
                     SUM(pona.nd_adj_hdrd_ot)   AS nd_adj_hdrd_ot,
 
-                    SUM(ep.adj_comp) AS adj_comp,
-                    SUM(ep.taxable_allowances) AS taxable_allowances,
-                    SUM(ep.gross_pay) AS gross_pay,
-                    SUM(ep.gross_pay - ep.adj_non_comp - ep.non_taxable_allowances) AS gross_taxable,
-                    SUM(ep.adj_non_comp) AS adj_non_comp,
-                    SUM(ep.non_taxable_allowances) AS non_taxable_allowances,
+                    SUM(COALESCE(ep.adj_comp, 0)) AS adj_comp,
+                    SUM(COALESCE(ep.taxable_allowances, employee_allowance_totals.taxable_allowances, 0)) AS taxable_allowances,
+                    SUM(
+                        COALESCE(
+                            ep.gross_pay,
+                            COALESCE(ep.basic_salary, CAST(NULLIF(eps.main_computation, '') AS DECIMAL(10,2)), 0)
+                                - COALESCE(ep.absence_deduction, 0)
+                                - COALESCE(ep.late_deduction, 0)
+                                - COALESCE(ep.undertime_deduction, 0)
+                                + COALESCE(ep.overtime, 0)
+                                + COALESCE(ep.adj_comp, 0)
+                                + COALESCE(employee_allowance_totals.taxable_allowances, 0)
+                                + COALESCE(ep.adj_non_comp, 0)
+                                + COALESCE(employee_allowance_totals.non_taxable_allowances, 0),
+                            0
+                        )
+                    ) AS gross_pay,
+                    SUM(
+                        COALESCE(
+                            ep.gross_pay - COALESCE(ep.adj_non_comp, 0) - COALESCE(ep.non_taxable_allowances, employee_allowance_totals.non_taxable_allowances, 0),
+                            COALESCE(ep.basic_salary, CAST(NULLIF(eps.main_computation, '') AS DECIMAL(10,2)), 0)
+                                - COALESCE(ep.absence_deduction, 0)
+                                - COALESCE(ep.late_deduction, 0)
+                                - COALESCE(ep.undertime_deduction, 0)
+                                + COALESCE(ep.overtime, 0)
+                                + COALESCE(ep.adj_comp, 0)
+                                + COALESCE(employee_allowance_totals.taxable_allowances, 0),
+                            0
+                        )
+                    ) AS gross_taxable,
+                    SUM(COALESCE(ep.adj_non_comp, 0)) AS adj_non_comp,
+                    SUM(COALESCE(ep.non_taxable_allowances, employee_allowance_totals.non_taxable_allowances, 0)) AS non_taxable_allowances,
 
-                    SUM(ep.sss_employee) AS sss_employee,
-                    SUM(ep.philhealth_employee) AS philhealth_employee,
-                    SUM(ep.pagibig_employee) AS pagibig_employee,
-                    SUM(ep.tax_withheld) AS tax_withheld,
+                    SUM(COALESCE(ep.sss_employee, 0)) AS sss_employee,
+                    SUM(COALESCE(ep.philhealth_employee, 0)) AS philhealth_employee,
+                    SUM(COALESCE(ep.pagibig_employee, 0)) AS pagibig_employee,
+                    SUM(COALESCE(ep.tax_withheld, 0)) AS tax_withheld,
+                    SUM(COALESCE(ep.sss_employer, 0)) AS sss_employer,
+                    SUM(COALESCE(ep.sss_ecc, 0)) AS sss_ecc,
+                    SUM(COALESCE(ep.philhealth_employer, 0)) AS philhealth_employer,
+                    SUM(COALESCE(ep.pagibig_employer, 0)) AS pagibig_employer,
                     SUM(paa.sss_emp) AS sss_emp_adj,
                     SUM(paa.philhealth_emp) AS philhealth_emp_adj,
                     SUM(paa.pagibig_emp) AS pagibig_emp_adj,
@@ -614,11 +734,48 @@ module.exports = function (app, pool) {
                     SUM(paa.philhealth_employer) AS philhealth_employer_adj,
                     SUM(paa.pagibig_employer) AS pagibig_employer_adj,
 
-                    SUM(ep.deductions) AS deductions,
-                    SUM(ep.loans) AS loans,
-                    SUM(ep.other_deductions) AS other_deductions,
-                    SUM(ep.total_deductions) AS total_deductions,
-                    SUM(ep.net_pay) AS net_pay,
+                    SUM(COALESCE(ep.deductions, employee_deduction_totals.deductions, 0)) AS deductions,
+                    SUM(COALESCE(ep.loans, 0)) AS loans,
+                    SUM(COALESCE(ep.other_deductions, 0)) AS other_deductions,
+                    SUM(
+                        COALESCE(
+                            ep.total_deductions,
+                            COALESCE(employee_deduction_totals.deductions, 0)
+                                + COALESCE(ep.sss_employee, 0)
+                                + COALESCE(ep.philhealth_employee, 0)
+                                + COALESCE(ep.pagibig_employee, 0)
+                                + COALESCE(ep.tax_withheld, 0)
+                                + COALESCE(ep.loans, 0)
+                                + COALESCE(ep.other_deductions, 0),
+                            0
+                        )
+                    ) AS total_deductions,
+                    SUM(
+                        COALESCE(
+                            ep.net_pay,
+                            (
+                                COALESCE(ep.basic_salary, CAST(NULLIF(eps.main_computation, '') AS DECIMAL(10,2)), 0)
+                                    - COALESCE(ep.absence_deduction, 0)
+                                    - COALESCE(ep.late_deduction, 0)
+                                    - COALESCE(ep.undertime_deduction, 0)
+                                    + COALESCE(ep.overtime, 0)
+                                    + COALESCE(ep.adj_comp, 0)
+                                    + COALESCE(employee_allowance_totals.taxable_allowances, 0)
+                                    + COALESCE(ep.adj_non_comp, 0)
+                                    + COALESCE(employee_allowance_totals.non_taxable_allowances, 0)
+                            )
+                            - (
+                                COALESCE(employee_deduction_totals.deductions, 0)
+                                    + COALESCE(ep.sss_employee, 0)
+                                    + COALESCE(ep.philhealth_employee, 0)
+                                    + COALESCE(ep.pagibig_employee, 0)
+                                    + COALESCE(ep.tax_withheld, 0)
+                                    + COALESCE(ep.loans, 0)
+                                    + COALESCE(ep.other_deductions, 0)
+                            ),
+                            0
+                        )
+                    ) AS net_pay,
                     MAX(ep.payroll_status) AS payroll_status,
 
                     -- Computation
@@ -647,9 +804,25 @@ module.exports = function (app, pool) {
                 LEFT JOIN employee_accounts ea ON ea.employee_id = ep.employee_id
                 LEFT JOIN employee_tax_insurance eti ON eti.employee_id = ep.employee_id
                 LEFT JOIN tax_exemptions_table tet ON tet.description = eti.tax_status
-                LEFT JOIN payroll_ot_nd pon ON pon.employee_id = ep.employee_id
-                LEFT JOIN payroll_ot_nd_adjustments pona ON pona.employee_id = ep.employee_id
-                LEFT JOIN payroll_attendance_adjustments paa ON paa.employee_id = ep.employee_id
+                LEFT JOIN (
+                    SELECT
+                        employee_allowances.employee_id,
+                        SUM(CASE WHEN allowance_types.is_taxable = 1 THEN employee_allowances.amount ELSE 0 END) AS taxable_allowances,
+                        SUM(CASE WHEN allowance_types.is_taxable = 1 THEN 0 ELSE employee_allowances.amount END) AS non_taxable_allowances
+                    FROM employee_allowances
+                    LEFT JOIN allowance_types ON allowance_types.allowance_type_id = employee_allowances.allowance_type_id
+                    GROUP BY employee_allowances.employee_id
+                ) employee_allowance_totals ON employee_allowance_totals.employee_id = ep.employee_id
+                LEFT JOIN (
+                    SELECT
+                        employee_id,
+                        SUM(amount) AS deductions
+                    FROM employee_deductions
+                    GROUP BY employee_id
+                ) employee_deduction_totals ON employee_deduction_totals.employee_id = ep.employee_id
+                LEFT JOIN payroll_ot_nd pon ON pon.employee_id = ep.employee_id AND pon.run_id = ep.run_id
+                LEFT JOIN payroll_ot_nd_adjustments pona ON pona.employee_id = ep.employee_id AND pona.run_id = ep.run_id
+                LEFT JOIN payroll_attendance_adjustments paa ON paa.employee_id = ep.employee_id AND paa.run_id = ep.run_id
 
                 WHERE ${whereClauses.join(" AND ")}
 
@@ -716,9 +889,9 @@ module.exports = function (app, pool) {
                     p { font-size: 13px; color: #555; margin: 5px 0 20px 0; }
 
                     .journal-table thead th { text-align: center; }
-                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 9px; }
                     table, th, td { border: 1px solid black; }
-                    th, td { padding: 4px 6px; text-align: left; }
+                    th, td { padding: 4px 5px; text-align: left; vertical-align: middle; }
                     th { background-color: #c0c0c0; }
                     thead { display: table-header-group; }
 
@@ -732,9 +905,14 @@ module.exports = function (app, pool) {
                     .journal-header-center { text-align: center; }
                     .journal-header-center h3 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
                     .journal-header-center p { font-size: 13px; color: #555; }
+                    .report-export-header { text-align: center; margin-bottom: 8px; }
+                    .report-export-header h2 { margin: 0 0 4px; font-size: 17px; }
+                    .report-export-header p { margin: 2px 0; font-size: 11px; color: #333; }
+                    .report-signatories { page-break-inside: avoid; }
                     </style>
                 </head>
                 <body>
+                    ${headerHtml}
                     ${tableHtml}
                 </body>
                 </html>
@@ -747,22 +925,12 @@ module.exports = function (app, pool) {
             landscape: landscape,
             printBackground: true,
             displayHeaderFooter: true,
-            headerTemplate: `
-                <div style="width:100%; font-family: Arial, sans-serif; font-size:12px; padding:0 20px; display:flex; justify-content:space-between; align-items:center;">
-                <div style="font-weight: 600;">
-                    Date: ${new Date().toLocaleDateString()} <br>
-                    Time: ${new Date().toLocaleTimeString()}
-                </div>
-                <div style="text-align:center; flex-grow:1;">
-                    ${headerHtml}
-                </div>
-                <div style="text-align:right; font-weight: 600;">
+            headerTemplate: `<div style="width:100%; font-family: Arial, sans-serif; font-size:9px; padding:0 20px; text-align:right;">
                     Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-                </div>
                 </div>
             `,
             footerTemplate: `<div></div>`, // keep empty if footer is not needed
-            margin: { top: '120px', right: '20px', bottom: '40px', left: '20px' }
+            margin: { top: '36px', right: '14px', bottom: '28px', left: '14px' }
             });
 
             await browser.close();

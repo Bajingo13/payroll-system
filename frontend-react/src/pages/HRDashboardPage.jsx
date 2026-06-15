@@ -186,6 +186,9 @@ export default function HRDashboardPage() {
 
       <section className="dboard-grid">
 
+        {/* ── Workforce ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Workforce</span></div>
+
         {/* Attendance */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
@@ -209,6 +212,18 @@ export default function HRDashboardPage() {
           </div>
         </article>
 
+        {/* Employment Status */}
+        <article className="dboard-card dboard-span-2">
+          <div className="dboard-ch">
+            <div className="dboard-ch-icon" style={{ background: '#fff7ed' }}>📈</div>
+            <div><h3>Employment Status</h3><p>{Number(summary.totalEmployees || 0).toLocaleString()} total employees</p></div>
+          </div>
+          <SegBar rows={summary.employeeStatuses} />
+        </article>
+
+        {/* ── Operations ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Operations</span></div>
+
         {/* Payroll */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
@@ -224,6 +239,79 @@ export default function HRDashboardPage() {
                 <span className={`dbadge ${i === 0 ? 'dbadge--blue' : 'dbadge--green'}`}>{item.value}</span>
               </div>
             ))}
+          </div>
+        </article>
+
+        {/* Leave Requests */}
+        <article className="dboard-card dboard-span-1">
+          <div className="dboard-ch">
+            <div className="dboard-ch-icon" style={{ background: '#fef9c3' }}>📋</div>
+            <div><h3>Leave Requests</h3><p>Approval overview</p></div>
+          </div>
+          <div className="dboard-rows">
+            {leaveItems.length === 0 ? <p className="muted">No leave data.</p> : null}
+            {leaveItems.map((item, i) => (
+              <div className="dboard-row" key={item.label}>
+                <span className="dboard-dot" style={{ background: C[i % 6] }} />
+                <div><strong>{item.label}</strong><small>Leave requests</small></div>
+                <span className="dbadge dbadge--neutral">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        {/* Overtime Trends */}
+        <article className="dboard-card dboard-span-1">
+          <div className="dboard-ch">
+            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏱️</div>
+            <div><h3>Overtime Trends</h3><p>Weekly OT pattern</p></div>
+            <span className="dboard-badge-period">8 Wks</span>
+          </div>
+          <div className="dboard-bars">
+            {otWeeks.length === 0 ? <p className="muted">No overtime data.</p> : null}
+            {otWeeks.map((week, i) => {
+              const maxH = Math.max(...otWeeks.map((w) => w.total_hours), 1);
+              const p = Math.min(100, Math.max(2, (week.total_hours / maxH) * 100));
+              const lbl = week.week_start
+                ? new Date(`${week.week_start}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+                : `Wk ${i + 1}`;
+              return (
+                <div className="dboard-bar-row" key={week.week_key}>
+                  <span>Wk {lbl}</span>
+                  <div className="dboard-prog"><div className="dboard-prog-fill" style={{ width: `${p}%`, background: C[i % 6] }} /></div>
+                  <b>{week.total_hours.toFixed(1)}h</b>
+                </div>
+              );
+            })}
+          </div>
+          <div className="dboard-foot">
+            <span>Next Wk Est. <b>{Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs</b></span>
+            <span>Trend <b>{analytics?.forecast?.direction || 'Stable'}</b></span>
+          </div>
+        </article>
+
+        {/* ── Risk & Analytics ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Risk &amp; Analytics</span></div>
+
+        {/* Turnover Risk */}
+        <article className="dboard-card dboard-span-1">
+          <div className="dboard-ch">
+            <div className="dboard-ch-icon" style={{ background: '#fee2e2' }}>⚠️</div>
+            <div><h3>Turnover Risk</h3><p>Needs attention</p></div>
+          </div>
+          <div className="dboard-rows">
+            {topRisks.length === 0 ? <p className="muted">No risk signals available.</p> : null}
+            {topRisks.map((row, i) => {
+              const [bg, fg, border] = RISK_P[row.risk_band] || RISK_P.Stable;
+              return (
+                <div className="dboard-row dboard-row--pad" key={`${row.emp_code}-${i}`}>
+                  <span className="dboard-row-avatar" style={{ background: '#eef2ff', color: '#35508a' }}>{(row.employee_name || 'E')[0]}</span>
+                  <div><strong>{row.employee_name || 'Employee'}</strong><small>{row.department || 'N/A'}</small></div>
+                  <span style={{ background: bg, color: fg, border: `1px solid ${border}`, borderRadius: '999px', padding: '3px 9px', fontSize: '11px', fontWeight: 800 }}>{row.risk_band || 'Stable'}</span>
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{Number(row.risk_score || 0).toFixed(1)}</span>
+                </div>
+              );
+            })}
           </div>
         </article>
 
@@ -249,54 +337,39 @@ export default function HRDashboardPage() {
           </div>
         </article>
 
-        {/* Employment Status */}
-        <article className="dboard-card dboard-span-2">
-          <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fff7ed' }}>📈</div>
-            <div><h3>Employment Status</h3><p>{Number(summary.totalEmployees || 0).toLocaleString()} total employees</p></div>
-          </div>
-          <SegBar rows={summary.employeeStatuses} />
-        </article>
-
-        {/* Leave Requests */}
+        {/* Attendance Analytics */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fef9c3' }}>📋</div>
-            <div><h3>Leave Requests</h3><p>Approval overview</p></div>
+            <div className="dboard-ch-icon" style={{ background: '#fefce8' }}>🗓️</div>
+            <div><h3>Attendance Analytics</h3><p>Tardiness &amp; absence</p></div>
+            <span className="dboard-badge-period">30 Days</span>
           </div>
-          <div className="dboard-rows">
-            {leaveItems.length === 0 ? <p className="muted">No leave data.</p> : null}
-            {leaveItems.map((item, i) => (
-              <div className="dboard-row" key={item.label}>
+          <p className="dboard-sub-label">Tardiness by Day</p>
+          <div className="dboard-rows compact">
+            {tardiness.length === 0 ? <p className="muted">No tardiness signals.</p> : null}
+            {tardiness.map((row, i) => (
+              <div className="dboard-row" key={row.day_name}>
                 <span className="dboard-dot" style={{ background: C[i % 6] }} />
-                <div><strong>{item.label}</strong><small>Leave requests</small></div>
-                <span className="dbadge dbadge--neutral">{item.value}</span>
+                <div><strong>{row.day_name}</strong><small>Late arrivals</small></div>
+                <span className="dbadge dbadge--neutral">{row.late_count}</span>
+              </div>
+            ))}
+          </div>
+          <p className="dboard-sub-label" style={{ marginTop: '10px' }}>Absence by Department</p>
+          <div className="dboard-rows compact">
+            {absences.length === 0 ? <p className="muted">No absence signals.</p> : null}
+            {absences.map((row, i) => (
+              <div className="dboard-row" key={row.department}>
+                <span className="dboard-dot" style={{ background: C[(i + 2) % 6] }} />
+                <div><strong>{row.department}</strong><small>Absence signals</small></div>
+                <span className="dbadge dbadge--neutral">{row.absence_days}</span>
               </div>
             ))}
           </div>
         </article>
 
-        {/* Turnover Risk */}
-        <article className="dboard-card dboard-span-1">
-          <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fee2e2' }}>⚠️</div>
-            <div><h3>Turnover Risk</h3><p>Needs attention</p></div>
-          </div>
-          <div className="dboard-rows">
-            {topRisks.length === 0 ? <p className="muted">No risk signals available.</p> : null}
-            {topRisks.map((row, i) => {
-              const [bg, fg, border] = RISK_P[row.risk_band] || RISK_P.Stable;
-              return (
-                <div className="dboard-row dboard-row--pad" key={`${row.emp_code}-${i}`}>
-                  <span className="dboard-row-avatar" style={{ background: '#eef2ff', color: '#35508a' }}>{(row.employee_name || 'E')[0]}</span>
-                  <div><strong>{row.employee_name || 'Employee'}</strong><small>{row.department || 'N/A'}</small></div>
-                  <span style={{ background: bg, color: fg, border: `1px solid ${border}`, borderRadius: '999px', padding: '3px 9px', fontSize: '11px', fontWeight: 800 }}>{row.risk_band || 'Stable'}</span>
-                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{Number(row.risk_score || 0).toFixed(1)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </article>
+        {/* ── Intelligence ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Intelligence</span></div>
 
         {/* AI Insights */}
         <article className="dboard-card dboard-span-2">
@@ -344,67 +417,6 @@ export default function HRDashboardPage() {
                 </div>
               );
             })}
-          </div>
-        </article>
-
-        {/* Overtime Trends */}
-        <article className="dboard-card dboard-span-1">
-          <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏱️</div>
-            <div><h3>Overtime Trends</h3><p>Weekly OT pattern</p></div>
-            <span className="dboard-badge-period">8 Wks</span>
-          </div>
-          <div className="dboard-bars">
-            {otWeeks.length === 0 ? <p className="muted">No overtime data.</p> : null}
-            {otWeeks.map((week, i) => {
-              const maxH = Math.max(...otWeeks.map((w) => w.total_hours), 1);
-              const p = Math.min(100, Math.max(2, (week.total_hours / maxH) * 100));
-              const lbl = week.week_start
-                ? new Date(`${week.week_start}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
-                : `Wk ${i + 1}`;
-              return (
-                <div className="dboard-bar-row" key={week.week_key}>
-                  <span>Wk {lbl}</span>
-                  <div className="dboard-prog"><div className="dboard-prog-fill" style={{ width: `${p}%`, background: C[i % 6] }} /></div>
-                  <b>{week.total_hours.toFixed(1)}h</b>
-                </div>
-              );
-            })}
-          </div>
-          <div className="dboard-foot">
-            <span>Next Wk Est. <b>{Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs</b></span>
-            <span>Trend <b>{analytics?.forecast?.direction || 'Stable'}</b></span>
-          </div>
-        </article>
-
-        {/* Attendance Analytics */}
-        <article className="dboard-card dboard-span-1">
-          <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fefce8' }}>🗓️</div>
-            <div><h3>Attendance Analytics</h3><p>Tardiness &amp; absence</p></div>
-            <span className="dboard-badge-period">30 Days</span>
-          </div>
-          <p className="dboard-sub-label">Tardiness by Day</p>
-          <div className="dboard-rows compact">
-            {tardiness.length === 0 ? <p className="muted">No tardiness signals.</p> : null}
-            {tardiness.map((row, i) => (
-              <div className="dboard-row" key={row.day_name}>
-                <span className="dboard-dot" style={{ background: C[i % 6] }} />
-                <div><strong>{row.day_name}</strong><small>Late arrivals</small></div>
-                <span className="dbadge dbadge--neutral">{row.late_count}</span>
-              </div>
-            ))}
-          </div>
-          <p className="dboard-sub-label" style={{ marginTop: '10px' }}>Absence by Department</p>
-          <div className="dboard-rows compact">
-            {absences.length === 0 ? <p className="muted">No absence signals.</p> : null}
-            {absences.map((row, i) => (
-              <div className="dboard-row" key={row.department}>
-                <span className="dboard-dot" style={{ background: C[(i + 2) % 6] }} />
-                <div><strong>{row.department}</strong><small>Absence signals</small></div>
-                <span className="dbadge dbadge--neutral">{row.absence_days}</span>
-              </div>
-            ))}
           </div>
         </article>
 

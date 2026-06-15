@@ -199,7 +199,7 @@ export default function DashboardPage() {
 
       <section className="dboard-grid">
 
-        {/* Attendance */}
+        {/* ── Row 1: Core snapshot — 3 equal cards ── */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#e0f2fe' }}>👥</div>
@@ -222,7 +222,6 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Payroll */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#dcfce7' }}>💰</div>
@@ -240,7 +239,6 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Performance */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#ede9fe' }}>📊</div>
@@ -249,9 +247,9 @@ export default function DashboardPage() {
           </div>
           <div className="dboard-metrics">
             {[
-              { label: 'Tardiness', value: Number(as.tardinessRate || 0), detail: `${as.lateDays || 0} late signals`, unit: '%', color: '#ef4444' },
-              { label: 'Absence', value: Number(as.absenceRate || 0), detail: `${as.absentDays || 0} absent signals`, unit: '%', color: '#f59e0b' },
-              { label: 'OT Forecast', value: Number(as.nextWeekOtForecast || 0), detail: `${analytics?.forecast?.direction || 'Stable'} trend`, unit: ' hrs', color: '#0ea5e9' },
+              { label: 'Tardiness',   value: Number(as.tardinessRate || 0),       detail: `${as.lateDays || 0} late signals`,   unit: '%',   color: '#ef4444' },
+              { label: 'Absence',     value: Number(as.absenceRate || 0),          detail: `${as.absentDays || 0} absent signals`, unit: '%',   color: '#f59e0b' },
+              { label: 'OT Forecast', value: Number(as.nextWeekOtForecast || 0),  detail: `${analytics?.forecast?.direction || 'Stable'} trend`, unit: ' hrs', color: '#0ea5e9' },
             ].map((row) => (
               <div className="dboard-metric-row" key={row.label}>
                 <div><strong>{row.label}</strong><small>{row.detail}</small></div>
@@ -262,8 +260,10 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Employment Status */}
-        <article className="dboard-card dboard-span-2">
+        {/* ── Workforce Overview — full-width bar ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Workforce Overview</span></div>
+
+        <article className="dboard-card dboard-span-3">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#fff7ed' }}>📈</div>
             <div><h3>Employment Status</h3><p>{Number(summary.totalEmployees || 0).toLocaleString()} total employees</p></div>
@@ -271,7 +271,9 @@ export default function DashboardPage() {
           <SegBar rows={summary.employeeStatuses} />
         </article>
 
-        {/* Leave Requests */}
+        {/* ── Risk & Requests — 3 equal cards ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Risk &amp; Requests</span></div>
+
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#fef9c3' }}>📋</div>
@@ -289,7 +291,6 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Overtime Requests */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏰</div>
@@ -307,7 +308,6 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Turnover Risk */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#fee2e2' }}>⚠️</div>
@@ -329,14 +329,16 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* AI Insights */}
-        <article className="dboard-card dboard-span-2">
+        {/* ── Intelligence — full-width AI card ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Intelligence</span></div>
+
+        <article className="dboard-card dboard-span-3">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: 'linear-gradient(135deg,#dbeafe,#ede9fe)' }}>🤖</div>
             <div><h3>AI Insights</h3><p>Workforce intelligence summary</p></div>
             <span className="dboard-ai-badge">✦ AI</span>
           </div>
-          <div className="dboard-ai-body">
+          <div className="dboard-ai-body" style={{ gridTemplateColumns: '90px 1fr 1fr' }}>
             <div className="dboard-ai-score">
               <svg width="76" height="76" viewBox="0 0 76 76">
                 <circle cx="38" cy="38" r="28" fill="none" stroke="#e2e8f0" strokeWidth="8" />
@@ -349,7 +351,7 @@ export default function DashboardPage() {
               <strong style={{ color: healthColor }}>{healthLabel}</strong>
               <small>Workforce Health</small>
             </div>
-            <div className="dboard-ai-insight-list">
+            <div style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
               {aiInsights.map((ins) => {
                 const ic = INSIGHT_COLORS[ins.type];
                 return (
@@ -366,49 +368,23 @@ export default function DashboardPage() {
           </div>
           <div className="dboard-ai-recs">
             <p className="dboard-sub-label">Recommended Actions</p>
-            {aiRecs.map((rec, i) => {
-              const pc = rec.priority === 'High' ? '#dc2626' : rec.priority === 'Medium' ? '#d97706' : '#64748b';
-              return (
-                <div key={i} className="dboard-ai-rec">
-                  <span className="dboard-ai-rec-badge" style={{ color: pc, borderColor: `${pc}40`, background: `${pc}10` }}>{rec.priority}</span>
-                  <span>{rec.text}</span>
-                </div>
-              );
-            })}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0 16px' }}>
+              {aiRecs.map((rec, i) => {
+                const pc = rec.priority === 'High' ? '#dc2626' : rec.priority === 'Medium' ? '#d97706' : '#64748b';
+                return (
+                  <div key={i} className="dboard-ai-rec">
+                    <span className="dboard-ai-rec-badge" style={{ color: pc, borderColor: `${pc}40`, background: `${pc}10` }}>{rec.priority}</span>
+                    <span>{rec.text}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </article>
 
-        {/* Overtime Trends */}
-        <article className="dboard-card dboard-span-1">
-          <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏱️</div>
-            <div><h3>Overtime Trends</h3><p>Weekly OT pattern</p></div>
-            <span className="dboard-badge-period">8 Wks</span>
-          </div>
-          <div className="dboard-bars">
-            {otWeeks.length === 0 ? <p className="muted">No overtime data.</p> : null}
-            {otWeeks.map((week, i) => {
-              const maxH = Math.max(...otWeeks.map((w) => w.total_hours), 1);
-              const p = Math.min(100, Math.max(2, (week.total_hours / maxH) * 100));
-              const lbl = week.week_start
-                ? new Date(`${week.week_start}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
-                : `Wk ${i + 1}`;
-              return (
-                <div className="dboard-bar-row" key={week.week_key}>
-                  <span>Wk {lbl}</span>
-                  <div className="dboard-prog"><div className="dboard-prog-fill" style={{ width: `${p}%`, background: C[i % 6] }} /></div>
-                  <b>{week.total_hours.toFixed(1)}h</b>
-                </div>
-              );
-            })}
-          </div>
-          <div className="dboard-foot">
-            <span>Next Wk Est. <b>{Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs</b></span>
-            <span>Trend <b>{analytics?.forecast?.direction || 'Stable'}</b></span>
-          </div>
-        </article>
+        {/* ── Analytics — 3 equal cards ── */}
+        <div className="dboard-section-head dboard-span-3"><span>Analytics</span></div>
 
-        {/* Attendance Analytics */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#fefce8' }}>🗓️</div>
@@ -439,7 +415,35 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Payroll Forecast */}
+        <article className="dboard-card dboard-span-1">
+          <div className="dboard-ch">
+            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏱️</div>
+            <div><h3>Overtime Trends</h3><p>Weekly OT pattern</p></div>
+            <span className="dboard-badge-period">8 Wks</span>
+          </div>
+          <div className="dboard-bars">
+            {otWeeks.length === 0 ? <p className="muted">No overtime data.</p> : null}
+            {otWeeks.map((week, i) => {
+              const maxH = Math.max(...otWeeks.map((w) => w.total_hours), 1);
+              const p = Math.min(100, Math.max(2, (week.total_hours / maxH) * 100));
+              const lbl = week.week_start
+                ? new Date(`${week.week_start}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+                : `Wk ${i + 1}`;
+              return (
+                <div className="dboard-bar-row" key={week.week_key}>
+                  <span>Wk {lbl}</span>
+                  <div className="dboard-prog"><div className="dboard-prog-fill" style={{ width: `${p}%`, background: C[i % 6] }} /></div>
+                  <b>{week.total_hours.toFixed(1)}h</b>
+                </div>
+              );
+            })}
+          </div>
+          <div className="dboard-foot">
+            <span>Next Wk Est. <b>{Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs</b></span>
+            <span>Trend <b>{analytics?.forecast?.direction || 'Stable'}</b></span>
+          </div>
+        </article>
+
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#dcfce7' }}>📉</div>

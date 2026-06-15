@@ -16,6 +16,22 @@ module.exports = function (app, pool) {
         return 'MONTHLY';
     }
 
+    function computePeriodSalaryFromMonthly(monthlySalary, payrollPeriod, daysInYear = 313) {
+        const salary = toMoney(monthlySalary);
+        const normalizedPeriod = normalizePayPeriod(payrollPeriod);
+        if (salary <= 0) return 0;
+        if (normalizedPeriod === 'WEEKLY') return roundMoney((salary * 12) / 52);
+        if (normalizedPeriod === 'SEMI-MONTHLY') return roundMoney(salary / 2);
+        if (normalizedPeriod === 'DAILY') return roundMoney((salary * 12) / toMoney(daysInYear || 313));
+        return roundMoney(salary);
+    }
+
+    function computeDailyRateFromMonthly(monthlySalary, daysInYear = 313) {
+        const salary = toMoney(monthlySalary);
+        if (salary <= 0) return 0;
+        return roundMoney((salary * 12) / toMoney(daysInYear || 313));
+    }
+
     async function ensurePayrollAutomationColumns(conn) {
         const [columns] = await conn.query(
             `SELECT COLUMN_NAME
@@ -160,6 +176,416 @@ module.exports = function (app, pool) {
             }
         };
     }
+
+    // GET HRIS data (approved OT + leave + attendance adjustments) for a given employee and payroll period
+    app.get("/api/payroll/hris-data", async (req, res) => {
+        const employeeId = Number(req.query.employee_id);
+        const monthId = Number(req.query.month_id);
+        const yearId = Number(req.query.year_id);
+        const periodId = Number(req.query.period_id);
+        const runId = req.query.run_id ? Number(req.query.run_id) : null;
+        const paramBasicSalary = req.query.basic_salary ? Number(req.query.basic_salary) : 0;
+        const paramGroupId = req.query.group_id ? Number(req.query.group_id) : null;
+
+        if (!employeeId || !monthId || !yearId || !periodId) {
+            return res.status(400).json({ success: false, message: "Missing required parameters: employee_id, month_id, year_id, period_id." });
+        }
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+
+            const [[monthRow]] = await conn.query("SELECT month_name FROM payroll_months WHERE month_id = ? LIMIT 1", [monthId]);
+            const [[yearRow]] = await conn.query("SELECT year_value FROM payroll_years WHERE year_id = ? LIMIT 1", [yearId]);
+            const [[periodRow]] = await conn.query("SELECT period_name FROM payroll_periods WHERE period_id = ? LIMIT 1", [periodId]);
+
+            if (!monthRow || !yearRow || !periodRow) {
+                return res.status(404).json({ success: false, message: "Invalid month, year, or period ID." });
+            }
+
+            const MONTH_NAMES = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+            const monthNum = MONTH_NAMES.indexOf(String(monthRow.month_name || "").trim().toLowerCase()) + 1;
+            const yearVal = Number(yearRow.year_value);
+            const periodName = String(periodRow.period_name || "").toLowerCase();
+
+            if (!monthNum) {
+                return res.status(400).json({ success: false, message: `Unrecognized month name: ${monthRow.month_name}` });
+            }
+
+            const lastDay = new Date(yearVal, monthNum, 0).getDate();
+            const mm = String(monthNum).padStart(2, "0");
+            let startDate, endDate;
+            if (periodName.includes("week")) {
+                // Weekly periods: 1st Week = 1–7, 2nd = 8–14, 3rd = 15–21, 4th = 22–end
+                if (periodName.includes("1st")) {
+                    startDate = `${yearVal}-${mm}-01`;
+                    endDate   = `${yearVal}-${mm}-07`;
+                } else if (periodName.includes("2nd")) {
+                    startDate = `${yearVal}-${mm}-08`;
+                    endDate   = `${yearVal}-${mm}-14`;
+                } else if (periodName.includes("3rd")) {
+                    startDate = `${yearVal}-${mm}-15`;
+                    endDate   = `${yearVal}-${mm}-21`;
+                } else {
+                    // 4th Week: 22–end
+                    startDate = `${yearVal}-${mm}-22`;
+                    endDate   = `${yearVal}-${mm}-${lastDay}`;
+                }
+            } else if (periodName.includes("first") || periodName.includes("1st")) {
+                // Semi-monthly first half: 1–15
+                startDate = `${yearVal}-${mm}-01`;
+                endDate   = `${yearVal}-${mm}-15`;
+            } else if (periodName.includes("second") || periodName.includes("2nd")) {
+                // Semi-monthly second half: 16–end
+                startDate = `${yearVal}-${mm}-16`;
+                endDate   = `${yearVal}-${mm}-${lastDay}`;
+            } else {
+                // Monthly: full month
+                startDate = `${yearVal}-${mm}-01`;
+                endDate   = `${yearVal}-${mm}-${lastDay}`;
+            }
+
+            // Employee salary/work-schedule settings
+            const [[settings]] = await conn.query(
+                `SELECT main_computation, payroll_period, days_in_year, hours_in_day
+                 FROM employee_payroll_settings
+                 WHERE employee_id = ? LIMIT 1`,
+                [employeeId]
+            );
+
+            // Determine payroll group name (Weekly / Semi-Monthly / Monthly) in priority:
+            // 1. group_id param from frontend → look up group_name
+            // 2. run's group_id → look up group_name
+            // 3. employee_payroll_settings.payroll_period
+            let groupName = String(settings?.payroll_period || '').trim();
+            if (paramGroupId) {
+                const [[grpRow]] = await conn.query(
+                    `SELECT group_name FROM payroll_groups WHERE group_id = ? LIMIT 1`,
+                    [paramGroupId]
+                );
+                if (grpRow) groupName = String(grpRow.group_name || '');
+            } else if (runId) {
+                const [[runRow]] = await conn.query(
+                    `SELECT pg.group_name FROM payroll_runs pr
+                     JOIN payroll_groups pg ON pg.group_id = pr.group_id
+                     WHERE pr.run_id = ? LIMIT 1`,
+                    [runId]
+                );
+                if (runRow) groupName = String(runRow.group_name || '');
+            }
+
+            // main_computation is the employee's monthly/base salary.
+            // Payroll group controls the displayed payroll-period salary, not the attendance rate basis.
+
+            // Fallback salary: if settings has no main_computation, use (in priority order):
+            // 1. basic_salary passed as query param (from frontend payroll record)
+            // 2. most recent non-null basic_salary from employee_payroll
+            let fallbackBasicSalary = 0;
+            if (!(settings && Number(settings.main_computation) > 0)) {
+                if (paramBasicSalary > 0) {
+                    fallbackBasicSalary = paramBasicSalary;
+                } else {
+                    const [[payrollRow]] = await conn.query(
+                        `SELECT basic_salary FROM employee_payroll
+                         WHERE employee_id = ? AND basic_salary IS NOT NULL AND basic_salary > 0
+                         ORDER BY run_id DESC LIMIT 1`,
+                        [employeeId]
+                    );
+                    fallbackBasicSalary = Number(payrollRow?.basic_salary || 0);
+                }
+            }
+
+            // Approved OT requests within period
+            const [otRows] = await conn.query(
+                `SELECT overtime_request_id, overtime_date, start_time, end_time, total_hours, reason
+                 FROM employee_overtime_requests
+                 WHERE employee_id = ? AND status = 'Approved'
+                   AND overtime_date BETWEEN ? AND ?
+                 ORDER BY overtime_date ASC`,
+                [employeeId, startDate, endDate]
+            );
+
+            // Approved leave requests overlapping with period
+            const [leaveRows] = await conn.query(
+                `SELECT r.request_id, r.start_date, r.end_date, r.total_days, r.reason, t.leave_name
+                 FROM employee_leave_requests r
+                 JOIN leave_types t ON t.leave_type_id = r.leave_type_id
+                 WHERE r.employee_id = ? AND r.status = 'Approved'
+                   AND NOT (r.end_date < ? OR r.start_date > ?)
+                 ORDER BY r.start_date ASC`,
+                [employeeId, startDate, endDate]
+            );
+
+            // Active loans due this period
+            const [loanRows] = await conn.query(
+                `SELECT loan_id, loan_category, amortization_amount, balance_amount, payment_frequency
+                 FROM employee_loans
+                 WHERE employee_id = ? AND status = 'Active'
+                   AND (
+                     LOWER(payment_frequency) = 'both'
+                     OR LOWER(payment_frequency) = 'monthly'
+                     OR LOWER(payment_frequency) = LOWER(?)
+                   )
+                 ORDER BY loan_id ASC`,
+                [employeeId, periodName]
+            );
+            const totalLoanAmortization = Math.round(
+                loanRows.reduce((s, r) => s + Number(r.amortization_amount || 0), 0) * 100
+            ) / 100;
+
+            // Employee allowances (taxable and non-taxable), filtered by period
+            const [allowanceRows] = await conn.query(
+                `SELECT ea.emp_allowance_id, ea.amount, at.allowance_name, at.is_taxable, ea.period
+                 FROM employee_allowances ea
+                 JOIN allowance_types at ON at.allowance_type_id = ea.allowance_type_id
+                 WHERE ea.employee_id = ?
+                   AND (
+                     LOWER(ea.period) = 'both'
+                     OR LOWER(ea.period) = LOWER(?)
+                     OR LOWER(ea.period) = 'monthly'
+                   )
+                 ORDER BY ea.emp_allowance_id ASC`,
+                [employeeId, periodName]
+            );
+            const taxableAllowances = Math.round(
+                allowanceRows.filter(a => Number(a.is_taxable) === 1).reduce((s, a) => s + Number(a.amount || 0), 0) * 100
+            ) / 100;
+            const nonTaxableAllowances = Math.round(
+                allowanceRows.filter(a => Number(a.is_taxable) !== 1).reduce((s, a) => s + Number(a.amount || 0), 0) * 100
+            ) / 100;
+
+            const totalOtHours = Math.round(otRows.reduce((s, r) => s + Number(r.total_hours || 0), 0) * 100) / 100;
+
+            // Clip leave days to payroll period boundaries
+            let totalLeaveDays = 0;
+            for (const leave of leaveRows) {
+                const effectiveStart = leave.start_date > startDate ? leave.start_date : startDate;
+                const effectiveEnd   = leave.end_date   < endDate   ? leave.end_date   : endDate;
+                const ms = new Date(effectiveEnd).getTime() - new Date(effectiveStart).getTime();
+                const days = Math.floor(ms / 86400000) + 1;
+                totalLeaveDays += Math.max(0, days);
+            }
+            totalLeaveDays = Math.round(totalLeaveDays * 100) / 100;
+
+            // Compute monetary amounts
+            let otAmount = 0;
+            let absenceDeduction = 0;
+            let dailyRate = 0;
+            let hourlyRate = 0;
+
+            const effectiveSalary = (settings && Number(settings.main_computation) > 0)
+                ? Number(settings.main_computation)
+                : fallbackBasicSalary;
+
+            if (effectiveSalary > 0) {
+                const daysInYear  = Number(settings?.days_in_year  || 313);
+                const hoursInDay  = Number(settings?.hours_in_day  || 8);
+
+                // Annualise monthly salary, then divide by working days/year.
+                dailyRate  = computeDailyRateFromMonthly(effectiveSalary, daysInYear);
+                hourlyRate = Math.round((dailyRate / hoursInDay) * 100) / 100;
+
+                otAmount = Math.round(totalOtHours * hourlyRate * 1.25 * 100) / 100;
+                // absenceDeduction computed after attendance block once totalAbsentDays is known
+            }
+
+            // totalAbsentDays: start with leave-based count; replaced by attendance-based when user account exists
+            let totalAbsentDays = totalLeaveDays;
+
+            // Attendance (late / undertime / OT override / absent):
+            // Priority 1 – payroll_attendance_adjustments (manual HR override)
+            // Priority 2 – hris_attendance (pre-computed by HRIS, saved in real-time)
+            // Priority 3 – compute directly from audit_logs (daily timekeeping)
+            let lateMinutes = 0, lateDeduction = 0, undertimeMinutes = 0, undertimeDeduction = 0;
+            let attendanceSource = 'none';
+            {
+                let attAdj = null;
+
+                if (runId) {
+                    [[attAdj]] = await conn.query(
+                        `SELECT late_time, late_amt, undertime_time, undertime_amt
+                         FROM payroll_attendance_adjustments
+                         WHERE employee_id = ? AND run_id = ? LIMIT 1`,
+                        [employeeId, runId]
+                    );
+                }
+
+                if (!attAdj) {
+                    [[attAdj]] = await conn.query(
+                        `SELECT paa.late_time, paa.late_amt, paa.undertime_time, paa.undertime_amt
+                         FROM payroll_attendance_adjustments paa
+                         JOIN payroll_runs pr ON pr.run_id = paa.run_id
+                         WHERE paa.employee_id = ? AND pr.period_id = ? AND pr.month_id = ? AND pr.year_id = ?
+                         ORDER BY paa.adj_id DESC LIMIT 1`,
+                        [employeeId, periodId, monthId, yearId]
+                    );
+                }
+
+                if (attAdj) {
+                    // Priority 1: manual payroll adjustment
+                    lateMinutes      = Number(attAdj.late_time  || 0);
+                    undertimeMinutes = Number(attAdj.undertime_time || 0);
+                    lateDeduction = Number(attAdj.late_amt || 0) ||
+                        Math.round((lateMinutes / 60) * hourlyRate * 100) / 100;
+                    undertimeDeduction = Number(attAdj.undertime_amt || 0) ||
+                        Math.round((undertimeMinutes / 60) * hourlyRate * 100) / 100;
+                    attendanceSource = 'payroll_adjustment';
+                } else {
+                    // Priority 2: hris_attendance table (pre-computed, saved in real-time from HRIS)
+                    const [hrisAttRows] = await conn.query(
+                        `SELECT attendance_date, time_in, late_minutes, undertime_minutes, overtime_hours, status
+                         FROM hris_attendance
+                         WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?
+                         ORDER BY attendance_date ASC`,
+                        [employeeId, startDate, endDate]
+                    );
+
+                    if (hrisAttRows.length > 0) {
+                        const hrisAbsentCount = hrisAttRows.filter(r =>
+                            !r.time_in || String(r.status || '').toLowerCase().includes('absent')
+                        ).length;
+                        const totalHrisLateMin      = hrisAttRows.reduce((s, r) => s + Number(r.late_minutes     || 0), 0);
+                        const totalHrisUndertimeMin = hrisAttRows.reduce((s, r) => s + Number(r.undertime_minutes || 0), 0);
+                        const totalHrisOtHours      = Math.round(hrisAttRows.reduce((s, r) => s + Number(r.overtime_hours || 0), 0) * 100) / 100;
+
+                        if (hrisAbsentCount > 0) totalAbsentDays = hrisAbsentCount;
+                        lateMinutes      = totalHrisLateMin;
+                        undertimeMinutes = totalHrisUndertimeMin;
+
+                        if (hourlyRate > 0) {
+                            lateDeduction      = Math.round((lateMinutes      / 60) * hourlyRate * 100) / 100;
+                            undertimeDeduction = Math.round((undertimeMinutes / 60) * hourlyRate * 100) / 100;
+                        }
+                        if (totalHrisOtHours > 0 && hourlyRate > 0) {
+                            otAmount = Math.round(totalHrisOtHours * hourlyRate * 1.25 * 100) / 100;
+                        }
+                        attendanceSource = 'hris_attendance';
+                    } else {
+                    // Priority 3: No hris_attendance records — compute from actual daily time records in audit_logs
+                    const [[empUserRow]] = await conn.query(
+                        `SELECT u.user_id
+                         FROM employees e
+                         JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+                         WHERE e.employee_id = ?
+                         LIMIT 1`,
+                        [employeeId]
+                    );
+
+                    if (empUserRow) {
+                        const [attLogs] = await conn.query(
+                            `SELECT
+                               MIN(CASE WHEN action = 'Employee Time In'   THEN log_time END) AS time_in,
+                               MIN(CASE WHEN action = 'Employee Break Out' THEN log_time END) AS break_out,
+                               MIN(CASE WHEN action = 'Employee Break In'  THEN log_time END) AS break_in,
+                               MAX(CASE WHEN action = 'Employee Time Out'  THEN log_time END) AS time_out
+                             FROM audit_logs
+                             WHERE user_id = ?
+                               AND action IN ('Employee Time In','Employee Break Out','Employee Break In','Employee Time Out')
+                               AND DATE(log_time) BETWEEN ? AND ?
+                             GROUP BY DATE(log_time)`,
+                            [empUserRow.user_id, startDate, endDate]
+                        );
+
+                        // Dates the employee was present (has a time_in record)
+                        const presentDates = new Set(
+                            attLogs
+                                .filter(day => day.time_in)
+                                .map(day => String(day.time_in).slice(0, 10))
+                        );
+
+                        // Count Mon–Fri days in the period where employee was absent
+                        let absentCount = 0;
+                        const iterD = new Date(startDate + 'T12:00:00Z');
+                        const iterEnd = new Date(endDate + 'T12:00:00Z');
+                        while (iterD <= iterEnd) {
+                            const dow = iterD.getUTCDay();
+                            if (dow !== 0 && dow !== 6) {
+                                const dateStr = iterD.toISOString().slice(0, 10);
+                                if (!presentDates.has(dateStr)) absentCount++;
+                            }
+                            iterD.setUTCDate(iterD.getUTCDate() + 1);
+                        }
+                        totalAbsentDays = absentCount;
+                        attendanceSource = 'computed_from_attendance';
+
+                        let totalLateMin = 0, totalUndertimeMin = 0;
+                        for (const day of attLogs) {
+                            if (day.time_in) {
+                                const timeIn = new Date(String(day.time_in).replace(' ', 'T'));
+                                const shiftStart = new Date(timeIn);
+                                shiftStart.setHours(8, 0, 0, 0);
+                                if (timeIn > shiftStart) {
+                                    totalLateMin += Math.floor((timeIn - shiftStart) / 60000);
+                                }
+                            }
+                            if (day.time_in && day.time_out) {
+                                const timeIn  = new Date(String(day.time_in).replace(' ', 'T'));
+                                const timeOut = new Date(String(day.time_out).replace(' ', 'T'));
+                                let workedMin = Math.floor((timeOut - timeIn) / 60000);
+                                if (day.break_out && day.break_in) {
+                                    const brkOut = new Date(String(day.break_out).replace(' ', 'T'));
+                                    const brkIn  = new Date(String(day.break_in).replace(' ', 'T'));
+                                    if (brkIn > brkOut) workedMin -= Math.floor((brkIn - brkOut) / 60000);
+                                }
+                                totalUndertimeMin += Math.max(0, 480 - workedMin);
+                            }
+                        }
+
+                        if (totalLateMin > 0 || totalUndertimeMin > 0) {
+                            lateMinutes      = totalLateMin;
+                            undertimeMinutes = totalUndertimeMin;
+                            if (hourlyRate > 0) {
+                                lateDeduction      = Math.round((lateMinutes      / 60) * hourlyRate * 100) / 100;
+                                undertimeDeduction = Math.round((undertimeMinutes / 60) * hourlyRate * 100) / 100;
+                            }
+                        }
+                    }
+                    } // end priority 3 (audit_logs)
+                }
+            }
+
+            // Finalize absence deduction using actual absent days
+            absenceDeduction = Math.round(totalAbsentDays * dailyRate * 100) / 100;
+
+            return res.json({
+                success: true,
+                period_range: `${startDate} to ${endDate}`,
+                ot: {
+                    requests: otRows,
+                    total_hours: totalOtHours,
+                    computed_amount: otAmount
+                },
+                absences: {
+                    requests: leaveRows,
+                    total_days: totalAbsentDays,
+                    total_days_from_leaves: totalLeaveDays,
+                    computed_deduction: absenceDeduction
+                },
+                attendance: {
+                    late_minutes: lateMinutes,
+                    late_deduction: lateDeduction,
+                    undertime_minutes: undertimeMinutes,
+                    undertime_deduction: undertimeDeduction,
+                    source: attendanceSource
+                },
+                loans: {
+                    records: loanRows,
+                    total_amortization: totalLoanAmortization
+                },
+                allowances: {
+                    records: allowanceRows,
+                    taxable: taxableAllowances,
+                    non_taxable: nonTaxableAllowances
+                },
+                rates: settings ? { daily_rate: dailyRate, hourly_rate: hourlyRate } : null
+            });
+        } catch (err) {
+            console.error("HRIS data fetch error:", err);
+            return res.status(500).json({ success: false, message: err.message || "Server error" });
+        } finally {
+            if (conn) conn.release();
+        }
+    });
 
     app.post("/api/payroll/auto-compute", async (req, res) => {
         let conn;
@@ -792,6 +1218,7 @@ module.exports = function (app, pool) {
             const [rows] = await conn.query(
                 `SELECT e.employee_id,
                         ep.payroll_status,
+                        ep.basic_salary,
                         ep.absence_time,
                         ep.absence_deduction,
                         ep.late_time,
@@ -826,6 +1253,11 @@ module.exports = function (app, pool) {
             }
 
             const employee = rows[0];
+            employee.basic_salary = computePeriodSalaryFromMonthly(
+                employee.main_computation,
+                employee.payroll_period,
+                employee.days_in_year
+            );
 
             // Fetch OT / ND record for this employee and run_id
             const [otNdRows] = await conn.query(`
@@ -1796,14 +2228,6 @@ module.exports = function (app, pool) {
             conn = await pool.getConnection();
             await conn.beginTransaction();
 
-            // Fetch group_id for the payroll run
-            const [runInfo] = await conn.query(
-                `SELECT group_id FROM payroll_runs WHERE run_id = ? LIMIT 1`,
-                [run_id]
-            );
-
-            const group_id = (runInfo[0]?.group_id || "").toLowerCase();
-
             for (const p of payrolls) {
                 const {
                     employee_id,
@@ -1822,29 +2246,14 @@ module.exports = function (app, pool) {
                     payroll_status, allowances = [], deductions = [], periodOption
                 } = p;
 
-                // --- Adjust values based on group_id ---
-                function adjustByGroup(amount, group_id) {
-                    let value = Number(amount || 0);
-
-                    switch (group_id) {
-                        case "weekly":
-                            return value / 4;
-                        case "semi-monthly":
-                            return value / 2;
-                        case "monthly":
-                        default:
-                            return value;
-                    }
-                }
-
-                let adjustedSalary = adjustByGroup(basic_salary, group_id);
-                let adjustedTaxableAllowances = adjustByGroup(taxable_allowances, group_id);
-                let adjustedNonTaxableAllowances = adjustByGroup(non_taxable_allowances, group_id);
-                let adjustedDeductions = adjustByGroup(total_deductions, group_id);
-                let adjustedSSS = adjustByGroup(sss_employee, group_id);
-                let adjustedPagIbig = adjustByGroup(pagibig_employee, group_id);
-                let adjustedPhilhealth = adjustByGroup(philhealth_employee, group_id);
-                let adjustedTaxWithheld = adjustByGroup(tax_withheld, group_id);
+                const adjustedSalary = Number(basic_salary || 0);
+                const adjustedTaxableAllowances = Number(taxable_allowances || 0);
+                const adjustedNonTaxableAllowances = Number(non_taxable_allowances || 0);
+                const adjustedDeductions = Number(total_deductions || 0);
+                const adjustedSSS = Number(sss_employee || 0);
+                const adjustedPagIbig = Number(pagibig_employee || 0);
+                const adjustedPhilhealth = Number(philhealth_employee || 0);
+                const adjustedTaxWithheld = Number(tax_withheld || 0);
 
                 const [existingPayroll] = await conn.query(
                     `SELECT basic_salary FROM employee_payroll
@@ -2311,4 +2720,3 @@ module.exports = function (app, pool) {
     });
 
 };
-

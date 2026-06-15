@@ -3,6 +3,7 @@ import { Navigate, useParams } from 'react-router-dom';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getReportCompanyName, getReportMetadata } from '../utils/reportExport.js';
+import PayrollSummaryReportPage from './PayrollSummaryReportPage.jsx';
 
 const ALLOWED_TYPES = ['payroll-journal', 'gross-pay', 'net-pay', 'payslip', 'reconciliation-details'];
 
@@ -418,6 +419,10 @@ export default function ReportsPage() {
 
   if (!ALLOWED_TYPES.includes(type)) {
     return <Navigate to="/reports/payroll-journal" replace />;
+  }
+
+  if (type === 'payroll-journal') {
+    return <PayrollSummaryReportPage />;
   }
 
   if (type === 'payslip') {

@@ -1,4 +1,4 @@
-[dotenv@17.2.4] injecting env (23) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.2.4] injecting env (23) from .env -- tip: 🔑 add access controls to secrets: https://dotenvx.com/ops
 RUNNING FILE: C:\Users\User\Desktop\payroll-system\server.js
 RAILWAY DETECTED: false
 APP TIMEZONE: Asia/Manila
@@ -7,31 +7,9 @@ OK > DATABASE CONNECTED USING LOCAL MYSQL
 OK > DB HOST: 127.0.0.1
 OK > DB PORT: 3306
 OK > ACTIVE DATABASE: payroll_system
-OK > SERVER TIME: 2026-06-10 09:16:29
+OK > SERVER TIME: 2026-06-15 09:06:23
 AUTH ROUTES LOADED: login.js (password-route-v3)
 OK > Server running on port 12687
 OK > Active DB mode: local-mysql
 OK > db-test route registered
 OK > system_config tables ready
-LOGIN API HIT: EMP-105
-LOGIN DB CONNECTION OK
-LOGIN USER ROWS: 1
-LOGIN PASSWORD MATCH: true
-LOGIN AUDIT LOG INSERTED
-LOGIN SENDING RESPONSE
-LOGIN API HIT: EMP-107
-LOGIN DB CONNECTION OK
-LOGIN USER ROWS: 1
-LOGIN PASSWORD MATCH: false
-LOGIN API HIT: EMP-107
-LOGIN DB CONNECTION OK
-LOGIN USER ROWS: 1
-LOGIN PASSWORD MATCH: true
-LOGIN AUDIT LOG INSERTED
-LOGIN SENDING RESPONSE
-[Leave] NOTIFY_ADMIN_EMAILS from env: [ 'astreablueintelligenceinc@gmail.com' ]
-[Notification] Admin/HR targets for type=leave_request: [ 1, 4, 12, 22 ]
-[Notification] Inserted 4 admin/hr notifications for type=leave_request
-Leave admin notification sent to: astreablueintelligenceinc@gmail.com, whea0321@gmail.com, adversariojohnemilm@gmail.com
-[Notification] Leave status lookup emp_code=EMP-107 employee_name=Albert Aquinas -> user_id=10
-[Notification] Created for user_id=10 type=leave_status

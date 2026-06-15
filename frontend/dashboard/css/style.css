@@ -2744,3 +2744,180 @@ th {
     padding-bottom: 4px;
   }
 }
+
+/* Payroll computation layout cleanup */
+.summary-input {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.payslip-grid,
+.ot-nd-payroll-grid,
+.allowance-payroll-grid,
+.deduction-payroll-grid,
+.ot-adj-payroll-grid,
+.attendance-adj-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+  max-width: 100%;
+}
+
+.payslip-grid .panel,
+.summary-input .form-box {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid #d2d6dc;
+  border-radius: 8px;
+}
+
+.payslip-grid .panel {
+  padding: 20px;
+}
+
+.payslip-grid .panel table,
+.payroll-form-table,
+.ot-nd-table,
+.allowance-table,
+.deduction-table,
+.ot-adj-table,
+.attendance-table,
+.premium-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.payslip-grid .panel table th,
+.payslip-grid .panel table td,
+.payroll-form-table th,
+.payroll-form-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.payslip-grid .panel table th:first-child,
+.payslip-grid .panel table td:first-child,
+.payroll-form-table th:first-child,
+.payroll-form-table td:first-child {
+  text-align: left;
+}
+
+.payslip-grid .panel table th:not(:first-child),
+.payslip-grid .panel table td:not(:first-child),
+.payroll-form-table th:not(:first-child),
+.payroll-form-table td:not(:first-child) {
+  text-align: right;
+}
+
+.payslip-grid .panel input[type="number"],
+.payslip-grid .panel input[type="text"],
+.payroll-form-table input[type="number"],
+.payroll-form-table input[type="text"],
+.ot-nd-table input,
+.allowance-table input,
+.deduction-table input,
+.ot-adj-table input,
+.attendance-table input,
+.premium-table input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.deduction-box-container {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+}
+
+.deduction-box-container .form-box {
+  width: min(100%, 820px);
+}
+
+.summary-bar {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) repeat(3, minmax(180px, 1fr));
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  margin-top: 20px;
+}
+
+.summary-bar label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.summary-bar div {
+  margin-left: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.summary-bar div:last-child {
+  text-align: right;
+}
+
+.payroll-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+
+.right-buttons {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
+@media (max-width: 1180px) {
+  .payslip-grid,
+  .ot-nd-payroll-grid,
+  .allowance-payroll-grid,
+  .deduction-payroll-grid,
+  .ot-adj-payroll-grid,
+  .attendance-adj-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-bar div,
+  .summary-bar div:last-child {
+    text-align: left;
+  }
+}
+
+@media (max-width: 720px) {
+  .summary-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .payroll-buttons,
+  .right-buttons,
+  .payroll-buttons .btn,
+  .add-employee-btn {
+    width: 100%;
+  }
+
+  .right-buttons {
+    margin-left: 0;
+    flex-direction: column;
+  }
+}

@@ -147,6 +147,8 @@ export default function EmployeeAttendancePage() {
       'Time Out',
       'Total Hours',
       'OT Hours',
+      'Late (min)',
+      'Undertime (min)',
       'Status'
     ];
 
@@ -166,6 +168,8 @@ export default function EmployeeAttendancePage() {
         formatExportDateTime(record.time_out),
         totalHours,
         record.ot_hours != null ? Number(record.ot_hours).toFixed(2) : ot,
+        record.late_minutes != null ? Number(record.late_minutes) : '-',
+        record.undertime_minutes != null ? Number(record.undertime_minutes) : '-',
         status.label
       ];
     });
@@ -299,17 +303,21 @@ export default function EmployeeAttendancePage() {
                 <th>Time Out</th>
                 <th>Total Hours</th>
                 <th>OT Hours</th>
+                <th>Late (min)</th>
+                <th>Undertime (min)</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan="12">No attendance records found.</td></tr>
+                <tr><td colSpan="14">No attendance records found.</td></tr>
               ) : filteredRecords.map((record) => {
                 const status = attendanceStatus(record);
                 const totalHours = computeHours(record);
                 const ot = totalHours === '-' ? '-' : Math.max(0, Number(totalHours) - 8).toFixed(2);
+                const lateMin = record.late_minutes != null ? Number(record.late_minutes) : null;
+                const undertimeMin = record.undertime_minutes != null ? Number(record.undertime_minutes) : null;
                 return (
                   <tr key={`${record.attendance_date}-${record.emp_code}-${record.time_in || ''}`}>
                     <td>{record.emp_code || 'N/A'}</td>
@@ -322,6 +330,12 @@ export default function EmployeeAttendancePage() {
                     <td>{formatTime(record.time_out)}</td>
                     <td>{totalHours}</td>
                     <td>{record.ot_hours != null ? Number(record.ot_hours).toFixed(2) : ot}</td>
+                    <td style={{ color: lateMin > 0 ? '#b91c1c' : undefined }}>
+                      {lateMin != null ? (lateMin > 0 ? lateMin : '-') : '-'}
+                    </td>
+                    <td style={{ color: undertimeMin > 0 ? '#b91c1c' : undefined }}>
+                      {undertimeMin != null ? (undertimeMin > 0 ? undertimeMin : '-') : '-'}
+                    </td>
                     <td><span className={`status ${status.className}`}>{status.label}</span></td>
                     <td>
                       <button type="button" className="btn secondary" onClick={() => openEditAttendance(record)}>

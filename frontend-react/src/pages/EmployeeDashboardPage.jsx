@@ -108,6 +108,7 @@ export default function EmployeeDashboardPage() {
   const todayState = data?.todayTime || {};
   const employee = data?.employee || {};
   const payrollSummary = data?.payrollSummary || null;
+  const attendanceSummary = data?.attendanceSummary || null;
   const attendanceLogs = data?.attendanceLogs || [];
   const evaluations = data?.evaluations || [];
   const evaluationSummary = data?.evaluationSummary || {};
@@ -119,6 +120,19 @@ export default function EmployeeDashboardPage() {
   const isOnBreak = Boolean(todayState.hasBreakOut && !todayState.hasBreakIn && !todayState.hasTimeOut);
   const isClockedIn = Boolean(todayState.hasTimeIn && !todayState.hasTimeOut && !isOnBreak);
   const clockStatus = todayState.hasTimeOut ? 'Clocked out' : isOnBreak ? 'On break' : isClockedIn ? 'Clocked in' : 'Not started';
+
+  const todayLateMinutes = (() => {
+    if (!todayState.timeIn) return 0;
+    const timeIn = parseDateTime(todayState.timeIn);
+    if (!timeIn) return 0;
+    const shiftStart = new Date(timeIn);
+    shiftStart.setHours(8, 0, 0, 0);
+    return Math.max(0, Math.floor((timeIn - shiftStart) / 60000));
+  })();
+
+  const todayUndertimeMinutes = todayState.hasTimeOut
+    ? Math.max(0, 480 - Math.floor(workedSeconds / 60))
+    : 0;
 
   const timeButtons = useMemo(() => {
     const hasTimeIn = Boolean(todayState.hasTimeIn);
@@ -203,7 +217,66 @@ export default function EmployeeDashboardPage() {
           <div className="card"><span>Break In</span><strong>{formatDateTime(todayState.breakIn)}</strong></div>
           <div className="card"><span>Time Out</span><strong>{formatDateTime(todayState.timeOut)}</strong></div>
         </div>
+
+        <div className="summary employee-mini-summary employee-metric-strip">
+          <div className="card">
+            <span>Late Today (min)</span>
+            <strong style={{ color: todayLateMinutes > 0 ? '#b91c1c' : undefined }}>
+              {todayLateMinutes > 0 ? todayLateMinutes : '-'}
+            </strong>
+          </div>
+          <div className="card">
+            <span>Undertime Today (min)</span>
+            <strong style={{ color: todayUndertimeMinutes > 0 ? '#b91c1c' : undefined }}>
+              {todayState.hasTimeOut ? (todayUndertimeMinutes > 0 ? todayUndertimeMinutes : '-') : 'Pending'}
+            </strong>
+          </div>
+          <div className="card">
+            <span>Shift Start (Standard)</span>
+            <strong>08:00 AM</strong>
+          </div>
+          <div className="card">
+            <span>Required Hours</span>
+            <strong>8 hrs / day</strong>
+          </div>
+        </div>
       </section>
+
+      {/* Attendance Adjustments from last payroll */}
+      {attendanceSummary && (
+        <section className="table-section employee-modern-panel">
+          <h3>Attendance Adjustments</h3>
+          <p style={{ fontSize: '0.85rem', marginBottom: '0.5rem', opacity: 0.7 }}>
+            From payroll period: {attendanceSummary.period_range || '-'}
+          </p>
+          <div className="summary employee-mini-summary employee-metric-strip">
+            <div className="card">
+              <span>Late (min)</span>
+              <strong style={{ color: attendanceSummary.late_minutes > 0 ? '#b91c1c' : undefined }}>
+                {attendanceSummary.late_minutes > 0 ? attendanceSummary.late_minutes : '-'}
+              </strong>
+            </div>
+            <div className="card">
+              <span>Late Deduction</span>
+              <strong style={{ color: attendanceSummary.late_amt > 0 ? '#b91c1c' : undefined }}>
+                {attendanceSummary.late_amt > 0 ? money(attendanceSummary.late_amt) : '-'}
+              </strong>
+            </div>
+            <div className="card">
+              <span>Undertime (min)</span>
+              <strong style={{ color: attendanceSummary.undertime_minutes > 0 ? '#b91c1c' : undefined }}>
+                {attendanceSummary.undertime_minutes > 0 ? attendanceSummary.undertime_minutes : '-'}
+              </strong>
+            </div>
+            <div className="card">
+              <span>Undertime Deduction</span>
+              <strong style={{ color: attendanceSummary.undertime_amt > 0 ? '#b91c1c' : undefined }}>
+                {attendanceSummary.undertime_amt > 0 ? money(attendanceSummary.undertime_amt) : '-'}
+              </strong>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Latest Payroll */}
       <section className="table-section employee-modern-panel">
