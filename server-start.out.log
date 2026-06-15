@@ -18,3 +18,69 @@ OK > Active DB mode: local-mysql
 OK > db-test route registered
 OK > system_config tables ready
 ✅ Audit logged: Admin → Updated Employee EMP-001
+LOGIN API HIT: admin
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+✅ Audit logged: Admin → Payroll run created (First Half July 2026)
+✅ Audit logged: Admin → Updated Employee EMP-001
+LOGIN API HIT: EMP-101
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+[Leave] NOTIFY_ADMIN_EMAILS from env: [ 'astreablueintelligenceinc@gmail.com' ]
+[Notification] Admin/HR targets for type=leave_request: [ 1, 4, 12 ]
+[Notification] Inserted 3 admin/hr notifications for type=leave_request
+Leave admin notification sent to: astreablueintelligenceinc@gmail.com, whea0321@gmail.com
+LOGIN API HIT: admin
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+[Notification] Leave status lookup emp_code=EMP-101 employee_name=Matt Wentz -> user_id=18
+[Notification] Created for user_id=18 type=leave_status
+LOGIN API HIT: EMP-101
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+LOGIN API HIT: admin
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Payroll run created (First Half April 2026)
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Payroll run created (First Half August 2026)
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Added Employee EMP-114
+REGISTER API HIT: EMP-114
+LOGIN API HIT: EMP-114
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+LOGIN API HIT: admin
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: true
+LOGIN AUDIT LOG INSERTED
+LOGIN SENDING RESPONSE
+LOGIN API HIT: admin
+LOGIN DB CONNECTION OK
+LOGIN USER ROWS: 1
+LOGIN PASSWORD MATCH: false
