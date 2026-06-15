@@ -89,11 +89,11 @@ function buildLocalDbConfig() {
 
 function buildPrimaryDbConfig() {
   return {
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    host: process.env.DB_HOST || process.env.MYSQLHOST,
+    port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
+    user: process.env.DB_USER || process.env.MYSQLUSER,
+    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+    database: process.env.DB_NAME || process.env.MYSQLDATABASE,
     timezone: getDbTimezone(),
     dateStrings: true,
     waitForConnections: true,
@@ -105,11 +105,11 @@ function buildPrimaryDbConfig() {
 
 function buildRailwayInternalFallbackConfig() {
   return {
-    host: 'mysql.railway.internal',
-    port: 3306,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'railway',
+    host: process.env.MYSQLHOST || 'mysql.railway.internal',
+    port: Number(process.env.MYSQLPORT || 3306),
+    user: process.env.DB_USER || process.env.MYSQLUSER,
+    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+    database: process.env.DB_NAME || process.env.MYSQLDATABASE || 'railway',
     timezone: getDbTimezone(),
     dateStrings: true,
     waitForConnections: true,
