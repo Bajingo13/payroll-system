@@ -141,6 +141,20 @@ async function tryConnect(label, config) {
   return pool;
 }
 
+function parseMysqlUrl(mysqlUrl) {
+  try {
+    const parsed = new URL(mysqlUrl);
+    if (!process.env.DB_HOST)     process.env.DB_HOST     = parsed.hostname;
+    if (!process.env.DB_PORT)     process.env.DB_PORT     = parsed.port || '3306';
+    if (!process.env.DB_USER)     process.env.DB_USER     = decodeURIComponent(parsed.username);
+    if (!process.env.DB_PASSWORD) process.env.DB_PASSWORD = decodeURIComponent(parsed.password);
+    if (!process.env.DB_NAME)     process.env.DB_NAME     = parsed.pathname.replace(/^\//, '');
+    console.log('OK > MYSQL_URL parsed successfully (host:', process.env.DB_HOST + ', db:', process.env.DB_NAME + ')');
+  } catch (err) {
+    console.error('FAILED TO PARSE MYSQL_URL:', err.message);
+  }
+}
+
 async function createWorkingPool() {
   const onRailway = isRunningOnRailway();
 
@@ -411,6 +425,10 @@ if (useReactFrontend) {
     console.log('RAILWAY DETECTED:', isRunningOnRailway());
     console.log('APP TIMEZONE:', process.env.TZ);
     console.log('DB SESSION TIMEZONE:', getDbTimezone());
+
+    if (process.env.MYSQL_URL) {
+      parseMysqlUrl(process.env.MYSQL_URL);
+    }
 
     const { pool, dbMode } = await createWorkingPool();
 
