@@ -432,13 +432,16 @@ module.exports = function (app, pool) {
                     attendanceSource = 'payroll_adjustment';
                 } else {
                     // Priority 2: hris_attendance table (pre-computed, saved in real-time from HRIS)
-                    const [hrisAttRows] = await conn.query(
-                        `SELECT attendance_date, time_in, late_minutes, undertime_minutes, overtime_hours, status
-                         FROM hris_attendance
-                         WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?
-                         ORDER BY attendance_date ASC`,
-                        [employeeId, startDate, endDate]
-                    );
+                    let hrisAttRows = [];
+                    try {
+                        [hrisAttRows] = await conn.query(
+                            `SELECT attendance_date, time_in, late_minutes, undertime_minutes, overtime_hours, status
+                             FROM hris_attendance
+                             WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?
+                             ORDER BY attendance_date ASC`,
+                            [employeeId, startDate, endDate]
+                        );
+                    } catch (_) { hrisAttRows = []; } // table may not exist on older deployments
 
                     if (hrisAttRows.length > 0) {
                         const hrisAbsentCount = hrisAttRows.filter(r =>

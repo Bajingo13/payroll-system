@@ -1415,20 +1415,22 @@ module.exports = function (app, pool) {
           else if (workedMin > 480) hrisOtHours = Math.round((workedMin - 480) / 60 * 100) / 100;
         }
 
-        await conn.execute(
-          `INSERT INTO hris_attendance
-             (employee_id, attendance_date, time_in, time_out, late_minutes, undertime_minutes, overtime_hours, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             time_in = VALUES(time_in), time_out = VALUES(time_out),
-             late_minutes = VALUES(late_minutes), undertime_minutes = VALUES(undertime_minutes),
-             overtime_hours = VALUES(overtime_hours), status = VALUES(status)`,
-          [
-            empRecordForHris.employee_id, attendanceDate,
-            normalizedTimes.time_in || null, normalizedTimes.time_out || null,
-            hrisLateMin, hrisUndertimeMin, hrisOtHours, hrisStatus
-          ]
-        );
+        try {
+          await conn.execute(
+            `INSERT INTO hris_attendance
+               (employee_id, attendance_date, time_in, time_out, late_minutes, undertime_minutes, overtime_hours, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               time_in = VALUES(time_in), time_out = VALUES(time_out),
+               late_minutes = VALUES(late_minutes), undertime_minutes = VALUES(undertime_minutes),
+               overtime_hours = VALUES(overtime_hours), status = VALUES(status)`,
+            [
+              empRecordForHris.employee_id, attendanceDate,
+              normalizedTimes.time_in || null, normalizedTimes.time_out || null,
+              hrisLateMin, hrisUndertimeMin, hrisOtHours, hrisStatus
+            ]
+          );
+        } catch (_) {} // non-critical: table may not exist on older deployments
       }
 
       await conn.commit();
