@@ -2462,7 +2462,8 @@ module.exports = function (app, pool) {
                     ]
                 );
 
-                const periodToUse = periodOption || null;
+                const validPeriods = ['Weekly', 'Monthly', 'First Half', 'Second Half', 'Both'];
+                const periodToUse = validPeriods.includes(periodOption) ? periodOption : 'Both';
                 
                 const [existing] = await conn.query(
                     `SELECT payroll_id FROM employee_payroll WHERE employee_id = ? AND run_id = ? LIMIT 1`,
