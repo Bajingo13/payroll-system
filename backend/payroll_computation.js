@@ -2501,14 +2501,11 @@ module.exports = function (app, pool) {
                     const usedNulls = new Set();
                     
                     for (const a of allowances) {
-                        // --- Adjust amount based on group_id ---
-                        const adjustedAmount = adjustByGroup(a.amount, group_id);
-
                         // Match by source_emp_allowance_id and not null
                         const existing = existingAllowances.find(
                             x => x.source_emp_allowance_id === a.source_emp_allowance_id
                         );
-                        
+
                         console.log("a.source_emp_allowance_id:", a.source_emp_allowance_id);
 
                         // Match records WITHOUT source_emp_allowance_id (NULL) and mark their IDs
@@ -2516,7 +2513,7 @@ module.exports = function (app, pool) {
                             x => x.source_emp_allowance_id == null &&
                                 !usedNulls.has(x.emp_payroll_allowance_id)
                         );
-                        
+
                         if (existing) {
                             // UPDATE records with matching source_emp_allowance_id and not null
                             await conn.query(updateQuery, [
@@ -2544,7 +2541,7 @@ module.exports = function (app, pool) {
                                 payrollId,
                                 employee_id,
                                 a.allowance_type_id,
-                                adjustedAmount,
+                                a.amount,
                                 periodToUse
                             ]);
                             console.log("inserted new allowance");
@@ -2575,9 +2572,6 @@ module.exports = function (app, pool) {
                     const usedNulls = new Set();
                     
                     for (const d of deductions) {
-                        // --- Adjust amount based on group_id ---
-                        const adjustedAmount = adjustByGroup(d.amount, group_id);
-
                         // Match by source_emp_deduction_id and not null
                         const existing = existingDeductions.find(
                             x => x.source_emp_deduction_id === d.source_emp_deduction_id
@@ -2616,7 +2610,7 @@ module.exports = function (app, pool) {
                                 payrollId,
                                 employee_id,
                                 d.deduction_type_id,
-                                adjustedAmount,
+                                d.amount,
                                 periodToUse
                             ]);
                             console.log("inserted new deduction");
