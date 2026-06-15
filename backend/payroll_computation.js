@@ -16,6 +16,54 @@ module.exports = function (app, pool) {
         return 'MONTHLY';
     }
 
+    function normalizePayrollRate(value) {
+        const rate = String(value || '').trim().toUpperCase();
+        if (rate.includes('DAILY'))   return 'DAILY';
+        if (rate.includes('HOURLY'))  return 'HOURLY';
+        if (rate.includes('WEEKLY'))  return 'WEEKLY';
+        if (rate.includes('PIECE'))   return 'PIECE';
+        return 'MONTHLY'; // Monthly Rate or unknown
+    }
+
+    // Convert any stored rate to its monthly salary equivalent.
+    function computeMonthlySalaryFromRate(mainComputation, payrollRate, settings = {}) {
+        const amount     = toMoney(mainComputation);
+        if (amount <= 0) return 0;
+        const rate       = normalizePayrollRate(payrollRate);
+        const daysInYear = toMoney(settings.days_in_year || 313);
+        const hoursInDay = toMoney(settings.hours_in_day || 8);
+        const weekInYear = toMoney(settings.week_in_year || 52);
+        if (rate === 'DAILY')  return roundMoney(amount * daysInYear / 12);
+        if (rate === 'HOURLY') return roundMoney(amount * hoursInDay * daysInYear / 12);
+        if (rate === 'WEEKLY') return roundMoney(amount * weekInYear / 12);
+        return roundMoney(amount); // MONTHLY or PIECE RATE
+    }
+
+    // Compute the period salary from main_computation, respecting payroll_rate.
+    function computePeriodSalary(mainComputation, payrollRate, payrollPeriod, settings = {}) {
+        const monthly    = computeMonthlySalaryFromRate(mainComputation, payrollRate, settings);
+        const period     = normalizePayPeriod(payrollPeriod);
+        const weekInYear = toMoney(settings.week_in_year || 52);
+        if (period === 'SEMI-MONTHLY') return roundMoney(monthly / 2);
+        if (period === 'WEEKLY')       return roundMoney((monthly * 12) / weekInYear);
+        return roundMoney(monthly); // MONTHLY
+    }
+
+    // Compute the effective daily rate from main_computation, respecting payroll_rate.
+    function computeEffectiveDailyRate(mainComputation, payrollRate, settings = {}) {
+        const amount     = toMoney(mainComputation);
+        if (amount <= 0) return 0;
+        const rate       = normalizePayrollRate(payrollRate);
+        const daysInYear = toMoney(settings.days_in_year || 313);
+        const daysInWeek = toMoney(settings.days_in_week || 5);
+        const hoursInDay = toMoney(settings.hours_in_day || 8);
+        if (rate === 'DAILY')  return roundMoney(amount);
+        if (rate === 'HOURLY') return roundMoney(amount * hoursInDay);
+        if (rate === 'WEEKLY') return roundMoney(daysInWeek > 0 ? amount / daysInWeek : 0);
+        // Monthly Rate or Piece Rate: annualise then divide by working days/year
+        return roundMoney(daysInYear > 0 ? (amount * 12) / daysInYear : 0);
+    }
+
     function computePeriodSalaryFromMonthly(monthlySalary, payrollPeriod, daysInYear = 313) {
         const salary = toMoney(monthlySalary);
         const normalizedPeriod = normalizePayPeriod(payrollPeriod);
@@ -247,7 +295,8 @@ module.exports = function (app, pool) {
 
             // Employee salary/work-schedule settings
             const [[settings]] = await conn.query(
-                `SELECT main_computation, payroll_period, days_in_year, hours_in_day
+                `SELECT main_computation, payroll_period, payroll_rate,
+                        days_in_year, days_in_week, hours_in_day, week_in_year
                  FROM employee_payroll_settings
                  WHERE employee_id = ? LIMIT 1`,
                 [employeeId]
@@ -377,12 +426,17 @@ module.exports = function (app, pool) {
                 ? Number(settings.main_computation)
                 : fallbackBasicSalary;
 
-            if (effectiveSalary > 0) {
-                const daysInYear  = Number(settings?.days_in_year  || 313);
-                const hoursInDay  = Number(settings?.hours_in_day  || 8);
+            // Determine the payroll_rate for the fallback path (no settings row).
+            const effectivePayrollRate = settings?.payroll_rate || 'Monthly Rate';
 
-                // Annualise monthly salary, then divide by working days/year.
-                dailyRate  = computeDailyRateFromMonthly(effectiveSalary, daysInYear);
+            if (effectiveSalary > 0) {
+                const hoursInDay = Number(settings?.hours_in_day || 8);
+
+                // Compute daily rate based on payroll_rate type so that Daily Rate
+                // employees use their stored daily rate directly, Hourly Rate employees
+                // multiply by hours/day, Weekly Rate divides by days/week, and Monthly
+                // Rate / Piece Rate use the annual-days formula.
+                dailyRate  = computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
                 hourlyRate = Math.round((dailyRate / hoursInDay) * 100) / 100;
 
                 otAmount = Math.round(totalOtHours * hourlyRate * 1.25 * 100) / 100;
@@ -1211,7 +1265,7 @@ module.exports = function (app, pool) {
     // GET payroll settings for one employee
     app.get("/api/employee_payroll_settings/:employeeId", async (req, res) => {
         const { employeeId } = req.params;
-        const { periodOption, run_id } = req.query;
+        const { periodOption, run_id, group_id } = req.query;
 
         try {
             const conn = await pool.getConnection();
@@ -1230,13 +1284,23 @@ module.exports = function (app, pool) {
                         ep.undertime_deduction,
                         ep.overtime,
                         ep.holiday_pay,
+                        ep.taxable_allowances,
+                        ep.non_taxable_allowances,
                         ep.adj_comp,
                         ep.adj_non_comp,
                         ep.total_leaves_used,
+                        ep.gsis_employee, ep.gsis_employer, ep.gsis_ecc,
+                        ep.sss_employee, ep.sss_employer, ep.sss_ecc,
+                        ep.pagibig_employee, ep.pagibig_employer, ep.pagibig_ecc,
+                        ep.philhealth_employee, ep.philhealth_employer, ep.philhealth_ecc,
+                        ep.tax_withheld,
                         ep.loans,
                         ep.other_deductions,
                         ep.premium_adj,
-                        eps.payroll_period, 
+                        ep.ytd_sss, ep.ytd_wtax, ep.ytd_philhealth,
+                        ep.ytd_gsis, ep.ytd_pagibig, ep.ytd_gross,
+                        eps.payroll_period,
+                        eps.payroll_rate,
                         eps.main_computation,
                         eps.days_in_year_ot,
                         eps.days_in_year,
@@ -1256,10 +1320,32 @@ module.exports = function (app, pool) {
             }
 
             const employee = rows[0];
-            employee.basic_salary = computePeriodSalaryFromMonthly(
+
+            // Use the selected payroll group's period (Monthly/Semi-Monthly/Weekly) rather
+            // than the employee's own payroll_period setting, so the computation always
+            // matches what the admin selected in the UI.
+            // Priority: group_id param (integer → payroll_groups lookup) > run_id lookup > employee setting
+            let effectivePayrollPeriod = employee.payroll_period;
+            const numericGroupId = group_id ? Number(group_id) : null;
+            if (numericGroupId) {
+                const [[grpRow]] = await conn.query(
+                    `SELECT group_name FROM payroll_groups WHERE group_id = ? LIMIT 1`,
+                    [numericGroupId]
+                );
+                if (grpRow?.group_name) effectivePayrollPeriod = grpRow.group_name;
+            } else if (run_id) {
+                const [[runRow]] = await conn.query(
+                    `SELECT group_id FROM payroll_runs WHERE run_id = ? LIMIT 1`,
+                    [run_id]
+                );
+                if (runRow?.group_id) effectivePayrollPeriod = runRow.group_id;
+            }
+
+            employee.basic_salary = computePeriodSalary(
                 employee.main_computation,
-                employee.payroll_period,
-                employee.days_in_year
+                employee.payroll_rate,
+                effectivePayrollPeriod,
+                employee
             );
 
             // Fetch OT / ND record for this employee and run_id
@@ -1359,134 +1445,132 @@ module.exports = function (app, pool) {
             const computePhilhealth = shouldCompute(philhealthRecord);
 
             if (computeSSS) {
-                // STEP 1: Get main computation (salary) + period
-                const [mainRow] = await conn.query(
-                    `SELECT main_computation, payroll_period 
-                    FROM employee_payroll_settings 
-                    WHERE employee_id = ? LIMIT 1`,
-                    [employeeId]
+                const monthlySalarySSS = computeMonthlySalaryFromRate(
+                    employee.main_computation, employee.payroll_rate, employee
                 );
+                const normalizedPeriodSSS = normalizePayPeriod(effectivePayrollPeriod);
+                const periodDivisorSSS = normalizedPeriodSSS === 'SEMI-MONTHLY' ? 2
+                    : normalizedPeriodSSS === 'WEEKLY' ? 4
+                    : 1;
 
-                let computedBasic = parseFloat(mainRow[0]?.main_computation || 0);
-                const period = (mainRow[0]?.payroll_period || "").toLowerCase();
-
-                // Apply your same divisor adjustments
-                if (period === "weekly") computedBasic /= 4;
-                else if (period === "semi-monthly") computedBasic /= 2;
-
-                // STEP 2: Lookup SSS table
+                // Look up SSS using monthly salary so the correct bracket is used,
+                // then divide the monthly contribution amount by the number of pay periods.
                 const [sssTableMatch] = await conn.query(
                     `SELECT ee_share, er_share, ecc
                     FROM sss_contribution_table
                     WHERE ? BETWEEN salary_low AND salary_high
                     LIMIT 1`,
-                    [computedBasic]
+                    [monthlySalarySSS]
                 );
 
                 if (sssTableMatch && sssTableMatch.length > 0) {
                     const match = sssTableMatch[0];
+                    const periodEeShare = Math.round(toMoney(match.ee_share) / periodDivisorSSS * 100) / 100;
+                    const periodErShare = Math.round(toMoney(match.er_share) / periodDivisorSSS * 100) / 100;
+                    const periodEcc    = Math.round(toMoney(match.ecc)      / periodDivisorSSS * 100) / 100;
 
-                    // If no SSS record exists, create one in memory
                     if (!sssRecord) {
                         contributions.push({
                             contribution_type_id: 1,
                             type_option: "Computed",
-                            ee_share: match.ee_share,
-                            er_share: match.er_share,
-                            ecc: match.ecc
+                            ee_share: periodEeShare,
+                            er_share: periodErShare,
+                            ecc: periodEcc
                         });
                     } else {
-                        // If record exists but type_option = 'Computed', override values
-                        sssRecord.ee_share = match.ee_share;
-                        sssRecord.er_share = match.er_share;
-                        sssRecord.ecc = match.ecc;
+                        sssRecord.ee_share = periodEeShare;
+                        sssRecord.er_share = periodErShare;
+                        sssRecord.ecc      = periodEcc;
                     }
                 }
             }
             
             if (computePagibig) {
-                // STEP 1: Get main computation (salary) + period
-                const [mainRow] = await conn.query(
-                    `SELECT main_computation, payroll_period 
-                    FROM employee_payroll_settings 
-                    WHERE employee_id = ? LIMIT 1`,
-                    [employeeId]
+                const monthlySalaryPagibig = computeMonthlySalaryFromRate(
+                    employee.main_computation, employee.payroll_rate, employee
                 );
+                const normalizedPeriodPagibig = normalizePayPeriod(effectivePayrollPeriod);
+                const periodDivisorPagibig = normalizedPeriodPagibig === 'SEMI-MONTHLY' ? 2
+                    : normalizedPeriodPagibig === 'WEEKLY' ? 4
+                    : 1;
 
-                let computedBasic = parseFloat(mainRow[0]?.main_computation || 0);
-                const period = (mainRow[0]?.payroll_period || "").toLowerCase();
-
-                // Apply your same divisor adjustments
-                if (period === "weekly") computedBasic /= 4;
-                else if (period === "semi-monthly") computedBasic /= 2;
-
-                // STEP 2: Lookup Pag-Ibig table
                 const [pagibigTableMatch] = await conn.query(
                     `SELECT ee_share, er_share
                     FROM pagibig_contribution_table
                     WHERE ? BETWEEN salary_low AND salary_high
                     LIMIT 1`,
-                    [computedBasic]
+                    [monthlySalaryPagibig]
                 );
 
                 if (pagibigTableMatch && pagibigTableMatch.length > 0) {
                     const match = pagibigTableMatch[0];
-                    // If no Pag-Ibig record exists, create one in memory
+                    const periodEeShare = Math.round(toMoney(match.ee_share) / periodDivisorPagibig * 100) / 100;
+                    const periodErShare = Math.round(toMoney(match.er_share) / periodDivisorPagibig * 100) / 100;
+
                     if (!pagibigRecord) {
                         contributions.push({
-                            contribution_type_id: 1,
+                            contribution_type_id: 2,
                             type_option: "Computed",
-                            ee_share: match.ee_share,
-                            er_share: match.er_share
+                            ee_share: periodEeShare,
+                            er_share: periodErShare
                         });
-                    } else if (pagibigRecord.type_option == "Computed" && pagibigRecord.computation == null) {
-                        pagibigRecord.ee_share = match.ee_share;
-                        pagibigRecord.er_share = match.er_share;
+                    } else if (pagibigRecord.type_option === "Computed") {
+                        pagibigRecord.ee_share = periodEeShare;
+                        pagibigRecord.er_share = periodErShare;
                     }
                 }
             }
             
             if (computePhilhealth) {
-                // STEP 1: Get main computation (salary) + period
-                const [mainRow] = await conn.query(
-                    `SELECT main_computation, payroll_period 
-                    FROM employee_payroll_settings 
-                    WHERE employee_id = ? LIMIT 1`,
-                    [employeeId]
+                const monthlySalaryPH = computeMonthlySalaryFromRate(
+                    employee.main_computation, employee.payroll_rate, employee
                 );
+                const normalizedPeriodPH = normalizePayPeriod(effectivePayrollPeriod);
+                const periodDivisorPH = normalizedPeriodPH === 'SEMI-MONTHLY' ? 2
+                    : normalizedPeriodPH === 'WEEKLY' ? 4
+                    : 1;
 
-                let computedBasic = parseFloat(mainRow[0]?.main_computation || 0);
-                const period = (mainRow[0]?.payroll_period || "").toLowerCase();
-
-                // Apply your same divisor adjustments
-                if (period === "weekly") computedBasic /= 4;
-                else if (period === "semi-monthly") computedBasic /= 2;
-
-                // STEP 2: Lookup PhilHealth table
                 const [philhealthTableMatch] = await conn.query(
                     `SELECT ee_share, er_share
                     FROM philhealth_contribution_table
                     WHERE ? BETWEEN salary_low AND salary_high
                     LIMIT 1`,
-                    [computedBasic]
+                    [monthlySalaryPH]
                 );
 
                 if (philhealthTableMatch && philhealthTableMatch.length > 0) {
                     const match = philhealthTableMatch[0];
+                    const periodEeShare = Math.round(toMoney(match.ee_share) / periodDivisorPH * 100) / 100;
+                    const periodErShare = Math.round(toMoney(match.er_share) / periodDivisorPH * 100) / 100;
 
-                    // If no PhilHealth record exists, create one in memory
                     if (!philhealthRecord) {
                         contributions.push({
-                            contribution_type_id: 1,
+                            contribution_type_id: 3,
                             type_option: "Computed",
-                            ee_share: match.ee_share,
-                            er_share: match.er_share
+                            ee_share: periodEeShare,
+                            er_share: periodErShare
                         });
                     } else {
-                        philhealthRecord.ee_share = match.ee_share;
-                        philhealthRecord.er_share = match.er_share;
+                        philhealthRecord.ee_share = periodEeShare;
+                        philhealthRecord.er_share = periodErShare;
                     }
                 }
+            }
+
+            // Map computed contribution amounts to the employee payroll fields when no
+            // saved values were loaded from the DB (i.e., the field is still NULL).
+            if (computeSSS && employee.sss_employee == null && sssRecord) {
+                employee.sss_employee = sssRecord.ee_share || 0;
+                employee.sss_employer = sssRecord.er_share || 0;
+                employee.sss_ecc      = sssRecord.ecc      || 0;
+            }
+            if (computePagibig && employee.pagibig_employee == null && pagibigRecord) {
+                employee.pagibig_employee = pagibigRecord.ee_share || 0;
+                employee.pagibig_employer = pagibigRecord.er_share || 0;
+            }
+            if (computePhilhealth && employee.philhealth_employee == null && philhealthRecord) {
+                employee.philhealth_employee = philhealthRecord.ee_share || 0;
+                employee.philhealth_employer = philhealthRecord.er_share || 0;
             }
 
             // Check if there is a payroll record for this employee and run_id

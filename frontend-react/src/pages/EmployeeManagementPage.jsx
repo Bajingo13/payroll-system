@@ -1078,13 +1078,6 @@ export default function EmployeeManagementPage() {
         <div className="legacy-payroll-grid">
           <div>
             <h4>Main Computation</h4>
-            {renderFormRow('Payroll Period:', <input value={comp.payroll_period || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'payroll_period', event.target.value)} />)}
-            {renderFormRow('Payroll Rate:', (
-              <select value={comp.payroll_rate || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'payroll_rate', event.target.value)}>
-                <option value="">-- Select --</option>
-                {PAYROLL_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            ))}
             {renderFormRow('Employee Salary:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
             <hr className="divider" />
             <h4>Basis of Computation for Absences, Late and Undertime</h4>

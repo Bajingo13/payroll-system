@@ -311,7 +311,7 @@ export default function PayrollComputationPage() {
     const effectiveRunId = rid || runId;
     const [settingsResp, hrisResp] = await Promise.all([
       api.get(`/employee_payroll_settings/${empId}`, {
-        params:{ run_id:effectiveRunId, periodOption:selectedPeriod?.period_name||'' }
+        params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
       }),
       (filters.month && filters.year && filters.payroll_period)
         ? api.get('/payroll/hris-data', {
@@ -326,7 +326,20 @@ export default function PayrollComputationPage() {
 
     const nextP = makeEmptyPayroll();
     Object.keys(nextP).forEach(k => { if(rec[k]!=null) nextP[k]=rec[k]; });
-    if (!nextP.basic_salary && rec.main_computation) nextP.basic_salary = rec.main_computation;
+
+    // Always recompute basic_salary from main_computation using the selected payroll group period,
+    // so it is never driven by the employee's own payroll_period setting.
+    if (rec.main_computation) {
+      const rawSalary = toNum(rec.main_computation);
+      if (rawSalary > 0) {
+        const grp = (meta.payrollGroups || []).find(g => String(g.group_id) === String(filters.payroll_group));
+        const gName = (grp?.group_name || '').toUpperCase();
+        const weekInYear = toNum(rec.week_in_year) || 52;
+        if (gName.includes('SEMI')) nextP.basic_salary = Math.round(rawSalary / 2 * 100) / 100;
+        else if (gName.includes('WEEK')) nextP.basic_salary = Math.round(rawSalary * 12 / weekInYear * 100) / 100;
+        else nextP.basic_salary = rawSalary;
+      }
+    }
     if (rec.previousYtd) {
       const ytd = rec.previousYtd;
       if (!nextP.ytd_sss)        nextP.ytd_sss        = ytd.ytd_sss||'';
