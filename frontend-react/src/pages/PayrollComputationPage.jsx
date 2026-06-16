@@ -670,9 +670,10 @@ export default function PayrollComputationPage() {
       const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
       const selectedPer = meta.payrollPeriods.find(p => String(p.period_id) === String(filters.payroll_period));
       const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
+      const selectedYear = meta.payrollYears?.find(y => String(y.year_id) === String(filters.year));
       const { data:runData } = await api.post('/payroll_runs', {
         group_id:(selectedGrp?.group_name||'').toLowerCase(), period_id:(selectedPer?.period_name||'').toLowerCase(),
-        month_id:(selectedMon?.month_name||'').toLowerCase(), year_id:filters.year, payroll_range:payrollRange,
+        month_id: selectedMon?.month_id, year_id: selectedYear?.year_value || filters.year, payroll_range:payrollRange,
         user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
       if (!runData.success) throw new Error(runData.message||'Failed to create payroll run.');
