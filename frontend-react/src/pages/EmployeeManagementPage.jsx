@@ -1069,6 +1069,29 @@ export default function EmployeeManagementPage() {
     );
   }
 
+  const fetchDropdownOptions = async (category) => {
+    const res = await fetch(`/api/system_lists?category=${category}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
+  const [payrollPeriods, setPayrollPeriods] = useState([]);
+  const [payrollRates, setPayrollRates] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      const [periods, rates] = await Promise.all([
+        fetchDropdownOptions("payroll_period"),
+        fetchDropdownOptions("payroll_rate"),
+      ]);
+
+      setPayrollPeriods(periods);
+      setPayrollRates(rates);
+    };
+
+    load();
+  }, []);
+
   function renderPayrollComputationAddTab() {
     const comp = addForm.payrollComputation || {};
     const tax = addForm.taxInsurance || {};
@@ -1078,6 +1101,42 @@ export default function EmployeeManagementPage() {
         <div className="legacy-payroll-grid">
           <div>
             <h4>Main Computation</h4>
+            {renderFormRow(
+              'Payroll Period:',
+              <select
+                value={comp.payroll_period || ''}
+                onChange={(event) =>
+                  updateNestedAddField('payrollComputation', 'payroll_period', event.target.value)
+                }
+              >
+                <option value="" disabled>
+                  -- Select --
+                </option>
+                {payrollPeriods.map((item, index) => (
+                  <option key={index} value={item.value}>
+                    {item.value}
+                  </option>
+                ))}
+              </select>
+            )}
+            {renderFormRow(
+              'Payroll Rate:',
+              <select
+                value={comp.payroll_rate || ''}
+                onChange={(event) =>
+                  updateNestedAddField('payrollComputation', 'payroll_rate', event.target.value)
+                }
+              >
+                <option value="" disabled>
+                  -- Select --
+                </option>
+                {payrollRates.map((item, index) => (
+                  <option key={index} value={item.value}>
+                    {item.value}
+                  </option>
+                ))}
+              </select>
+            )}
             {renderFormRow('Employee Salary:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
             <hr className="divider" />
             <h4>Basis of Computation for Absences, Late and Undertime</h4>
