@@ -205,7 +205,32 @@ export default function PayrollComputationPage() {
   const selectedMonth  = meta.payrollMonths.find(m => String(m.month_id)   === String(filters.month));
   const selectedYear   = meta.payrollYears.find(y  => String(y.year_id) === String(filters.year) || y.year_value === String(filters.year));
   const yearLabel      = selectedYear?.year_value || (/^\d{4}$/.test(String(filters.year)) ? String(filters.year) : '');
-  const payrollRange   = [selectedPeriod?.period_name, selectedMonth?.month_name, yearLabel].filter(Boolean).join(' ');
+  const payrollRange   = (() => {
+    if (!selectedPeriod || !selectedMonth) return '';
+    const periodName = selectedPeriod.period_name?.toLowerCase() || '';
+    const monthName = selectedMonth.month_name || '';
+    
+    // For weekly periods
+    if (periodName.includes('week')) {
+      return `${monthName} (${selectedPeriod.period_name}), ${yearLabel}`;
+    }
+    
+    // For semi-monthly periods (check first and second without "week")
+    if (periodName.includes('first') || periodName.includes('1st half')) {
+      return `${monthName} 1-15, ${yearLabel}`;
+    }
+    if (periodName.includes('second') || periodName.includes('2nd half')) {
+      return `${monthName} 16-31, ${yearLabel}`;
+    }
+    
+    // For monthly periods
+    if (periodName.includes('monthly')) {
+      return `${monthName} 1-30, ${yearLabel}`;
+    }
+    
+    // Default format
+    return [selectedPeriod.period_name, monthName, yearLabel].filter(Boolean).join(' ');
+  })();
   const periodReady    = Boolean(filters.payroll_group && filters.payroll_period && filters.month && filters.year);
 
   const allowanceTotals = useMemo(() => effectiveAllowanceTotals(payroll, allowances), [payroll, allowances]);
@@ -264,6 +289,20 @@ export default function PayrollComputationPage() {
         payrollMonths: p.payrollMonths || [],
         payrollYears: p.payrollYears || [],
       });
+      // Auto-fill year with current year (prefer matching payrollYears entry)
+      try {
+        const nowYear = String(new Date().getFullYear());
+        const found = (p.payrollYears || []).find(y => String(y.year_value) === nowYear);
+        if (found) {
+          setFilters(f => ({ ...f, year: found.year_id }));
+          setYearInputText(String(found.year_value));
+        } else {
+          setFilters(f => ({ ...f, year: nowYear }));
+          setYearInputText(nowYear);
+        }
+      } catch (e) {
+        // non-fatal
+      }
       const entries = await Promise.all(FILTER_CATS.map(async ([cat]) => {
         const { data:d } = await api.get(`/system_lists/${cat}`);
         return [cat, d || []];
@@ -283,6 +322,44 @@ export default function PayrollComputationPage() {
   function upOtNdAdj(k,v) { setOtNdAdj(p=>({...p,[k]:v})); }
   function upAttAdj(k,v)  { setAttAdj(p=>({...p,[k]:v})); }
 
+  function handlePayrollGroupChange(value) {
+    setFilters(f => ({
+      ...f,
+      payroll_group: value,
+      payroll_period: '',   // clear period when group changes
+    }));
+  }
+
+  useEffect(() => {
+    async function loadPeriodsByGroup() {
+      if (!filters.payroll_group) {
+        setMeta(prev => ({ ...prev, payrollPeriods: [] }));
+        return;
+      }
+
+      const { data } = await api.get('/payroll_periods', {
+        params: { groupId: filters.payroll_group }
+      });
+
+      const p = data.data || {};
+      // If the selected payroll group is exactly 'Monthly' (case-insensitive),
+      // replace the periods with a single Monthly option and auto-select it.
+      const group = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
+      const gname = (group?.group_name || '').toLowerCase();
+      if (gname === 'monthly') {
+        const monthlyOption = { period_id: 'monthly', period_name: 'Monthly' };
+        setMeta(prev => ({ ...prev, payrollPeriods: [monthlyOption] }));
+        setFilters(f => ({ ...f, payroll_period: monthlyOption.period_id }));
+      } else {
+        setMeta(prev => ({ ...prev, payrollPeriods: p.payrollPeriods || [] }));
+      }
+    }
+
+    loadPeriodsByGroup().catch(err =>
+      flash(getApiMessage(err, 'Failed to load payroll periods.'), 'warning')
+    );
+  }, [filters.payroll_group]);
+  
   async function loadRunEmployees(rid) {
     const { data } = await api.get('/employees_for_payroll_run', {
       params: {
@@ -322,9 +399,12 @@ export default function PayrollComputationPage() {
     if (!periodReady) { flash('Select Payroll Group, Period, Month, and Year first.','warning'); return; }
     setLoading(true);
     try {
+      const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
+      const selectedPer = meta.payrollPeriods.find(p => String(p.period_id) === String(filters.payroll_period));
+      const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
       const { data:runData } = await api.post('/payroll_runs', {
-        group_id:filters.payroll_group, period_id:filters.payroll_period,
-        month_id:filters.month, year_id:filters.year, payroll_range:payrollRange,
+        group_id:(selectedGrp?.group_name||'').toLowerCase(), period_id:(selectedPer?.period_name||'').toLowerCase(),
+        month_id:(selectedMon?.month_name||'').toLowerCase(), year_id:filters.year, payroll_range:payrollRange,
         user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
       if (!runData.success) throw new Error(runData.message||'Failed to create payroll run.');
@@ -374,13 +454,15 @@ export default function PayrollComputationPage() {
 
   async function loadEmpData(empId, rid) {
     const effectiveRunId = rid || runId;
+    const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
+    const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
     const [settingsResp, hrisResp] = await Promise.all([
       api.get(`/employee_payroll_settings/${empId}`, {
-        params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
+        params:{ run_id:effectiveRunId, group_id:(selectedGrp?.group_name||'').toLowerCase(), periodOption:selectedPeriod?.period_name||'' }
       }),
       (filters.month && filters.year && filters.payroll_period)
         ? api.get('/payroll/hris-data', {
-            params:{ employee_id:empId, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:effectiveRunId||'', group_id:filters.payroll_group||'' }
+            params:{ employee_id:empId, month_id:(selectedMon?.month_name||'').toLowerCase(), year_id:filters.year, period_id:(selectedPeriod?.period_name||'').toLowerCase(), run_id:effectiveRunId||'', group_id:(selectedGrp?.group_name||'').toLowerCase() }
           }).catch(() => ({ data: null }))
         : Promise.resolve({ data: null }),
     ]);
@@ -494,8 +576,10 @@ export default function PayrollComputationPage() {
     if (!selectedEmp) return;
     setHrisLoading(true);
     try {
+      const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
+      const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
       const { data } = await api.get('/payroll/hris-data', {
-        params:{ employee_id:selectedEmp.employee_id, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:runId||'', group_id:filters.payroll_group||'', basic_salary:toNum(payroll.basic_salary)||'' }
+        params:{ employee_id:selectedEmp.employee_id, month_id:(selectedMon?.month_name||'').toLowerCase(), year_id:filters.year, period_id:(selectedPeriod?.period_name||'').toLowerCase(), run_id:runId||'', group_id:(selectedGrp?.group_name||'').toLowerCase(), basic_salary:toNum(payroll.basic_salary)||'' }
       });
       if (!data.success) { flash(data.message||'Failed to fetch HRIS data.','warning'); return; }
       setHrisData(data);
@@ -692,22 +776,38 @@ export default function PayrollComputationPage() {
               <div className="form-grid">
                 <div className="payroll-period-row">
                   <label>Payroll Group:</label>
-                  <select value={filters.payroll_group} onChange={e=>upFilter('payroll_group',e.target.value)}>
-                    <option value="">-- Select Group --</option>
+                  <select value={filters.payroll_group} onChange={e=>handlePayrollGroupChange(e.target.value)}>
+                    <option disabled value="">-- Select Group --</option>
                     {meta.payrollGroups.map(g=><option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}
                   </select>
                 </div>
                 <div className="payroll-period-row">
                   <label>Period:</label>
                   <select value={filters.payroll_period} onChange={e=>upFilter('payroll_period',e.target.value)}>
-                    <option value="">-- Select Period --</option>
-                    {meta.payrollPeriods.map(p=><option key={p.period_id} value={p.period_id}>{p.period_name}</option>)}
+                    {!filters.payroll_group
+                      ? <option disabled value="">-- Please select a group first --</option>
+                      : (
+                          meta.payrollPeriods.length === 0
+                            ? (
+                                <>
+                                  <option disabled value="">-- Select Period --</option>
+                                  <option disabled value="">-- No periods available --</option>
+                                </>
+                              )
+                            : (
+                                <>
+                                  <option disabled value="">-- Select Period --</option>
+                                  {meta.payrollPeriods.map(p => <option key={p.period_id} value={p.period_id}>{p.period_name}</option>)}
+                                </>
+                              )
+                        )
+                    }
                   </select>
                 </div>
                 <div className="payroll-period-row">
                   <label>Month:</label>
                   <select value={filters.month} onChange={e=>upFilter('month',e.target.value)}>
-                    <option value="">-- Select Month --</option>
+                    <option disabled value="">-- Select Month --</option>
                     {meta.payrollMonths.map(m=><option key={m.month_id} value={m.month_id}>{m.month_name}</option>)}
                   </select>
                 </div>
@@ -750,7 +850,7 @@ export default function PayrollComputationPage() {
                 </div>
                 <div className="payroll-period-row">
                   <label>Generated Payroll Range:</label>
-                  <input type="text" value={payrollRange} readOnly />
+                  <input type="text" value={payrollRange} disabled />
                 </div>
               </div>
             </div>
@@ -764,7 +864,7 @@ export default function PayrollComputationPage() {
                     <div key={cat} className="filter-row">
                       <label>{label}:</label>
                       <select value={filters[key]||''} onChange={e=>upFilter(key,e.target.value)}>
-                        <option value=""></option>
+                        <option disabled value="">-- Select --</option>
                         {(lists[cat]||[]).map(r=><option key={r.value} value={r.value}>{r.value}</option>)}
                       </select>
                     </div>
