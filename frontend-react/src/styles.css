@@ -5084,6 +5084,14 @@ select:focus {
 .payroll-period-panel .payroll-period-row input,
 .filter-panel .filter-row select,
 .filter-panel .filter-row input { flex:1; border:1px solid #ddd; padding:5px 8px; font-size:13px; border-radius:4px; }
+.year-picker-wrap { position:relative; display:flex; align-items:center; gap:4px; flex:1; }
+.year-picker-wrap .year-input { flex:1; min-width:0; }
+.year-calendar-btn { background:#fff; border:1px solid #ddd; border-radius:4px; padding:5px 8px; cursor:pointer; display:flex; align-items:center; color:#555; flex-shrink:0; }
+.year-calendar-btn:hover { background:#f0f0f0; border-color:#aaa; }
+.year-picker-dropdown { position:absolute; top:calc(100% + 4px); left:0; background:#fff; border:1px solid #ccc; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; max-height:200px; overflow-y:auto; min-width:120px; }
+.year-picker-option { padding:8px 16px; cursor:pointer; font-size:14px; }
+.year-picker-option:hover { background:#f5f5f5; }
+.year-picker-option.selected { background:#2563eb; color:#fff; }
 
 /* Profile Header */
 .profile-header { position:relative; display:flex; align-items:center; gap:25px; background:#fff; border:1px solid #ddd; border-radius:12px; padding:20px; margin-bottom:20px; box-shadow:0 2px 4px rgba(0,0,0,0.05); }

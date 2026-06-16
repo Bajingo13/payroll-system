@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -197,11 +197,15 @@ export default function PayrollComputationPage() {
   const [loading, setLoading]         = useState(false);
   const [toast, setToast]             = useState('');
   const [toastType, setToastType]     = useState('success');
+  const [showYearPicker, setShowYearPicker] = useState(false);
+  const [yearInputText, setYearInputText]   = useState('');
+  const yearPickerRef = useRef(null);
 
   const selectedPeriod = meta.payrollPeriods.find(p => String(p.period_id) === String(filters.payroll_period));
   const selectedMonth  = meta.payrollMonths.find(m => String(m.month_id)   === String(filters.month));
-  const selectedYear   = meta.payrollYears.find(y  => String(y.year_id)    === String(filters.year));
-  const payrollRange   = [selectedPeriod?.period_name, selectedMonth?.month_name, selectedYear?.year_value].filter(Boolean).join(' ');
+  const selectedYear   = meta.payrollYears.find(y  => String(y.year_id) === String(filters.year) || y.year_value === String(filters.year));
+  const yearLabel      = selectedYear?.year_value || (/^\d{4}$/.test(String(filters.year)) ? String(filters.year) : '');
+  const payrollRange   = [selectedPeriod?.period_name, selectedMonth?.month_name, yearLabel].filter(Boolean).join(' ');
   const periodReady    = Boolean(filters.payroll_group && filters.payroll_period && filters.month && filters.year);
 
   const allowanceTotals = useMemo(() => effectiveAllowanceTotals(payroll, allowances), [payroll, allowances]);
@@ -242,6 +246,13 @@ export default function PayrollComputationPage() {
       return true;
     });
   }, [availableEmps, modalSearch, modalSearchBy]);
+
+  useEffect(() => {
+    if (!showYearPicker) return;
+    const handle = e => { if (yearPickerRef.current && !yearPickerRef.current.contains(e.target)) setShowYearPicker(false); };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [showYearPicker]);
 
   useEffect(() => {
     async function load() {
@@ -702,10 +713,40 @@ export default function PayrollComputationPage() {
                 </div>
                 <div className="payroll-period-row">
                   <label>Year:</label>
-                  <select value={filters.year} onChange={e=>upFilter('year',e.target.value)}>
-                    <option value="">-- Select Year --</option>
-                    {meta.payrollYears.map(y=><option key={y.year_id} value={y.year_id}>{y.year_value}</option>)}
-                  </select>
+                  <div className="year-picker-wrap" ref={yearPickerRef}>
+                    <input
+                      type="text"
+                      className="year-input"
+                      value={yearInputText}
+                      placeholder="e.g. 2026"
+                      onChange={e => {
+                        const val = e.target.value;
+                        setYearInputText(val);
+                        const match = meta.payrollYears.find(y => y.year_value === val);
+                        upFilter('year', match ? match.year_id : val);
+                      }}
+                    />
+                    <button type="button" className="year-calendar-btn" onClick={() => setShowYearPicker(p => !p)}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </button>
+                    {showYearPicker && (
+                      <div className="year-picker-dropdown">
+                        {Array.from({ length: 21 }, (_, i) => 2015 + i).map(yr => {
+                          const found = meta.payrollYears.find(y => y.year_value === String(yr));
+                          const isSelected = found ? String(found.year_id)===String(filters.year) : String(filters.year)===String(yr);
+                          return (
+                            <div
+                              key={yr}
+                              className={`year-picker-option${isSelected?' selected':''}`}
+                              onClick={() => { upFilter('year', found ? found.year_id : String(yr)); setYearInputText(String(yr)); setShowYearPicker(false); }}
+                            >
+                              {yr}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="payroll-period-row">
                   <label>Generated Payroll Range:</label>
