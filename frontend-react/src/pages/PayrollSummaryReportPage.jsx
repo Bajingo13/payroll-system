@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { exportReport, getReportMetadata } from '../utils/reportExport.js';
 
@@ -485,6 +485,61 @@ function buildGroups(rows, orderBy) {
   return result;
 }
 
+function YearPicker({ value, payrollYears, onChange }) {
+  const [show, setShow] = useState(false);
+  const [text, setText] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const selected = payrollYears.find(y => String(y.year_id) === String(value));
+    setText(selected ? String(selected.year_value) : (/^\d{4}$/.test(String(value)) ? String(value) : ''));
+  }, [value, payrollYears]);
+
+  useEffect(() => {
+    if (!show) return;
+    const handle = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [show]);
+
+  return (
+    <div className="year-picker-wrap" ref={ref}>
+      <input
+        type="text"
+        className="year-input"
+        value={text}
+        placeholder="e.g. 2026"
+        onChange={e => {
+          const val = e.target.value;
+          setText(val);
+          const match = payrollYears.find(y => String(y.year_value) === val);
+          onChange(match ? match.year_id : val);
+        }}
+      />
+      <button type="button" className="year-calendar-btn" onClick={() => setShow(p => !p)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </button>
+      {show && (
+        <div className="year-picker-dropdown">
+          {Array.from({ length: 21 }, (_, i) => 2015 + i).map(yr => {
+            const found = payrollYears.find(y => String(y.year_value) === String(yr));
+            const isSelected = found ? String(found.year_id) === String(value) : String(value) === String(yr);
+            return (
+              <div
+                key={yr}
+                className={`year-picker-option${isSelected ? ' selected' : ''}`}
+                onClick={() => { onChange(found ? found.year_id : String(yr)); setShow(false); }}
+              >
+                {yr}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const FILTER_CATS = ['company','location','branch','division','department','class','position','emp_type','salary_type'];
 
 export default function PayrollSummaryReportPage() {
@@ -538,6 +593,9 @@ export default function PayrollSummaryReportPage() {
         payrollMonths:  p.payrollMonths  || [],
         payrollYears:   p.payrollYears   || [],
       });
+      const nowYear = String(new Date().getFullYear());
+      const foundYear = (p.payrollYears || []).find(y => String(y.year_value) === nowYear);
+      setFilters(f => ({ ...f, year: foundYear ? foundYear.year_id : nowYear }));
       const toVals = r => (Array.isArray(r.data) ? r.data.map(x => x.value || x) : []);
       setFilterOpts({
         companies:   toVals(coR),
@@ -770,10 +828,7 @@ export default function PayrollSummaryReportPage() {
                     </div>
                     <div className="payroll-period-row">
                       <label>Year:</label>
-                      <select value={filters.year} onChange={e=>upFilter('year',e.target.value)}>
-                        <option value="">-- Select Year --</option>
-                        {meta.payrollYears.map(y=><option key={y.year_id} value={y.year_id}>{y.year_value}</option>)}
-                      </select>
+                      <YearPicker value={filters.year} payrollYears={meta.payrollYears} onChange={v=>upFilter('year',v)} />
                     </div>
                     <div className="payroll-period-row">
                       <label>Generated Payroll Range:</label>
@@ -807,10 +862,7 @@ export default function PayrollSummaryReportPage() {
                     </div>
                     <div className="payroll-period-row">
                       <label></label>
-                      <select value={filters.start_year} onChange={e=>upFilter('start_year',e.target.value)}>
-                        <option value="">-- Select Year --</option>
-                        {meta.payrollYears.map(y=><option key={y.year_id} value={y.year_id}>{y.year_value}</option>)}
-                      </select>
+                      <YearPicker value={filters.start_year} payrollYears={meta.payrollYears} onChange={v=>upFilter('start_year',v)} />
                     </div>
                     <div className="payroll-period-row">
                       <label>To:</label>
@@ -828,10 +880,7 @@ export default function PayrollSummaryReportPage() {
                     </div>
                     <div className="payroll-period-row">
                       <label></label>
-                      <select value={filters.end_year} onChange={e=>upFilter('end_year',e.target.value)}>
-                        <option value="">-- Select Year --</option>
-                        {meta.payrollYears.map(y=><option key={y.year_id} value={y.year_id}>{y.year_value}</option>)}
-                      </select>
+                      <YearPicker value={filters.end_year} payrollYears={meta.payrollYears} onChange={v=>upFilter('end_year',v)} />
                     </div>
                     <div className="payroll-period-row">
                       <label>Generated Payroll Range:</label>
