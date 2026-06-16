@@ -156,6 +156,117 @@ function makeEmptyLeaveRows() {
   return Array.from({length: 8}, () => ({ leave_type_id: '', used: '', amount: '' }));
 }
 
+function dateKey(value) {
+  if (!value) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function inclusiveDays(startDate, endDate) {
+  const start = new Date(`${dateKey(startDate)}T12:00:00Z`);
+  const end = new Date(`${dateKey(endDate)}T12:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  return Math.floor((end - start) / 86400000) + 1;
+}
+
+function getHrisPeriodRange(hrisData) {
+  const [start = '', end = ''] = String(hrisData?.period_range || '').split(' to ');
+  return { start: dateKey(start), end: dateKey(end) };
+}
+
+function buildPeriodLeaveRows(hrisData, basicSalary = 0, leaveBalances = []) {
+  const requests = hrisData?.absences?.requests || [];
+  const { start: periodStart, end: periodEnd } = getHrisPeriodRange(hrisData);
+  const dailyRate = toNum(basicSalary) / 26;
+  const grouped = new Map();
+
+  leaveBalances.forEach((balance) => {
+    if (!balance.leave_type_id) return;
+    grouped.set(String(balance.leave_type_id), {
+      leave_type_id: String(balance.leave_type_id),
+      used: '',
+      amount: ''
+    });
+  });
+
+  if (!periodStart || !periodEnd) {
+    const rows = Array.from(grouped.values());
+    while (rows.length < 8) rows.push({ leave_type_id: '', used: '', amount: '' });
+    return rows;
+  }
+
+  requests.forEach((request) => {
+    const leaveTypeId = request.leave_type_id;
+    const requestStart = dateKey(request.start_date);
+    const requestEnd = dateKey(request.end_date);
+    if (!leaveTypeId || !requestStart || !requestEnd) return;
+
+    const clippedStart = requestStart > periodStart ? requestStart : periodStart;
+    const clippedEnd = requestEnd < periodEnd ? requestEnd : periodEnd;
+    const used = inclusiveDays(clippedStart, clippedEnd);
+    if (used <= 0) return;
+
+    const key = String(leaveTypeId);
+    const current = grouped.get(key) || { leave_type_id: key, used: 0, amount: 0 };
+    current.used = toNum(current.used) + used;
+    current.amount = Math.round(current.used * dailyRate * 100) / 100;
+    grouped.set(key, current);
+  });
+
+  const rows = Array.from(grouped.values());
+  while (rows.length < 8) rows.push({ leave_type_id: '', used: '', amount: '' });
+  return rows;
+}
+
+function applyContributionRows(payroll, contributions = []) {
+  const next = { ...payroll };
+  const map = {
+    1: ['sss_employee', 'sss_employer', 'sss_ecc'],
+    2: ['pagibig_employee', 'pagibig_employer', 'pagibig_ecc'],
+    3: ['philhealth_employee', 'philhealth_employer', 'philhealth_ecc'],
+    4: ['gsis_employee', 'gsis_employer', 'gsis_ecc']
+  };
+
+  contributions.forEach((contribution) => {
+    if (Number(contribution.enabled) === 0) return;
+    const fields = map[Number(contribution.contribution_type_id)];
+    if (!fields) return;
+    const [employeeField, employerField, eccField] = fields;
+    if (!toNum(next[employeeField])) next[employeeField] = toNum(contribution.ee_share);
+    if (!toNum(next[employerField])) next[employerField] = toNum(contribution.er_share);
+    if (!toNum(next[eccField])) next[eccField] = toNum(contribution.ecc);
+  });
+
+  return next;
+}
+
+async function computePayrollDeductions(payroll, rec = {}, allowances = [], deductions = []) {
+  const allowanceTotals = effectiveAllowanceTotals(payroll, allowances);
+  const deductionTotal = effectiveDeductionTotal(payroll, deductions);
+  const { data } = await api.post('/payroll/auto-compute', {
+    basic_salary: toNum(payroll.basic_salary),
+    absence_deduction: toNum(payroll.absence_deduction),
+    late_deduction: toNum(payroll.late_deduction),
+    undertime_deduction: toNum(payroll.undertime_deduction),
+    overtime: toNum(payroll.overtime),
+    holiday_pay: toNum(payroll.holiday_pay),
+    taxable_allowances: allowanceTotals.taxable,
+    non_taxable_allowances: allowanceTotals.nontaxable,
+    adj_comp: toNum(payroll.adj_comp),
+    adj_non_comp: toNum(payroll.adj_non_comp),
+    total_leaves_used: toNum(payroll.total_leaves_used),
+    total_deductions: deductionTotal,
+    loans: toNum(payroll.loans),
+    other_deductions: toNum(payroll.other_deductions),
+    premium_adj: toNum(payroll.premium_adj),
+    payroll_period: rec.payroll_period || '',
+    tax_status: rec.tax_status || 'Z',
+    gsis_no: rec.gsis_no || '',
+    is_government_employee: Boolean(rec.gsis_no)
+  });
+  return data?.success ? data : null;
+}
+
 export default function PayrollComputationPage() {
   const { user } = useAuth();
 
@@ -599,6 +710,10 @@ export default function PayrollComputationPage() {
       nextP.undertime           = hrisUndertimeMinutes;
       nextP.undertime_deduction = hris.attendance?.undertime_deduction || 0;
       nextP.overtime            = hris.ot?.computed_amount || 0;
+      nextP.holiday_pay         = hris.holiday?.computed_amount || 0;
+      nextP.total_leaves_used   = buildPeriodLeaveRows(hris, nextP.basic_salary, rec.leaveBalances || [])
+        .reduce((sum, row) => sum + toNum(row.amount), 0)
+        .toFixed(2);
       nextAtt.absences_time  = hrisAbsenceMinutes;
       nextAtt.absences_amt   = hris.absences?.computed_deduction || 0;
       nextAtt.late_time      = hrisLateMinutes;
@@ -608,10 +723,29 @@ export default function PayrollComputationPage() {
       nextAdj.ot_adj_rg_ot_time = hrisOtMinutes;
       nextAdj.ot_adj_rg_ot      = hris.ot?.computed_amount || 0;
     }
+
+    Object.assign(nextP, applyContributionRows(nextP, rec.contributions || []));
+    try {
+      const computed = await computePayrollDeductions(nextP, rec, allowList, deductionList);
+      if (computed) {
+        [
+          'gsis_employee', 'gsis_employer', 'gsis_ecc',
+          'sss_employee', 'sss_employer', 'sss_ecc',
+          'pagibig_employee', 'pagibig_employer', 'pagibig_ecc',
+          'philhealth_employee', 'philhealth_employer', 'philhealth_ecc',
+          'tax_withheld'
+        ].forEach((field) => {
+          if (!toNum(nextP[field]) && computed[field] != null) nextP[field] = computed[field];
+        });
+      }
+    } catch {
+      // Keep loaded payroll values if automatic statutory computation is unavailable.
+    }
+
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
   }
 
-  async function loadLoansAndLeaves(empId, basicSalary = 0) {
+  async function loadLoansAndLeaves(empId, basicSalary = 0, periodHrisData = null) {
     setLoansLoading(true); setLeavesLoading(true);
     try {
       const [loansResp, leavesResp] = await Promise.all([
@@ -639,14 +773,8 @@ export default function PayrollComputationPage() {
       setPayroll(p=>({...p, loans: loanTotal.toFixed(2)}));
       setOtherDedRows([]);
       setSelectedDedRow(null);
-      // Build leave rows
-      const dailyRate = toNum(basicSalary) / 26;
-      const newRows = makeEmptyLeaveRows();
-      balances.slice(0, 8).forEach((b, i) => {
-        const used = toNum(b.used_days);
-        const amount = parseFloat((used * dailyRate).toFixed(2));
-        newRows[i] = { leave_type_id: String(b.leave_type_id), used, amount };
-      });
+      // Build leave rows only from approved requests clipped to the selected payroll period.
+      const newRows = buildPeriodLeaveRows(periodHrisData, basicSalary, balances);
       setLeaveRows(newRows);
       const totalLeavesAmt = newRows.reduce((s, r) => s + toNum(r.amount), 0);
       setPayroll(p => ({...p, total_leaves_used: totalLeavesAmt.toFixed(2)}));
@@ -663,7 +791,7 @@ export default function PayrollComputationPage() {
       setAllowances(d.allowances); setDeductions(d.deductions);
       setHrisData(d.hrisData || null);
       setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
-      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary));
+      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData);
       return;
     }
     setLoading(true);
@@ -674,7 +802,7 @@ export default function PayrollComputationPage() {
       setAllowances(d.allowances); setDeductions(d.deductions);
       setHrisData(d.hrisData || null);
       setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
-      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary));
+      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData);
     } catch(err) {
       flash(getApiMessage(err,'Failed to load employee payroll.'),'warning');
     } finally {
@@ -686,10 +814,8 @@ export default function PayrollComputationPage() {
     if (!selectedEmp) return;
     setHrisLoading(true);
     try {
-      const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
-      const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
       const { data } = await api.get('/payroll/hris-data', {
-        params:{ employee_id:selectedEmp.employee_id, month_id:(selectedMon?.month_name||'').toLowerCase(), year_id:filters.year, period_id:(selectedPeriod?.period_name||'').toLowerCase(), run_id:runId||'', group_id:(selectedGrp?.group_name||'').toLowerCase(), basic_salary:toNum(payroll.basic_salary)||'' }
+        params:{ employee_id:selectedEmp.employee_id, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:runId||'', group_id:filters.payroll_group||'', basic_salary:toNum(payroll.basic_salary)||'' }
       });
       if (!data.success) { flash(data.message||'Failed to fetch HRIS data.','warning'); return; }
       setHrisData(data);
@@ -700,6 +826,11 @@ export default function PayrollComputationPage() {
       upPayroll('undertime',           data.attendance?.undertime_minutes || 0);
       upPayroll('undertime_deduction', data.attendance?.undertime_deduction || 0);
       upPayroll('overtime',            data.ot?.computed_amount || 0);
+      upPayroll('holiday_pay',         data.holiday?.computed_amount || 0);
+      const periodLeaveRows = buildPeriodLeaveRows(data, toNum(payroll.basic_salary), empLeaveData.leaveBalances);
+      const periodLeaveAmount = periodLeaveRows.reduce((s, r) => s + toNum(r.amount), 0);
+      setLeaveRows(periodLeaveRows);
+      upPayroll('total_leaves_used', periodLeaveAmount.toFixed(2));
       setAttAdj(prev => ({
         ...prev,
         absences_time: Math.round((data.absences?.total_days || 0) * 480),

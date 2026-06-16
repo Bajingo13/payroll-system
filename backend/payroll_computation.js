@@ -120,6 +120,40 @@ module.exports = function (app, pool) {
         return holidayDates;
     }
 
+    // Returns Map<dateStr, 'regular'|'special'> for holiday premium pay computation.
+    async function getClassifiedHolidayDates(conn, startDate, endDate) {
+        const years = new Set([String(startDate).slice(0, 4), String(endDate).slice(0, 4)]);
+        const holidayTypes = new Map();
+        years.forEach((year) => {
+            fixedPhilippineHolidayDates(year).forEach((date) => {
+                if (date >= startDate && date <= endDate) holidayTypes.set(date, 'regular');
+            });
+        });
+        try {
+            const [rows] = await conn.query(
+                `SELECT DATE_FORMAT(event_date, '%Y-%m-%d') AS event_date, event_type, is_paid_holiday
+                 FROM company_calendar_events
+                 WHERE event_date BETWEEN ? AND ?
+                   AND (
+                     is_paid_holiday = 1
+                     OR LOWER(event_type) LIKE '%holiday%'
+                     OR LOWER(event_type) LIKE '%non-working%'
+                   )`,
+                [startDate, endDate]
+            );
+            rows.forEach(row => {
+                if (!row.event_date) return;
+                const dateKey = String(row.event_date).slice(0, 10);
+                const type = String(row.event_type || '').toLowerCase();
+                const isRegular = Number(row.is_paid_holiday) === 1 || type.includes('regular');
+                holidayTypes.set(dateKey, isRegular ? 'regular' : 'special');
+            });
+        } catch (_) {
+            // Calendar table may not exist in older deployments; fixed holidays still apply.
+        }
+        return holidayTypes;
+    }
+
     function normalizePayPeriod(value) {
         const period = String(value || '').trim().toUpperCase();
         if (period.includes('SEMI')) return 'SEMI-MONTHLY';
@@ -228,6 +262,47 @@ module.exports = function (app, pool) {
         return rows[0] || null;
     }
 
+    // GSIS (RA 8291) contributes a flat percentage of the revised basic salary,
+    // with no salary cap — unlike SSS's bracket table — so it is stored as a rate, not brackets.
+    async function ensureGsisContributionTable(conn) {
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS gsis_contribution_table (
+                id INT NOT NULL AUTO_INCREMENT,
+                ee_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 9.00,
+                er_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 12.00,
+                date_effective DATE NOT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                PRIMARY KEY (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        const [rows] = await conn.query('SELECT COUNT(*) AS cnt FROM gsis_contribution_table');
+        if (!rows[0].cnt) {
+            // Official RA 8291 rates: 9% employee share, 12% employer share of revised basic salary.
+            await conn.query(
+                `INSERT INTO gsis_contribution_table (ee_rate_percent, er_rate_percent, date_effective, is_active)
+                 VALUES (9.00, 12.00, '1997-05-30', 1)`
+            );
+        }
+    }
+
+    async function lookupGsisContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(
+            `SELECT ee_rate_percent, er_rate_percent
+             FROM gsis_contribution_table
+             WHERE COALESCE(is_active, 1) = 1
+             ORDER BY date_effective DESC
+             LIMIT 1`
+        );
+        const rate = rows[0];
+        if (!rate) return null;
+        return {
+            ee_share: roundMoney(salaryBasis * (Number(rate.ee_rate_percent) / 100)),
+            er_share: roundMoney(salaryBasis * (Number(rate.er_rate_percent) / 100)),
+            ecc: 0
+        };
+    }
+
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
         const normalizedPeriod = normalizePayPeriod(payPeriod);
         const status = String(taxStatus || 'Z').trim().toUpperCase();
@@ -282,14 +357,19 @@ module.exports = function (app, pool) {
         const premiumAdj = toMoney(input.premium_adj);
 
         const salaryBasis = Math.max(0, toMoney(input.contribution_basis) || basicSalary + taxableAllowances + overtime + holidayPay);
-        const sss = await lookupContribution(conn, 'sss_contribution_table', salaryBasis);
+        // GSIS (government employees) and SSS (private employees) are mutually exclusive.
+        const isGovernmentEmployee = Boolean(input.is_government_employee || input.gsis_no);
+        await ensureGsisContributionTable(conn);
+        const sss = isGovernmentEmployee ? null : await lookupContribution(conn, 'sss_contribution_table', salaryBasis);
+        const gsis = isGovernmentEmployee ? await lookupGsisContribution(conn, salaryBasis) : null;
         const pagibig = await lookupContribution(conn, 'pagibig_contribution_table', salaryBasis);
         const philhealth = await lookupContribution(conn, 'philhealth_contribution_table', salaryBasis);
 
         const sssEmployee = roundMoney(sss?.ee_share || 0);
+        const gsisEmployee = roundMoney(gsis?.ee_share || 0);
         const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
         const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
-        const statutoryEmployee = sssEmployee + pagibigEmployee + philhealthEmployee;
+        const statutoryEmployee = sssEmployee + gsisEmployee + pagibigEmployee + philhealthEmployee;
         const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
         const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
         const taxWithheld = roundMoney(taxResult.amount);
@@ -317,6 +397,9 @@ module.exports = function (app, pool) {
             sss_employee: sssEmployee,
             sss_employer: roundMoney(sss?.er_share || 0),
             sss_ecc: roundMoney(sss?.ecc || 0),
+            gsis_employee: gsisEmployee,
+            gsis_employer: roundMoney(gsis?.er_share || 0),
+            gsis_ecc: 0,
             pagibig_employee: pagibigEmployee,
             pagibig_employer: roundMoney(pagibig?.er_share || 0),
             pagibig_ecc: 0,
@@ -329,7 +412,8 @@ module.exports = function (app, pool) {
             net_pay: netPay,
             tax_bracket: taxResult.bracket,
             notes: {
-                sss: sss ? 'Matched SSS contribution table.' : 'No SSS contribution bracket matched.',
+                sss: isGovernmentEmployee ? 'Skipped (government employee contributes to GSIS instead).' : (sss ? 'Matched SSS contribution table.' : 'No SSS contribution bracket matched.'),
+                gsis: isGovernmentEmployee ? (gsis ? 'Computed from GSIS contribution rate.' : 'No GSIS contribution rate configured.') : 'Skipped (private employee contributes to SSS instead).',
                 pagibig: pagibig ? 'Matched Pag-IBIG contribution table.' : 'No Pag-IBIG contribution bracket matched.',
                 philhealth: philhealth ? 'Matched PhilHealth contribution table.' : 'No PhilHealth contribution bracket matched.',
                 tax: taxResult.bracket ? 'Matched withholding tax table.' : 'No withholding tax bracket matched.'
@@ -340,14 +424,14 @@ module.exports = function (app, pool) {
     // GET HRIS data (approved OT + leave + attendance adjustments) for a given employee and payroll period
     app.get("/api/payroll/hris-data", async (req, res) => {
         const employeeId = Number(req.query.employee_id);
-        const monthId = Number(req.query.month_id);
-        const yearId = Number(req.query.year_id);
-        const periodId = Number(req.query.period_id);
+        const monthInput = String(req.query.month_id || '').trim();
+        const yearInput = String(req.query.year_id || '').trim();
+        const periodInput = String(req.query.period_id || '').trim();
         const runId = req.query.run_id ? Number(req.query.run_id) : null;
         const paramBasicSalary = req.query.basic_salary ? Number(req.query.basic_salary) : 0;
-        const paramGroupId = req.query.group_id ? Number(req.query.group_id) : null;
+        const groupInput = String(req.query.group_id || '').trim();
 
-        if (!employeeId || !monthId || !yearId || !periodId) {
+        if (!employeeId || !monthInput || !yearInput || !periodInput) {
             return res.status(400).json({ success: false, message: "Missing required parameters: employee_id, month_id, year_id, period_id." });
         }
 
@@ -355,17 +439,56 @@ module.exports = function (app, pool) {
         try {
             conn = await pool.getConnection();
 
-            const [[monthRow]] = await conn.query("SELECT month_name FROM payroll_months WHERE month_id = ? LIMIT 1", [monthId]);
-            let [[yearRow]] = await conn.query("SELECT year_value FROM payroll_years WHERE year_id = ? LIMIT 1", [yearId]);
-            // Fallback: if year_id didn't match a DB row, try treating it as a year_value (e.g. 2026)
+            let monthId = Number(monthInput) || null;
+            let yearId = Number(yearInput) || null;
+            let periodId = Number(periodInput) || null;
+            let paramGroupId = Number(groupInput) || null;
+
+            let [[monthRow]] = monthId
+                ? await conn.query("SELECT month_id, month_name FROM payroll_months WHERE month_id = ? LIMIT 1", [monthId])
+                : [[]];
+            if (!monthRow) {
+                [[monthRow]] = await conn.query(
+                    "SELECT month_id, month_name FROM payroll_months WHERE LOWER(month_name) = LOWER(?) LIMIT 1",
+                    [monthInput]
+                );
+                if (monthRow) monthId = Number(monthRow.month_id);
+            }
+
+            let [[yearRow]] = yearId
+                ? await conn.query("SELECT year_id, year_value FROM payroll_years WHERE year_id = ? LIMIT 1", [yearId])
+                : [[]];
+            // Fallback: if year_id did not match a DB row, try treating it as a year_value (e.g. 2026)
             if (!yearRow) {
-                [[yearRow]] = await conn.query("SELECT year_value FROM payroll_years WHERE year_value = ? LIMIT 1", [yearId]);
+                [[yearRow]] = await conn.query("SELECT year_id, year_value FROM payroll_years WHERE year_value = ? LIMIT 1", [yearInput]);
+                if (yearRow) yearId = Number(yearRow.year_id);
             }
             // Last resort: if yearId looks like a valid calendar year, use it directly
             if (!yearRow && yearId >= 2000 && yearId <= 2100) {
                 yearRow = { year_value: yearId };
             }
-            const [[periodRow]] = await conn.query("SELECT period_name FROM payroll_periods WHERE period_id = ? LIMIT 1", [periodId]);
+
+            let [[periodRow]] = periodId
+                ? await conn.query("SELECT period_id, period_name FROM payroll_periods WHERE period_id = ? LIMIT 1", [periodId])
+                : [[]];
+            if (!periodRow) {
+                [[periodRow]] = await conn.query(
+                    "SELECT period_id, period_name FROM payroll_periods WHERE LOWER(period_name) = LOWER(?) LIMIT 1",
+                    [periodInput]
+                );
+                if (periodRow) periodId = Number(periodRow.period_id);
+            }
+            if (!periodRow && periodInput.toLowerCase() === 'monthly') {
+                periodRow = { period_name: 'Monthly' };
+            }
+
+            if (!paramGroupId && groupInput) {
+                const [[groupRow]] = await conn.query(
+                    "SELECT group_id FROM payroll_groups WHERE LOWER(group_name) = LOWER(?) LIMIT 1",
+                    [groupInput]
+                );
+                if (groupRow) paramGroupId = Number(groupRow.group_id);
+            }
 
             if (!monthRow || !yearRow || !periodRow) {
                 return res.status(404).json({ success: false, message: "Invalid month, year, or period ID." });
@@ -476,7 +599,7 @@ module.exports = function (app, pool) {
 
             // Approved leave requests overlapping with period
             const [leaveRows] = await conn.query(
-                `SELECT r.request_id, r.start_date, r.end_date, r.total_days, r.reason, t.leave_name
+                `SELECT r.request_id, r.leave_type_id, r.start_date, r.end_date, r.total_days, r.reason, t.leave_name
                  FROM employee_leave_requests r
                  JOIN leave_types t ON t.leave_type_id = r.leave_type_id
                  WHERE r.employee_id = ? AND r.status = 'Approved'
@@ -545,6 +668,16 @@ module.exports = function (app, pool) {
             let periodSalaryForAbsence = 0;
             let workingDaysInPeriod = 0;
             const nonWorkingHolidayDates = await getNonWorkingHolidayDates(conn, startDate, endDate);
+            const holidayTypeMap = await getClassifiedHolidayDates(conn, startDate, endDate);
+            let holidayPremium = 0;
+            const HOLIDAY_PREMIUM_RATE = { regular: 1.00, special: 0.30 };
+            function addHolidayPremiumForPresentDates(presentDateSet) {
+                holidayTypeMap.forEach((type, dateKey) => {
+                    if (presentDateSet.has(dateKey)) {
+                        holidayPremium += dailyRate * (HOLIDAY_PREMIUM_RATE[type] || 0);
+                    }
+                });
+            }
 
             const effectiveSalary = (settings && Number(settings.main_computation) > 0)
                 ? Number(settings.main_computation)
@@ -654,6 +787,7 @@ module.exports = function (app, pool) {
                             }
                             presentDates.add(dateKey);
                         });
+                        addHolidayPremiumForPresentDates(presentDates);
                         const hrisAbsentDates = new Set(explicitAbsentDates);
                         const iterD = new Date(startDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
@@ -717,6 +851,7 @@ module.exports = function (app, pool) {
                                 .filter(day => day.time_in)
                                 .map(day => String(day.time_in).slice(0, 10))
                         );
+                        addHolidayPremiumForPresentDates(presentDates);
 
                         // Count Mon–Fri days in the period where employee was absent
                         let absentCount = 0;
@@ -778,6 +913,7 @@ module.exports = function (app, pool) {
             const displayedOtHours = totalOtHours > 0
                 ? totalOtHours
                 : (otAmount > 0 && hourlyRate > 0 ? Math.round((otAmount / hourlyRate / 1.25) * 100) / 100 : 0);
+            holidayPremium = Math.round(holidayPremium * 100) / 100;
 
             return res.json({
                 success: true,
@@ -786,6 +922,10 @@ module.exports = function (app, pool) {
                     requests: otRows,
                     total_hours: displayedOtHours,
                     computed_amount: otAmount
+                },
+                holiday: {
+                    dates: Array.from(holidayTypeMap.entries()).map(([date, type]) => ({ date, type })),
+                    computed_amount: holidayPremium
                 },
                 absences: {
                     requests: leaveRows,
@@ -1481,10 +1621,17 @@ module.exports = function (app, pool) {
                         eps.days_in_year,
                         eps.days_in_week,
                         eps.hours_in_day,
-                        eps.week_in_year
+                        eps.week_in_year,
+                        ea.sss_no,
+                        ea.gsis_no,
+                        ea.pagibig_no,
+                        ea.philhealth_no,
+                        eti.tax_status
                 FROM employees e
                 LEFT JOIN employee_payroll ep ON e.employee_id = ep.employee_id AND ep.run_id = ?
                 LEFT JOIN employee_payroll_settings eps ON e.employee_id = eps.employee_id
+                LEFT JOIN employee_accounts ea ON ea.employee_id = e.employee_id
+                LEFT JOIN employee_tax_insurance eti ON eti.employee_id = e.employee_id
                 WHERE e.employee_id = ?`,
                 [run_id, employeeId]
             );
