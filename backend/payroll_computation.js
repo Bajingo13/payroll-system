@@ -547,35 +547,10 @@ module.exports = function (app, pool) {
 
             if (effectiveSalary > 0) {
                 const hoursInDay = Number(settings?.hours_in_day || 8);
-                const daysInYear = toMoney(settings?.days_in_year || 313);
 
-                // Convert to monthly equivalent using the employee's stored rate type,
-                // then derive the period salary from the payroll group's pay frequency.
-                const monthlySalary = computeMonthlySalaryFromRate(effectiveSalary, effectivePayrollRate, settings || {});
-                const periodSalary  = computePeriodSalaryFromMonthly(monthlySalary, groupName, daysInYear);
-                periodSalaryForAbsence = periodSalary;
-
-                // Count working days (Mon–Fri) in this specific payroll period.
-                {
-                    const d = new Date(startDate + 'T12:00:00Z');
-                    const e = new Date(endDate   + 'T12:00:00Z');
-                    while (d <= e) {
-                        const dow = d.getUTCDay();
-                        const dateKey = d.toISOString().slice(0, 10);
-                        if (dow !== 0 && dow !== 6 && !nonWorkingHolidayDates.has(dateKey)) workingDaysInPeriod++;
-                        d.setUTCDate(d.getUTCDate() + 1);
-                    }
-                }
-
-                // Daily rate = period salary ÷ working days in the period so that
-                // absences are deducted proportionally to what the employee earns that period.
-                exactAbsenceDailyRate = workingDaysInPeriod > 0
-                    ? periodSalary / workingDaysInPeriod
-                    : computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
-                dailyRate  = workingDaysInPeriod > 0
-                    ? roundMoney(exactAbsenceDailyRate)
-                    : computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
-                hourlyRate = Math.round((dailyRate / hoursInDay) * 100) / 100;
+                dailyRate             = computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
+                exactAbsenceDailyRate = dailyRate;
+                hourlyRate            = Math.round((dailyRate / hoursInDay) * 100) / 100;
 
                 otAmount = Math.round(totalOtHours * hourlyRate * 1.25 * 100) / 100;
                 // absenceDeduction computed after attendance block once totalAbsentDays is known
