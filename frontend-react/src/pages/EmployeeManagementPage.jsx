@@ -8,6 +8,86 @@ const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 const PAYROLL_RATE_OPTIONS = ['Piece Rate', 'Hourly Rate', 'Daily Rate', 'Weekly Rate', 'Monthly Rate'];
 const OT_RATE_OPTIONS = ['STANDARD OT RATE'];
 const ENTRY_PERIOD_OPTIONS = ['Weekly', 'Monthly', 'First Half', 'Second Half', 'Both'];
+const CONTRIBUTION_COLUMNS = [
+  { id: 1, label: 'SSS', defaultComputation: 'Gross' },
+  { id: 2, label: 'Pag-ibig', defaultComputation: 'Fix' },
+  { id: 3, label: 'Philhealth', defaultComputation: 'Basic - Lost Hours' },
+  { id: 4, label: 'WTax', defaultComputation: 'Gross Taxable' }
+];
+const CONTRIBUTION_PERIOD_OPTIONS = ['Both', 'First', 'Second', 'First Half', 'Second Half', 'Monthly', 'Weekly'];
+const CONTRIBUTION_TYPE_OPTIONS = ['Computed', 'Inputed'];
+const CONTRIBUTION_COMPUTATION_OPTIONS_BY_TYPE = {
+  1: ['Gross', 'Basic', 'Fix'],
+  2: ['Fix', 'EE (2% of MC) max 100 & ER (2% of MC) max 100', 'EE (2% of MC) & ER (Fix 100)', 'EE (2% of MC + ER - 100) & ER (Fix 100)', 'EE & ER (2% of MC)'],
+  3: ['Basic', 'Basic - Lost Hours', 'Gross', 'Fix'],
+  4: ['Gross Taxable', 'Gross Pay', 'Fix', 'EWT']
+};
+
+function contributionComputationOptionsFor(typeId) {
+  return CONTRIBUTION_COMPUTATION_OPTIONS_BY_TYPE[typeId] || [];
+}
+
+function contributionPeriodOptionsFor(payrollPeriod) {
+  const value = String(payrollPeriod || '').toLowerCase();
+  if (value.includes('week')) return ['Weekly'];
+  if (value.includes('semi') || value.includes('half')) return ['First Half', 'Second Half', 'Both'];
+  if (value.includes('month')) return ['Monthly'];
+  return CONTRIBUTION_PERIOD_OPTIONS;
+}
+
+function round2(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+// Pag-IBIG formulas encode their own rate/cap in the label, so they can be
+// previewed instantly from the employee's Amount Rate (MC) on the client.
+// Mirrors the server-side formula in payroll_computation.js.
+function pagibigFormulaPreview(formula, mc) {
+  const f = String(formula || '').trim().toLowerCase();
+  const MC = Number(mc) || 0;
+  if (f === 'ee (2% of mc) max 100 & er (2% of mc) max 100') {
+    return { ee_share: Math.min(round2(MC * 0.02), 100), er_share: Math.min(round2(MC * 0.02), 100) };
+  }
+  if (f === 'ee (2% of mc) & er (fix 100)') {
+    return { ee_share: round2(MC * 0.02), er_share: 100 };
+  }
+  if (f === 'ee (2% of mc + er - 100) & er (fix 100)') {
+    const er = 100;
+    return { ee_share: round2(0.02 * (MC + er - 100)), er_share: er };
+  }
+  if (f === 'ee & er (2% of mc)') {
+    return { ee_share: round2(MC * 0.02), er_share: round2(MC * 0.02) };
+  }
+  return null;
+}
+
+// Determines what to show/allow for a contribution row's EE/ER/ECC fields.
+// "Computed" rows whose formula has no deterministic client-side calculation
+// (SSS Gross/Basic, PhilHealth Gross/Basic/Basic - Lost Hours, WTax Gross
+// Taxable/Gross Pay/EWT) are resolved by the payroll engine's bracket tables
+// at payroll-run time, so they're shown locked with an "Auto" placeholder
+// instead of a stale manually-typed number.
+function getContributionPreview(column, row, mc) {
+  const isComputed = String(row.type_option || '').toLowerCase() === 'computed';
+  if (!isComputed) {
+    return { ee: row.ee_share, er: row.er_share, ecc: row.ecc, locked: false, auto: false };
+  }
+
+  const formula = String(row.computation || '').trim().toLowerCase();
+  if (formula === 'fix') {
+    return { ee: row.ee_share, er: row.er_share, ecc: row.ecc, locked: false, auto: false };
+  }
+
+  if (column.id === 2) {
+    const preview = pagibigFormulaPreview(row.computation, mc);
+    if (preview) {
+      return { ee: preview.ee_share, er: preview.er_share, ecc: '', locked: true, auto: false };
+    }
+  }
+
+  return { ee: '', er: '', ecc: '', locked: true, auto: true };
+}
+const TAX_STATUS_OPTIONS = ['SINGLE', 'ME', 'MWE', 'Z', 'S', 'ME1', 'ME2', 'ME3', 'ME4'];
 const ADD_EMPLOYEE_TABS = [
   { id: 'basic', label: 'Basic Information' },
   { id: 'systemAccount', label: 'Create Account Setting' },
@@ -41,6 +121,22 @@ function createBlankEvaluationForm() {
     improvement_areas: '',
     goals: '',
     action_plan: ''
+  };
+}
+
+function createDefaultContributionEntry(typeId) {
+  const column = CONTRIBUTION_COLUMNS.find((item) => item.id === typeId);
+  return {
+    contribution_type_id: typeId,
+    enabled: true,
+    start_date: '',
+    period: 'Both',
+    type_option: 'Computed',
+    computation: column?.defaultComputation || '',
+    ee_share: '',
+    er_share: '',
+    ecc: '',
+    annualize: false
   };
 }
 
@@ -495,6 +591,29 @@ export default function EmployeeManagementPage() {
     }));
   }
 
+  function getContributionEntry(typeId) {
+    const existing = (addForm.contributions || []).find((row) => String(row.contribution_type_id) === String(typeId));
+    return existing || createDefaultContributionEntry(typeId);
+  }
+
+  function updateContributionEntry(typeId, field, value) {
+    setAddForm((current) => {
+      const rows = [...(current.contributions || [])];
+      const index = rows.findIndex((row) => String(row.contribution_type_id) === String(typeId));
+      const base = index >= 0 ? rows[index] : createDefaultContributionEntry(typeId);
+      const nextRow = { ...base, [field]: value };
+
+      if (field === 'period') nextRow.period_id = value;
+      if (field === 'type_option') nextRow.type_option_id = value;
+      if (field === 'computation') nextRow.computation_id = value;
+
+      if (index >= 0) rows[index] = nextRow;
+      else rows.push(nextRow);
+
+      return { ...current, contributions: rows };
+    });
+  }
+
   function updateEntryRow(group, index, field, value) {
     setAddForm((current) => ({
       ...current,
@@ -520,6 +639,49 @@ export default function EmployeeManagementPage() {
       ...current,
       [group]: (current[group] || []).filter((_, rowIndex) => rowIndex !== index)
     }));
+  }
+
+  function findAllowanceEntryIndex(rows, taxable, slotIndex) {
+    let count = 0;
+    for (let index = 0; index < rows.length; index += 1) {
+      const option = allowanceOptions.find((item) => String(item.id) === String(rows[index].allowance_type_id));
+      const rowIsTaxable = Number(option?.taxable) === 1;
+      if (taxable ? rowIsTaxable : !rowIsTaxable) {
+        if (count === slotIndex) return index;
+        count += 1;
+      }
+    }
+    return -1;
+  }
+
+  function updateAllowanceEntrySlot(taxable, slotIndex, field, value) {
+    setAddForm((current) => {
+      const rows = [...(current.allowances || [])];
+      const index = findAllowanceEntryIndex(rows, taxable, slotIndex);
+
+      if (field === 'allowance_type_id') {
+        if (!value) {
+          if (index >= 0) rows.splice(index, 1);
+          return { ...current, allowances: rows };
+        }
+
+        const option = allowanceOptions.find((item) => String(item.id) === String(value));
+        const row = {
+          ...(index >= 0 ? rows[index] : {}),
+          allowance_type_id: value,
+          period: index >= 0 ? rows[index].period : '',
+          amount: index >= 0 ? rows[index].amount : (option?.amount ?? '0.00')
+        };
+
+        if (index >= 0) rows[index] = row;
+        else rows.push(row);
+        return { ...current, allowances: rows };
+      }
+
+      if (index < 0) return current;
+      rows[index] = { ...rows[index], [field]: value };
+      return { ...current, allowances: rows };
+    });
   }
 
   function updateDependent(index, field, value) {
@@ -601,6 +763,17 @@ export default function EmployeeManagementPage() {
         }))
         .filter((row) => row[typeField] && row.period && row.amount !== '' && Number.isFinite(Number(row.amount)))
     );
+    const contributionRows = CONTRIBUTION_COLUMNS.map((column) => {
+      const existing = (addForm.contributions || []).find((row) => String(row.contribution_type_id) === String(column.id));
+      const row = { ...createDefaultContributionEntry(column.id), ...(existing || {}) };
+      return {
+        ...row,
+        contribution_type_id: column.id,
+        period_id: row.period || '',
+        type_option_id: row.type_option || '',
+        computation_id: row.computation || ''
+      };
+    });
 
     return {
       ...addForm,
@@ -610,7 +783,7 @@ export default function EmployeeManagementPage() {
       regional_minimum_wage_rate_id: taxInsurance.regional_minimum_wage_rate_id || '',
       allowances: normalizeEntryRows(addForm.allowances, 'allowance_type_id'),
       deductions: normalizeEntryRows(addForm.deductions, 'deduction_type_id'),
-      contributions: Array.isArray(addForm.contributions) ? addForm.contributions : [],
+      contributions: contributionRows,
       dependents: Array.isArray(addForm.dependents)
         ? addForm.dependents.filter((row) => row.name || row.birthday)
         : [],
@@ -1092,6 +1265,22 @@ export default function EmployeeManagementPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    const allowedPeriods = contributionPeriodOptionsFor(addForm.payrollComputation?.payroll_period);
+    setAddForm((current) => {
+      const rows = current.contributions || [];
+      let changed = false;
+      const nextRows = rows.map((row) => {
+        if (row.period && !allowedPeriods.includes(row.period)) {
+          changed = true;
+          return { ...row, period: '', period_id: '' };
+        }
+        return row;
+      });
+      return changed ? { ...current, contributions: nextRows } : current;
+    });
+  }, [addForm.payrollComputation?.payroll_period]);
+
   function renderPayrollComputationAddTab() {
     const comp = addForm.payrollComputation || {};
     const tax = addForm.taxInsurance || {};
@@ -1137,14 +1326,13 @@ export default function EmployeeManagementPage() {
                 ))}
               </select>
             )}
-            {renderFormRow('Employee Salary:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
+            {renderFormRow('Amount Rate:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
             <hr className="divider" />
             <h4>Basis of Computation for Absences, Late and Undertime</h4>
             {renderFormRow('Days in a Year:', <input type="number" value={comp.days_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year', event.target.value)} />)}
             {renderFormRow('Days in a Week:', <input type="number" value={comp.days_in_week || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_week', event.target.value)} />)}
             {renderFormRow('Hours in a Day:', <input type="number" value={comp.hours_in_day || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'hours_in_day', event.target.value)} />)}
             {renderFormRow('Week in a Year:', <input type="number" value={comp.week_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'week_in_year', event.target.value)} />)}
-            {renderFormRow('Basis Absences:', <input value={comp.basis_absences || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'basis_absences', event.target.value)} />)}
           </div>
           <div>
             <h4>Basis of Computation for Overtime</h4>
@@ -1159,15 +1347,188 @@ export default function EmployeeManagementPage() {
               </select>
             ))}
             {renderFormRow('Days in a Year (O.T.):', <input type="number" value={comp.days_in_year_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year_ot', event.target.value)} />)}
-            {renderFormRow('Rate Basis (O.T.):', <input type="number" value={comp.rate_basis_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'rate_basis_ot', event.target.value)} />)}
-            {renderFormRow('Basis Overtime:', <input value={comp.basis_overtime || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'basis_overtime', event.target.value)} />)}
+            {renderFormRow('Rate Basis for OT:', <input type="number" value={comp.rate_basis_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'rate_basis_ot', event.target.value)} />)}
             <hr className="divider" />
-            <h4>Tax and Insurance</h4>
-            {renderFormRow('Tax Status:', <input value={tax.tax_status || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_status', event.target.value)} />)}
-            {renderFormRow('Tax Exemption:', <input type="number" value={tax.tax_exemption || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_exemption', event.target.value)} />)}
-            {renderFormRow('Insurance:', <input type="number" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />)}
-            {renderFormRow('Regional Minimum Wage Rate ID:', <input value={tax.regional_minimum_wage_rate_id || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'regional_minimum_wage_rate_id', event.target.value)} />)}
+            <div className="em-tax-panel">
+              <label>
+                <span>Tax Status</span>
+                <select value={tax.tax_status || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_status', event.target.value)}>
+                  <option value="">-- Select --</option>
+                  {TAX_STATUS_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Tax Exemption</span>
+                <input type="number" value={tax.tax_exemption || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_exemption', event.target.value)} />
+              </label>
+              <label>
+                <span>Premium paid on Health and/or Hospital Insurance</span>
+                <input type="number" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />
+              </label>
+              <label>
+                <span>Regional Min. Wage Rate</span>
+                <input value={tax.regional_minimum_wage_rate_id || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'regional_minimum_wage_rate_id', event.target.value)} />
+              </label>
+            </div>
           </div>
+        </div>
+        <div className="em-payroll-contribution-layout">
+          <fieldset className="em-contribution-fieldset">
+            <legend>Contributions</legend>
+            <div className="em-contribution-scroll">
+              <table className="em-contribution-table">
+                <thead>
+                  <tr>
+                    <th className="em-contribution-label-col" />
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      return (
+                        <th key={column.id}>
+                          <span>{column.label}</span>
+                          <input
+                            type="checkbox"
+                            checked={!!row.enabled}
+                            onChange={(event) => updateContributionEntry(column.id, 'enabled', event.target.checked)}
+                          />
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Start Date</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      return (
+                        <td key={column.id}>
+                          <input
+                            type="date"
+                            value={row.start_date || ''}
+                            onChange={(event) => updateContributionEntry(column.id, 'start_date', event.target.value)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td>Period</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      const periodOptions = contributionPeriodOptionsFor(comp.payroll_period);
+                      return (
+                        <td key={column.id}>
+                          <select
+                            value={row.period || ''}
+                            onChange={(event) => updateContributionEntry(column.id, 'period', event.target.value)}
+                          >
+                            <option value="">-- Select --</option>
+                            {periodOptions.map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td>Type</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      return (
+                        <td key={column.id}>
+                          <select
+                            value={row.type_option || ''}
+                            onChange={(event) => updateContributionEntry(column.id, 'type_option', event.target.value)}
+                          >
+                            <option value="">-- Select --</option>
+                            {CONTRIBUTION_TYPE_OPTIONS.map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td>Computation</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      return (
+                        <td key={column.id}>
+                          <select
+                            value={row.computation || ''}
+                            onChange={(event) => updateContributionEntry(column.id, 'computation', event.target.value)}
+                          >
+                            <option value="">-- Select --</option>
+                            {contributionComputationOptionsFor(column.id).map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td>EE Share</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      const preview = getContributionPreview(column, row, comp.main_computation);
+                      return (
+                        <td key={column.id}>
+                          <input
+                            type="number"
+                            value={preview.ee || ''}
+                            placeholder={preview.auto ? 'Auto' : undefined}
+                            disabled={preview.locked}
+                            onChange={(event) => updateContributionEntry(column.id, 'ee_share', event.target.value)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td>ER Share</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      const preview = getContributionPreview(column, row, comp.main_computation);
+                      return (
+                        <td key={column.id}>
+                          <input
+                            type="number"
+                            value={preview.er || ''}
+                            placeholder={preview.auto ? 'Auto' : undefined}
+                            disabled={preview.locked}
+                            onChange={(event) => updateContributionEntry(column.id, 'er_share', event.target.value)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td>ECC</td>
+                    {CONTRIBUTION_COLUMNS.map((column) => {
+                      const row = getContributionEntry(column.id);
+                      const preview = getContributionPreview(column, row, comp.main_computation);
+                      return (
+                        <td key={column.id}>
+                          <input
+                            type="number"
+                            value={preview.ecc || ''}
+                            placeholder={preview.auto ? 'Auto' : undefined}
+                            disabled={preview.locked}
+                            onChange={(event) => updateContributionEntry(column.id, 'ecc', event.target.value)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </fieldset>
         </div>
       </div>
     );
@@ -1204,6 +1565,161 @@ export default function EmployeeManagementPage() {
                 </td>
                 <td><input type="number" value={row.amount || ''} onChange={(event) => updateEntryRow(group, index, 'amount', event.target.value)} /></td>
                 <td><button type="button" className="btn danger" onClick={() => removeEntryRow(group, index)}>Remove</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  function renderAllowancePayrollEntry() {
+    const rows = addForm.allowances || [];
+    const renderSide = (taxable, title) => {
+      const options = allowanceOptions.filter((option) => taxable ? Number(option.taxable) === 1 : Number(option.taxable) !== 1);
+      const sideRows = rows.filter((row) => {
+        const option = allowanceOptions.find((item) => String(item.id) === String(row.allowance_type_id));
+        const rowIsTaxable = Number(option?.taxable) === 1;
+        return taxable ? rowIsTaxable : !rowIsTaxable;
+      });
+      const displayRows = Array.from({ length: Math.max(7, sideRows.length) }, (_, index) => sideRows[index] || {});
+
+      return (
+        <div className="em-allowance-entry-panel">
+          <table className="em-allowance-entry-table">
+            <thead>
+              <tr>
+                <th className="em-entry-row-num"></th>
+                <th>{title}</th>
+                <th className="em-entry-period-col">Period</th>
+                <th className="em-entry-amount-col">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((row, index) => (
+                <tr key={`${title}-${index}`}>
+                  <td className="em-entry-row-num">{index + 1}.</td>
+                  <td>
+                    <select
+                      value={row.allowance_type_id || ''}
+                      onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'allowance_type_id', event.target.value)}
+                    >
+                      <option value=""></option>
+                      {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select
+                      value={row.period || ''}
+                      disabled={!row.allowance_type_id}
+                      onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'period', event.target.value)}
+                    >
+                      <option value=""></option>
+                      {ENTRY_PERIOD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={row.allowance_type_id ? row.amount || '' : '0.00'}
+                      disabled={!row.allowance_type_id}
+                      onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'amount', event.target.value)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
+    return (
+      <div className="em-allowance-entry-grid">
+        {renderSide(true, 'Taxable Allowances')}
+        {renderSide(false, 'Non-Taxable Allowances')}
+      </div>
+    );
+  }
+
+  function updateDeductionEntrySlot(slotIndex, field, value) {
+    setAddForm((current) => {
+      const rows = [...(current.deductions || [])];
+      const index = slotIndex < rows.length ? slotIndex : -1;
+
+      if (field === 'deduction_type_id') {
+        if (!value) {
+          if (index >= 0) rows.splice(index, 1);
+          return { ...current, deductions: rows };
+        }
+
+        const option = deductionOptions.find((item) => String(item.id) === String(value));
+        const row = {
+          ...(index >= 0 ? rows[index] : {}),
+          deduction_type_id: value,
+          period: index >= 0 ? rows[index].period : '',
+          amount: index >= 0 ? rows[index].amount : (option?.amount ?? '0.00')
+        };
+
+        if (index >= 0) rows[index] = row;
+        else rows.push(row);
+        return { ...current, deductions: rows };
+      }
+
+      if (index < 0) return current;
+      rows[index] = { ...rows[index], [field]: value };
+      return { ...current, deductions: rows };
+    });
+  }
+
+  function renderDeductionPayrollEntry() {
+    const rows = addForm.deductions || [];
+    const displayRows = Array.from({ length: Math.max(7, rows.length) }, (_, index) => rows[index] || {});
+
+    return (
+      <div className="em-deduction-entry-wrap">
+        <table className="em-deduction-entry-table">
+          <thead>
+            <tr>
+              <th className="em-entry-row-num"></th>
+              <th>Deductions</th>
+              <th className="em-entry-period-col">Period</th>
+              <th className="em-entry-amount-col">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map((row, index) => (
+              <tr key={`deduction-entry-${index}`}>
+                <td className="em-entry-row-num">{index + 1}.</td>
+                <td>
+                  <select
+                    value={row.deduction_type_id || ''}
+                    onChange={(event) => updateDeductionEntrySlot(index, 'deduction_type_id', event.target.value)}
+                  >
+                    <option value=""></option>
+                    {deductionOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    value={row.period || ''}
+                    disabled={!row.deduction_type_id}
+                    onChange={(event) => updateDeductionEntrySlot(index, 'period', event.target.value)}
+                  >
+                    <option value=""></option>
+                    {ENTRY_PERIOD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={row.deduction_type_id ? row.amount || '' : '0.00'}
+                    disabled={!row.deduction_type_id}
+                    onChange={(event) => updateDeductionEntrySlot(index, 'amount', event.target.value)}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1323,21 +1839,13 @@ export default function EmployeeManagementPage() {
     if (addActiveTab === 'allowances') {
       return (
         <div className="legacy-form-box">
-          <h4>Allowance Payroll Entry</h4>
-          <div className="toolbar employee-tab-toolbar">
-            <button type="button" className="btn secondary" onClick={() => addEntryRow('allowances')}>Add Allowance</button>
-          </div>
-          {renderEntryRows('allowances', allowanceOptions, 'allowance_type_id')}
+          {renderAllowancePayrollEntry()}
         </div>
       );
     }
     return (
       <div className="legacy-form-box">
-        <h4>Deduction Payroll Entry</h4>
-        <div className="toolbar employee-tab-toolbar">
-          <button type="button" className="btn secondary" onClick={() => addEntryRow('deductions')}>Add Deduction</button>
-        </div>
-        {renderEntryRows('deductions', deductionOptions, 'deduction_type_id')}
+        {renderDeductionPayrollEntry()}
       </div>
     );
   }
@@ -1365,7 +1873,7 @@ export default function EmployeeManagementPage() {
             onClick={() => saveAddTab(addActiveTab)}
             disabled={addSaving}
           >
-            {addSaving ? 'Saving...' : detailModalOpen ? 'Save' : 'Save'}
+            {addSaving ? 'Saving...' : 'Save'}
           </button>
           {detailModalOpen ? (
             <button

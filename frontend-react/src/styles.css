@@ -3017,6 +3017,320 @@ select:focus {
   width: auto;
 }
 
+.em-payroll-contribution-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 16px;
+}
+
+.em-contribution-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 10px 8px;
+  border: 1px solid #aeb7c2;
+  background: #f8fafc;
+}
+
+.em-contribution-fieldset legend {
+  padding: 0 8px;
+  color: #111827;
+  font-weight: 700;
+}
+
+.em-contribution-scroll {
+  overflow-x: auto;
+}
+
+.em-contribution-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.em-contribution-table th,
+.em-contribution-table td {
+  padding: 0 4px;
+  vertical-align: middle;
+}
+
+.em-contribution-table th {
+  color: #111827;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  background: transparent;
+}
+
+.em-contribution-table th:not(.em-contribution-label-col) {
+  white-space: nowrap;
+}
+
+.em-contribution-table th span {
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.em-contribution-table th input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+}
+
+.em-contribution-table td:first-child {
+  width: 110px;
+  padding-right: 8px;
+  color: #dc2626;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.em-contribution-label-col {
+  width: 110px;
+}
+
+.em-contribution-table select,
+.em-contribution-table input:not([type="checkbox"]) {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid #9db8d4;
+  border-radius: 0;
+  background: #f7fbff;
+  box-shadow: inset 0 0 0 1px rgba(157, 184, 212, 0.35);
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.em-contribution-table select {
+  padding: 2px 22px 2px 6px;
+}
+
+.em-contribution-table input:not([type="checkbox"]) {
+  padding: 2px 6px;
+  text-align: right;
+}
+
+.em-contribution-table input[type="date"] {
+  text-align: left;
+}
+
+.em-contribution-table input:disabled,
+.em-contribution-table select:disabled {
+  background: #e5e7eb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.em-contribution-table input::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.em-tax-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.em-tax-panel label {
+  display: grid;
+  gap: 3px;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.em-tax-panel span {
+  color: #dc2626;
+  line-height: 1.15;
+}
+
+.em-tax-panel select,
+.em-tax-panel input {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid #9db8d4;
+  border-radius: 0;
+  background: #f7fbff;
+  box-shadow: inset 0 0 0 1px rgba(157, 184, 212, 0.35);
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.em-tax-panel select {
+  padding: 2px 22px 2px 6px;
+}
+
+.em-tax-panel input {
+  padding: 2px 6px;
+  text-align: right;
+}
+
+.em-tax-panel select:disabled,
+.em-tax-panel input:disabled {
+  background: #e5e7eb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.em-allowance-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  align-items: start;
+}
+
+.em-allowance-entry-panel {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.em-allowance-entry-table {
+  width: 100%;
+  min-width: 450px;
+  border-collapse: separate;
+  border-spacing: 0 5px;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.em-allowance-entry-table th {
+  padding: 4px 5px 12px;
+  color: #111827;
+  font-weight: 700;
+  text-align: center;
+  background: transparent;
+}
+
+.em-allowance-entry-table td {
+  padding: 0 3px;
+  vertical-align: middle;
+}
+
+.em-allowance-entry-table .em-entry-row-num {
+  width: 28px;
+  padding-right: 6px;
+  color: #1f2937;
+  text-align: right;
+}
+
+.em-allowance-entry-table .em-entry-period-col {
+  width: 116px;
+}
+
+.em-allowance-entry-table .em-entry-amount-col {
+  width: 92px;
+}
+
+.em-allowance-entry-table select,
+.em-allowance-entry-table input {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid #9db8d4;
+  border-radius: 0;
+  background: #f7fbff;
+  box-shadow: inset 0 0 0 1px rgba(157, 184, 212, 0.35);
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.em-allowance-entry-table select {
+  padding: 2px 22px 2px 6px;
+}
+
+.em-allowance-entry-table input {
+  padding: 2px 6px;
+  text-align: right;
+}
+
+.em-allowance-entry-table input:disabled,
+.em-allowance-entry-table select:disabled {
+  background: #f3f6f9;
+  color: #6b7280;
+  opacity: 1;
+}
+
+.em-deduction-entry-wrap {
+  width: min(620px, 100%);
+  margin: 0 auto;
+  overflow-x: auto;
+}
+
+.em-deduction-entry-table {
+  width: 100%;
+  min-width: 540px;
+  border-collapse: separate;
+  border-spacing: 0 5px;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.em-deduction-entry-table th {
+  padding: 4px 5px 12px;
+  color: #111827;
+  font-weight: 700;
+  text-align: center;
+  background: transparent;
+}
+
+.em-deduction-entry-table td {
+  padding: 0 3px;
+  vertical-align: middle;
+}
+
+.em-deduction-entry-table .em-entry-row-num {
+  width: 28px;
+  padding-right: 6px;
+  color: #1f2937;
+  text-align: right;
+}
+
+.em-deduction-entry-table .em-entry-period-col {
+  width: 120px;
+}
+
+.em-deduction-entry-table .em-entry-amount-col {
+  width: 132px;
+}
+
+.em-deduction-entry-table select,
+.em-deduction-entry-table input {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid #9db8d4;
+  border-radius: 0;
+  background: #f7fbff;
+  box-shadow: inset 0 0 0 1px rgba(157, 184, 212, 0.35);
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.em-deduction-entry-table select {
+  padding: 2px 22px 2px 6px;
+}
+
+.em-deduction-entry-table input {
+  padding: 2px 6px;
+  text-align: right;
+}
+
+.em-deduction-entry-table input:disabled,
+.em-deduction-entry-table select:disabled {
+  background: #f3f6f9;
+  color: #6b7280;
+  opacity: 1;
+}
+
 .employee-add-modal {
   width: min(1500px, 100%);
   max-height: min(92vh, 980px);
@@ -3037,6 +3351,16 @@ select:focus {
   gap: 12px;
   margin: 0 0 24px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .em-payroll-contribution-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .em-tax-panel {
+    max-width: 320px;
+  }
 }
 
 .legacy-employee-actions .btn {
@@ -3118,6 +3442,13 @@ select:focus {
   background: #f8f8f8;
   padding: 4px 10px;
   font-size: 15px;
+}
+
+.legacy-form-row input:disabled,
+.legacy-form-row select:disabled {
+  background: #e5e7eb;
+  color: #6b7280;
+  cursor: not-allowed;
 }
 
 .legacy-payroll-grid {
