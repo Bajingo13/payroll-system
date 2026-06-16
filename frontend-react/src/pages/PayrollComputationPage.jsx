@@ -15,6 +15,36 @@ const OT_TYPES = [
   { key:'hd', label:'Holiday' }, { key:'hdrd', label:'Holiday Rest Day' },
 ];
 
+const OT_ADJ_ROWS = [
+  { key:'rg_rate', label:'RG RATE', rate:'1.00%' },
+  { key:'rg_ot', label:'RG OT', rate:'1.25%' },
+  { key:'rd_rate', label:'RD RATE', rate:'1.30%' },
+  { key:'rd_ot', label:'RD OT', rate:'1.69%' },
+  { key:'sd_rate', label:'SD RATE', rate:'0.30%' },
+  { key:'sd_ot', label:'SD OT', rate:'1.69%' },
+  { key:'sdrd_rate', label:'SDRD RATE', rate:'1.50%' },
+  { key:'sdrd_ot', label:'SDRD OT', rate:'1.95%' },
+  { key:'hd_rate', label:'HD RATE', rate:'1.00%' },
+  { key:'hd_ot', label:'HD OT', rate:'2.60%' },
+  { key:'hdrd_rate', label:'HDRD RATE', rate:'2.60%' },
+  { key:'hdrd_ot', label:'HDRD OT', rate:'3.38%' },
+];
+
+const ND_ADJ_ROWS = [
+  { key:'rg_rate', label:'RG ND', baseRate:'1.00%' },
+  { key:'rg_ot', label:'RG OTND', baseRate:'1.25%' },
+  { key:'rd_rate', label:'RD ND', baseRate:'1.30%' },
+  { key:'rd_ot', label:'RD OTND', baseRate:'1.69%' },
+  { key:'sd_rate', label:'SD ND', baseRate:'1.30%' },
+  { key:'sd_ot', label:'SD OTND', baseRate:'1.69%' },
+  { key:'sdrd_rate', label:'SDRD ND', baseRate:'1.50%' },
+  { key:'sdrd_ot', label:'SDRD OTND', baseRate:'1.95%' },
+  { key:'hd_rate', label:'HD ND', baseRate:'2.00%' },
+  { key:'hd_ot', label:'HD OTND', baseRate:'2.60%' },
+  { key:'hdrd_rate', label:'HDRD ND', baseRate:'2.60%' },
+  { key:'hdrd_ot', label:'HDRD OTND', baseRate:'3.38%' },
+];
+
 const ATT_ROWS = [
   { key:'basic_salary', label:'Basic Salary', hasTime:true },
   { key:'absences',     label:'Absences',     hasTime:true },
@@ -30,6 +60,30 @@ const PREM_ROWS = [
 
 function toNum(v) { const n = Number(v||0); return isFinite(n)?n:0; }
 function fmt(v)   { return toNum(v).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function parseTimeToMinutes(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const text = String(value ?? '').trim();
+  if (!text) return 0;
+  if (text.includes(':')) {
+    const [hours, minutes = '0'] = text.split(':');
+    return Math.max(0, (Number(hours) || 0) * 60 + (Number(minutes) || 0));
+  }
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+function formatMinutesToTime(value) {
+  const total = Math.max(0, Math.round(parseTimeToMinutes(value)));
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(3, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+function normalizeAdjustmentTimes(data = {}) {
+  const next = { ...data };
+  Object.keys(next).forEach((key) => {
+    if (key.endsWith('_time')) next[key] = parseTimeToMinutes(next[key]);
+  });
+  return next;
+}
 function sumAllowanceRows(rows = []) {
   return rows.reduce((acc, row) => {
     if (Number(row.is_taxable) === 1) acc.taxable += toNum(row.amount);
@@ -383,6 +437,20 @@ export default function PayrollComputationPage() {
     const nextOt  = makeEmptyOtNd();    const otR = rec.ot_nd||{};       Object.keys(nextOt).forEach(k=>{if(otR[k]!=null)nextOt[k]=otR[k];});
     const nextAdj = makeEmptyOtNdAdj(); const aR  = rec.ot_nd_adj||{};   Object.keys(nextAdj).forEach(k=>{if(aR[k]!=null)nextAdj[k]=aR[k];});
     const nextAtt = makeEmptyAttAdj();  const atR = rec.attendance_adj||{}; Object.keys(nextAtt).forEach(k=>{if(atR[k]!=null)nextAtt[k]=atR[k];});
+    if (hris) {
+      const hrisAbsenceMinutes = Math.round((hris.absences?.total_days || 0) * 480);
+      const hrisLateMinutes = hris.attendance?.late_minutes || 0;
+      const hrisUndertimeMinutes = hris.attendance?.undertime_minutes || 0;
+      const hrisOtMinutes = Math.round((hris.ot?.total_hours || 0) * 60);
+      if (!toNum(nextAtt.absences_time) && hrisAbsenceMinutes) nextAtt.absences_time = hrisAbsenceMinutes;
+      if (!toNum(nextAtt.absences_amt) && toNum(hris.absences?.computed_deduction)) nextAtt.absences_amt = hris.absences.computed_deduction;
+      if (!toNum(nextAtt.late_time) && hrisLateMinutes) nextAtt.late_time = hrisLateMinutes;
+      if (!toNum(nextAtt.late_amt) && toNum(hris.attendance?.late_deduction)) nextAtt.late_amt = hris.attendance.late_deduction;
+      if (!toNum(nextAtt.undertime_time) && hrisUndertimeMinutes) nextAtt.undertime_time = hrisUndertimeMinutes;
+      if (!toNum(nextAtt.undertime_amt) && toNum(hris.attendance?.undertime_deduction)) nextAtt.undertime_amt = hris.attendance.undertime_deduction;
+      if (!toNum(nextAdj.ot_adj_rg_ot_time) && hrisOtMinutes) nextAdj.ot_adj_rg_ot_time = hrisOtMinutes;
+      if (!toNum(nextAdj.ot_adj_rg_ot) && toNum(hris.ot?.computed_amount)) nextAdj.ot_adj_rg_ot = hris.ot.computed_amount;
+    }
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
   }
 
@@ -427,6 +495,20 @@ export default function PayrollComputationPage() {
       upPayroll('undertime',           data.attendance?.undertime_minutes || 0);
       upPayroll('undertime_deduction', data.attendance?.undertime_deduction || 0);
       upPayroll('overtime',            data.ot?.computed_amount || 0);
+      setAttAdj(prev => ({
+        ...prev,
+        absences_time: Math.round((data.absences?.total_days || 0) * 480),
+        absences_amt: data.absences?.computed_deduction || 0,
+        late_time: data.attendance?.late_minutes || 0,
+        late_amt: data.attendance?.late_deduction || 0,
+        undertime_time: data.attendance?.undertime_minutes || 0,
+        undertime_amt: data.attendance?.undertime_deduction || 0,
+      }));
+      setOtNdAdj(prev => ({
+        ...prev,
+        ot_adj_rg_ot_time: Math.round((data.ot?.total_hours || 0) * 60),
+        ot_adj_rg_ot: data.ot?.computed_amount || 0,
+      }));
       flash('Attendance data synced from HRIS records.','success');
     } catch(err) {
       flash(getApiMessage(err,'Failed to sync HRIS data.'),'warning');
@@ -472,6 +554,9 @@ export default function PayrollComputationPage() {
           payroll_status:p.payroll_status||'Active',
           gross_pay:gross, grand_total_deductions:ded, net_pay:gross-ded,
           allowances:d.allowances, deductions:d.deductions,
+          ot_nd: normalizeAdjustmentTimes(d.otNd || {}),
+          ot_nd_adj: normalizeAdjustmentTimes(d.otNdAdj || {}),
+          att_adj: normalizeAdjustmentTimes(d.attAdj || {}),
           periodOption:selectedPeriod?.period_name||'',
         };
       });
@@ -514,7 +599,7 @@ export default function PayrollComputationPage() {
         ytd_gsis:toNum(payroll.ytd_gsis), ytd_pagibig:toNum(payroll.ytd_pagibig), ytd_gross:toNum(payroll.ytd_gross),
         payroll_status:payroll.payroll_status||'Active',
         gross_pay:totals.gross, grand_total_deductions:totals.ded, net_pay:totals.net,
-        ot_nd:otNd, ot_nd_adj:otNdAdj, att_adj:attAdj,
+        ot_nd:normalizeAdjustmentTimes(otNd), ot_nd_adj:normalizeAdjustmentTimes(otNdAdj), att_adj:normalizeAdjustmentTimes(attAdj),
         periodOption:selectedPeriod?.period_name||'',
         allowances, deductions,
         user_id:user?.user_id, admin_name:user?.full_name||user?.username,
@@ -901,14 +986,32 @@ export default function PayrollComputationPage() {
                     <h4>Overtime</h4>
                     <table className="ot-nd-table">
                       <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
-                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNd[`${key}_rate`]} set={v=>upOtNd(`${key}_rate`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_rate_time`]} set={v=>upOtNd(`${key}_rate_time`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_ot`]} set={v=>upOtNd(`${key}_ot`,v)} /></td></tr>)}</tbody>
+                      <tbody>
+                        {OT_ADJ_ROWS.map(({key,label,rate})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td><span className="readonly-rate">{rate}</span></td>
+                            <td><TimeInput dis={!isEditing} v={otNd[`${key}_time`]} set={v=>upOtNd(`${key}_time`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={otNd[key]} set={v=>upOtNd(key,v)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
                     </table>
                   </div>
                   <div className="form-box">
                     <h4>Night Differential</h4>
                     <table className="ot-nd-table">
                       <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
-                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNd[`${key}_rate_nd`]} set={v=>upOtNd(`${key}_rate_nd`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_rate_nd_time`]} set={v=>upOtNd(`${key}_rate_nd_time`,v)} /></td><td><Ni dis={!isEditing} v={otNd[`${key}_ot_nd`]} set={v=>upOtNd(`${key}_ot_nd`,v)} /></td></tr>)}</tbody>
+                      <tbody>
+                        {ND_ADJ_ROWS.map(({key,label,baseRate})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td><span className="readonly-rate">0.10% of {baseRate}</span></td>
+                            <td><TimeInput dis={!isEditing} v={otNd[`${key}_nd_time`]} set={v=>upOtNd(`${key}_nd_time`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={otNd[`${key}_nd`]} set={v=>upOtNd(`${key}_nd`,v)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
                     </table>
                   </div>
                 </div>
@@ -986,13 +1089,13 @@ export default function PayrollComputationPage() {
                 <div className="attendance-adj-grid">
                   <div className="form-box attendance-box">
                     <h4>Attendance Adjustments</h4>
-                    <table className="ot-nd-table">
-                      <thead><tr><th>Type</th><th style={{width:120}}>Time</th><th style={{width:120}}>Amount</th></tr></thead>
+                    <table className="ot-nd-table attendance-adjustment-table">
+                      <thead><tr><th></th><th style={{width:120}}>Time</th><th style={{width:120}}>Amount</th></tr></thead>
                       <tbody>
                         {ATT_ROWS.map(({key,label,hasTime})=>(
                           <tr key={key}>
                             <td>{label}</td>
-                            <td>{hasTime?<Ti dis={!isEditing} v={attAdj[`${key}_time`]} set={v=>upAttAdj(`${key}_time`,v)} />:null}</td>
+                            <td>{hasTime?<TimeInput dis={!isEditing} v={attAdj[`${key}_time`]} set={v=>upAttAdj(`${key}_time`,v)} />:null}</td>
                             <td><Ni dis={!isEditing} v={attAdj[`${key}_amt`]} set={v=>upAttAdj(`${key}_amt`,v)} /></td>
                           </tr>
                         ))}
@@ -1001,7 +1104,7 @@ export default function PayrollComputationPage() {
                   </div>
                   <div className="form-box premium-box">
                     <h4>Premium Adjustments</h4>
-                    <table className="ot-nd-table">
+                    <table className="ot-nd-table premium-adjustment-table">
                       <thead><tr><th>Type</th><th style={{width:120}}>Employee Share</th><th style={{width:120}}>Employer Share</th><th style={{width:120}}>ECC</th></tr></thead>
                       <tbody>
                         {PREM_ROWS.map(({key,label})=>(
@@ -1012,7 +1115,7 @@ export default function PayrollComputationPage() {
                             <td><Ni dis={!isEditing} v={attAdj[`${key}_ecc`]} set={v=>upAttAdj(`${key}_ecc`,v)} /></td>
                           </tr>
                         ))}
-                        <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td colSpan="2"></td></tr>
+                        <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td></td><td></td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -1027,14 +1130,32 @@ export default function PayrollComputationPage() {
                     <h4>Overtime</h4>
                     <table className="ot-adj-table">
                       <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
-                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}_rate`]} set={v=>upOtNdAdj(`ot_adj_${key}_rate`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}_rate_time`]} set={v=>upOtNdAdj(`ot_adj_${key}_rate_time`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}_ot`]} set={v=>upOtNdAdj(`ot_adj_${key}_ot`,v)} /></td></tr>)}</tbody>
+                      <tbody>
+                        {OT_ADJ_ROWS.map(({key,label,rate})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td><span className="readonly-rate">{rate}</span></td>
+                            <td><TimeInput dis={!isEditing} v={otNdAdj[`ot_adj_${key}_time`]} set={v=>upOtNdAdj(`ot_adj_${key}_time`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={otNdAdj[`ot_adj_${key}`]} set={v=>upOtNdAdj(`ot_adj_${key}`,v)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
                     </table>
                   </div>
                   <div className="form-box">
                     <h4>Night Differential</h4>
                     <table className="ot-adj-table">
                       <thead><tr><th>Type</th><th style={{width:120}}>Rate</th><th style={{width:120}}>Hours</th><th style={{width:120}}>Amount</th></tr></thead>
-                      <tbody>{OT_TYPES.map(({key,label})=><tr key={key}><td>{label}</td><td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}_rate`]} set={v=>upOtNdAdj(`nd_adj_${key}_rate`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}_rate_time`]} set={v=>upOtNdAdj(`nd_adj_${key}_rate_time`,v)} /></td><td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}_ot`]} set={v=>upOtNdAdj(`nd_adj_${key}_ot`,v)} /></td></tr>)}</tbody>
+                      <tbody>
+                        {ND_ADJ_ROWS.map(({key,label,baseRate})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td><span className="readonly-rate">0.10% of {baseRate}</span></td>
+                            <td><TimeInput dis={!isEditing} v={otNdAdj[`nd_adj_${key}_time`]} set={v=>upOtNdAdj(`nd_adj_${key}_time`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={otNdAdj[`nd_adj_${key}`]} set={v=>upOtNdAdj(`nd_adj_${key}`,v)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
                     </table>
                   </div>
                 </div>
@@ -1138,6 +1259,33 @@ function Ni({ v, set, dis=false }) {
 }
 function Ti({ v, set, dis=false }) {
   return <input type="text" disabled={dis} value={v??''} onChange={e=>set&&set(e.target.value)} style={{width:80}} />;
+}
+function TimeInput({ v, set, dis=false }) {
+  const [text, setText] = useState(formatMinutesToTime(v));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(formatMinutesToTime(v));
+  }, [v, focused]);
+  return (
+    <input
+      type="text"
+      disabled={dis}
+      value={text}
+      placeholder="000:00"
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        setText(e.target.value);
+        set?.(e.target.value);
+      }}
+      onBlur={() => {
+        const minutes = parseTimeToMinutes(text);
+        set?.(minutes);
+        setText(formatMinutesToTime(minutes));
+        setFocused(false);
+      }}
+      style={{ width:80 }}
+    />
+  );
 }
 function PConfirm({ open, title, msg, onOk, onCancel, okLabel='Confirm', okCls='btn' }) {
   if (!open) return null;

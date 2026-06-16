@@ -5137,6 +5137,7 @@ select:focus {
 .ot-nd-table th, .allowance-table th, .deduction-table th, .ot-adj-table th { background:#f4f4f4; font-weight:600; }
 .ot-nd-table input, .allowance-table input, .deduction-table input, .ot-adj-table input { width:100%; min-height:36px; padding:6px 8px; border:1px solid #d7dce2; border-radius:5px; font-size:13px; box-sizing:border-box; }
 .ot-nd-table input:disabled, .allowance-table input:disabled, .deduction-table input:disabled, .ot-adj-table input:disabled { background:#f5f5f5; border-color:transparent; }
+.readonly-rate { display:flex; align-items:center; min-height:36px; width:100%; padding:6px 8px; border:1px solid #d7dce2; border-radius:5px; background:#f8fafc; box-sizing:border-box; font-size:13px; color:#111827; white-space:normal; }
 
 /* Summary bar */
 .summary-bar { margin-top:20px; padding:16px 18px; background:#e8f5e9; border-radius:7px; display:grid; grid-template-columns:minmax(140px, 1fr) repeat(3, minmax(190px, 1fr)); align-items:center; font-size:18px; font-weight:700; gap:16px; color:#071326; }

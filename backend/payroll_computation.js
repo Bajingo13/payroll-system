@@ -8,6 +8,118 @@ module.exports = function (app, pool) {
         return Math.round(toMoney(value) * 100) / 100;
     }
 
+    const OT_ND_ADJ_COLUMNS = [
+        "ot_adj_rg_rate", "ot_adj_rg_ot",
+        "ot_adj_rd_rate", "ot_adj_rd_ot",
+        "ot_adj_sd_rate", "ot_adj_sd_ot",
+        "ot_adj_sdrd_rate", "ot_adj_sdrd_ot",
+        "ot_adj_hd_rate", "ot_adj_hd_ot",
+        "ot_adj_hdrd_rate", "ot_adj_hdrd_ot",
+        "nd_adj_rg_rate", "nd_adj_rg_ot",
+        "nd_adj_rd_rate", "nd_adj_rd_ot",
+        "nd_adj_sd_rate", "nd_adj_sd_ot",
+        "nd_adj_sdrd_rate", "nd_adj_sdrd_ot",
+        "nd_adj_hd_rate", "nd_adj_hd_ot",
+        "nd_adj_hdrd_rate", "nd_adj_hdrd_ot",
+        "ot_adj_rg_rate_time", "ot_adj_rg_ot_time",
+        "ot_adj_rd_rate_time", "ot_adj_rd_ot_time",
+        "ot_adj_sd_rate_time", "ot_adj_sd_ot_time",
+        "ot_adj_sdrd_rate_time", "ot_adj_sdrd_ot_time",
+        "ot_adj_hd_rate_time", "ot_adj_hd_ot_time",
+        "ot_adj_hdrd_rate_time", "ot_adj_hdrd_ot_time",
+        "nd_adj_rg_rate_time", "nd_adj_rg_ot_time",
+        "nd_adj_rd_rate_time", "nd_adj_rd_ot_time",
+        "nd_adj_sd_rate_time", "nd_adj_sd_ot_time",
+        "nd_adj_sdrd_rate_time", "nd_adj_sdrd_ot_time",
+        "nd_adj_hd_rate_time", "nd_adj_hd_ot_time",
+        "nd_adj_hdrd_rate_time", "nd_adj_hdrd_ot_time"
+    ];
+
+    const ATT_ADJ_COLUMNS = [
+        "basic_salary_time", "basic_salary_amt",
+        "absences_time", "absences_amt",
+        "late_time", "late_amt",
+        "undertime_time", "undertime_amt",
+        "others_amt",
+        "gsis_emp", "gsis_employer", "gsis_ecc",
+        "sss_emp", "sss_employer", "sss_ecc",
+        "pagibig_emp", "pagibig_employer", "pagibig_ecc",
+        "philhealth_emp", "philhealth_employer", "philhealth_ecc",
+        "tax_withheld"
+    ];
+
+    function normalizeNumericColumns(source, columns) {
+        const result = {};
+        columns.forEach(col => {
+            result[col] = Number(source?.[col]) || 0;
+        });
+        return result;
+    }
+
+    async function upsertPayrollAdjustment(conn, tableName, columns, payrollId, runId, employeeId, source) {
+        if (!source || typeof source !== "object") return;
+        const normalized = normalizeNumericColumns(source, columns);
+        const [existing] = await conn.query(
+            `SELECT adj_id FROM ${tableName} WHERE employee_id = ? AND run_id = ? LIMIT 1`,
+            [employeeId, runId]
+        );
+        if (existing.length > 0) {
+            const setClause = columns.map(col => `${col} = ?`).join(", ");
+            await conn.query(
+                `UPDATE ${tableName} SET ${setClause} WHERE employee_id = ? AND run_id = ?`,
+                [...columns.map(col => normalized[col]), employeeId, runId]
+            );
+            return;
+        }
+        const insertColumns = ["payroll_id", "run_id", "employee_id", ...columns];
+        const placeholders = insertColumns.map(() => "?").join(", ");
+        await conn.query(
+            `INSERT INTO ${tableName} (${insertColumns.join(", ")}) VALUES (${placeholders})`,
+            [payrollId, runId, employeeId, ...columns.map(col => normalized[col])]
+        );
+    }
+
+    function fixedPhilippineHolidayDates(year) {
+        return new Set([
+            `${year}-01-01`,
+            `${year}-04-09`,
+            `${year}-05-01`,
+            `${year}-06-12`,
+            `${year}-11-30`,
+            `${year}-12-25`,
+            `${year}-12-30`
+        ]);
+    }
+
+    async function getNonWorkingHolidayDates(conn, startDate, endDate) {
+        const years = new Set([String(startDate).slice(0, 4), String(endDate).slice(0, 4)]);
+        const holidayDates = new Set();
+        years.forEach((year) => {
+            fixedPhilippineHolidayDates(year).forEach((date) => {
+                if (date >= startDate && date <= endDate) holidayDates.add(date);
+            });
+        });
+        try {
+            const [rows] = await conn.query(
+                `SELECT DATE_FORMAT(event_date, '%Y-%m-%d') AS event_date
+                 FROM company_calendar_events
+                 WHERE event_date BETWEEN ? AND ?
+                   AND (
+                     is_paid_holiday = 1
+                     OR LOWER(event_type) LIKE '%holiday%'
+                     OR LOWER(event_type) LIKE '%non-working%'
+                   )`,
+                [startDate, endDate]
+            );
+            rows.forEach(row => {
+                if (row.event_date) holidayDates.add(String(row.event_date).slice(0, 10));
+            });
+        } catch (_) {
+            // Calendar table may not exist in older deployments; fixed holidays still apply.
+        }
+        return holidayDates;
+    }
+
     function normalizePayPeriod(value) {
         const period = String(value || '').trim().toUpperCase();
         if (period.includes('SEMI')) return 'SEMI-MONTHLY';
@@ -403,7 +515,7 @@ module.exports = function (app, pool) {
                 allowanceRows.filter(a => Number(a.is_taxable) !== 1).reduce((s, a) => s + Number(a.amount || 0), 0) * 100
             ) / 100;
 
-            const totalOtHours = Math.round(otRows.reduce((s, r) => s + Number(r.total_hours || 0), 0) * 100) / 100;
+            let totalOtHours = Math.round(otRows.reduce((s, r) => s + Number(r.total_hours || 0), 0) * 100) / 100;
 
             // Clip leave days to payroll period boundaries
             let totalLeaveDays = 0;
@@ -421,6 +533,10 @@ module.exports = function (app, pool) {
             let absenceDeduction = 0;
             let dailyRate = 0;
             let hourlyRate = 0;
+            let exactAbsenceDailyRate = 0;
+            let periodSalaryForAbsence = 0;
+            let workingDaysInPeriod = 0;
+            const nonWorkingHolidayDates = await getNonWorkingHolidayDates(conn, startDate, endDate);
 
             const effectiveSalary = (settings && Number(settings.main_computation) > 0)
                 ? Number(settings.main_computation)
@@ -431,12 +547,34 @@ module.exports = function (app, pool) {
 
             if (effectiveSalary > 0) {
                 const hoursInDay = Number(settings?.hours_in_day || 8);
+                const daysInYear = toMoney(settings?.days_in_year || 313);
 
-                // Compute daily rate based on payroll_rate type so that Daily Rate
-                // employees use their stored daily rate directly, Hourly Rate employees
-                // multiply by hours/day, Weekly Rate divides by days/week, and Monthly
-                // Rate / Piece Rate use the annual-days formula.
-                dailyRate  = computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
+                // Convert to monthly equivalent using the employee's stored rate type,
+                // then derive the period salary from the payroll group's pay frequency.
+                const monthlySalary = computeMonthlySalaryFromRate(effectiveSalary, effectivePayrollRate, settings || {});
+                const periodSalary  = computePeriodSalaryFromMonthly(monthlySalary, groupName, daysInYear);
+                periodSalaryForAbsence = periodSalary;
+
+                // Count working days (Mon–Fri) in this specific payroll period.
+                {
+                    const d = new Date(startDate + 'T12:00:00Z');
+                    const e = new Date(endDate   + 'T12:00:00Z');
+                    while (d <= e) {
+                        const dow = d.getUTCDay();
+                        const dateKey = d.toISOString().slice(0, 10);
+                        if (dow !== 0 && dow !== 6 && !nonWorkingHolidayDates.has(dateKey)) workingDaysInPeriod++;
+                        d.setUTCDate(d.getUTCDate() + 1);
+                    }
+                }
+
+                // Daily rate = period salary ÷ working days in the period so that
+                // absences are deducted proportionally to what the employee earns that period.
+                exactAbsenceDailyRate = workingDaysInPeriod > 0
+                    ? periodSalary / workingDaysInPeriod
+                    : computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
+                dailyRate  = workingDaysInPeriod > 0
+                    ? roundMoney(exactAbsenceDailyRate)
+                    : computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
                 hourlyRate = Math.round((dailyRate / hoursInDay) * 100) / 100;
 
                 otAmount = Math.round(totalOtHours * hourlyRate * 1.25 * 100) / 100;
@@ -498,9 +636,37 @@ module.exports = function (app, pool) {
                     } catch (_) { hrisAttRows = []; } // table may not exist on older deployments
 
                     if (hrisAttRows.length > 0) {
-                        const hrisAbsentCount = hrisAttRows.filter(r =>
-                            !r.time_in || String(r.status || '').toLowerCase().includes('absent')
-                        ).length;
+                        const toDateKey = (value) => {
+                            if (!value) return '';
+                            if (value instanceof Date) return value.toISOString().slice(0, 10);
+                            return String(value).slice(0, 10);
+                        };
+                        const presentDates = new Set();
+                        const explicitAbsentDates = new Set();
+                        hrisAttRows.forEach((row) => {
+                            const dateKey = toDateKey(row.attendance_date);
+                            if (!dateKey) return;
+                            const status = String(row.status || '').toLowerCase();
+                            if (status.includes('absent') || !row.time_in) {
+                                explicitAbsentDates.add(dateKey);
+                                return;
+                            }
+                            presentDates.add(dateKey);
+                        });
+                        const hrisAbsentDates = new Set(explicitAbsentDates);
+                        const iterD = new Date(startDate + 'T12:00:00Z');
+                        const iterEnd = new Date(endDate + 'T12:00:00Z');
+                        while (iterD <= iterEnd) {
+                            const dow = iterD.getUTCDay();
+                            if (dow !== 0 && dow !== 6) {
+                                const dateKey = iterD.toISOString().slice(0, 10);
+                                if (!nonWorkingHolidayDates.has(dateKey) && !presentDates.has(dateKey)) {
+                                    hrisAbsentDates.add(dateKey);
+                                }
+                            }
+                            iterD.setUTCDate(iterD.getUTCDate() + 1);
+                        }
+                        const hrisAbsentCount = hrisAbsentDates.size;
                         const totalHrisLateMin      = hrisAttRows.reduce((s, r) => s + Number(r.late_minutes     || 0), 0);
                         const totalHrisUndertimeMin = hrisAttRows.reduce((s, r) => s + Number(r.undertime_minutes || 0), 0);
                         const totalHrisOtHours      = Math.round(hrisAttRows.reduce((s, r) => s + Number(r.overtime_hours || 0), 0) * 100) / 100;
@@ -514,6 +680,7 @@ module.exports = function (app, pool) {
                             undertimeDeduction = Math.round((undertimeMinutes / 60) * hourlyRate * 100) / 100;
                         }
                         if (totalHrisOtHours > 0 && hourlyRate > 0) {
+                            totalOtHours = totalHrisOtHours;
                             otAmount = Math.round(totalHrisOtHours * hourlyRate * 1.25 * 100) / 100;
                         }
                         attendanceSource = 'hris_attendance';
@@ -558,7 +725,7 @@ module.exports = function (app, pool) {
                             const dow = iterD.getUTCDay();
                             if (dow !== 0 && dow !== 6) {
                                 const dateStr = iterD.toISOString().slice(0, 10);
-                                if (!presentDates.has(dateStr)) absentCount++;
+                                if (!nonWorkingHolidayDates.has(dateStr) && !presentDates.has(dateStr)) absentCount++;
                             }
                             iterD.setUTCDate(iterD.getUTCDate() + 1);
                         }
@@ -601,15 +768,22 @@ module.exports = function (app, pool) {
                 }
             }
 
-            // Finalize absence deduction using actual absent days
-            absenceDeduction = Math.round(totalAbsentDays * dailyRate * 100) / 100;
+            // Finalize absence deduction using actual absent days. Use the exact daily
+            // rate for multiplication so a full-period absence equals the period salary.
+            const rawAbsenceDeduction = Math.round(totalAbsentDays * (exactAbsenceDailyRate || dailyRate) * 100) / 100;
+            absenceDeduction = periodSalaryForAbsence > 0
+                ? Math.min(rawAbsenceDeduction, roundMoney(periodSalaryForAbsence))
+                : rawAbsenceDeduction;
+            const displayedOtHours = totalOtHours > 0
+                ? totalOtHours
+                : (otAmount > 0 && hourlyRate > 0 ? Math.round((otAmount / hourlyRate / 1.25) * 100) / 100 : 0);
 
             return res.json({
                 success: true,
                 period_range: `${startDate} to ${endDate}`,
                 ot: {
                     requests: otRows,
-                    total_hours: totalOtHours,
+                    total_hours: displayedOtHours,
                     computed_amount: otAmount
                 },
                 absences: {
@@ -2330,7 +2504,8 @@ module.exports = function (app, pool) {
                     philhealth_employee, philhealth_employer, philhealth_ecc,
                     tax_withheld, total_deductions, loans, other_deductions, premium_adj,
                     ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
-                    payroll_status, allowances = [], deductions = [], periodOption
+                    payroll_status, allowances = [], deductions = [], periodOption,
+                    ot_nd_adj, att_adj
                 } = p;
 
                 const adjustedSalary = Number(basic_salary || 0);
@@ -2475,6 +2650,26 @@ module.exports = function (app, pool) {
                 }
 
                 const payrollId = existing[0].payroll_id;
+
+                await upsertPayrollAdjustment(
+                    conn,
+                    "payroll_ot_nd_adjustments",
+                    OT_ND_ADJ_COLUMNS,
+                    payrollId,
+                    run_id,
+                    employee_id,
+                    ot_nd_adj
+                );
+
+                await upsertPayrollAdjustment(
+                    conn,
+                    "payroll_attendance_adjustments",
+                    ATT_ADJ_COLUMNS,
+                    payrollId,
+                    run_id,
+                    employee_id,
+                    att_adj
+                );
 
                 // ==================== ALLOWANCES ====================
                 if (Array.isArray(allowances)) {
