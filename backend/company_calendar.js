@@ -1,4 +1,4 @@
-const { createNotificationsForAllUsers } = require('./notificationHelper');
+    const { createNotificationsForAllUsers } = require('./notificationHelper');
 
 module.exports = function (app, pool) {
     const GOVERNMENT_HOLIDAY_DESCRIPTION = "Auto-added Philippine government holiday.";

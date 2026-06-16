@@ -152,6 +152,10 @@ function makeEmptyAttAdj() {
   return d;
 }
 
+function makeEmptyLeaveRows() {
+  return Array.from({length: 8}, () => ({ leave_type_id: '', used: '', amount: '' }));
+}
+
 export default function PayrollComputationPage() {
   const { user } = useAuth();
 
@@ -191,6 +195,16 @@ export default function PayrollComputationPage() {
 
   const [hrisData, setHrisData]       = useState(null);
   const [hrisLoading, setHrisLoading] = useState(false);
+
+  const [empLoans, setEmpLoans]         = useState([]);
+  const [loansLoading, setLoansLoading] = useState(false);
+  const [empLeaveData, setEmpLeaveData] = useState({ leaveBalances: [], leaveRequests: [] });
+  const [leavesLoading, setLeavesLoading] = useState(false);
+  const [leaveRows, setLeaveRows] = useState(makeEmptyLeaveRows);
+  const [loanRows, setLoanRows]         = useState([]);
+  const [selectedLoanRow, setSelectedLoanRow] = useState(null);
+  const [otherDedRows, setOtherDedRows] = useState([]);
+  const [selectedDedRow, setSelectedDedRow]   = useState(null);
 
   const [searchBy, setSearchBy]       = useState('employee_id');
   const [searchInput, setSearchInput] = useState('');
@@ -321,7 +335,10 @@ export default function PayrollComputationPage() {
   function upOtNd(k,v)    { setOtNd(p=>({...p,[k]:v})); }
   function upOtNdAdj(k,v) { setOtNdAdj(p=>({...p,[k]:v})); }
   function upAttAdj(k,v)  { setAttAdj(p=>({...p,[k]:v})); }
-
+  function addLoanRow() {
+    setLoanRows(prev => [...prev, { description:'', loan_amount:'', amortization:'', date_start:'', date_end:'', balance:'', skip:false, payment:'' }]);
+  }
+  
   function handlePayrollGroupChange(value) {
     setFilters(f => ({
       ...f,
@@ -359,7 +376,59 @@ export default function PayrollComputationPage() {
       flash(getApiMessage(err, 'Failed to load payroll periods.'), 'warning')
     );
   }, [filters.payroll_group]);
-  
+
+  function deleteLoanRow() {
+    if (selectedLoanRow === null) return;
+    setLoanRows(prev => {
+      const next = prev.filter((_, i) => i !== selectedLoanRow);
+      const total = next.filter(r=>!r.skip).reduce((s,r)=>s+toNum(r.payment),0);
+      setPayroll(p=>({...p, loans: total.toFixed(2)}));
+      return next;
+    });
+    setSelectedLoanRow(null);
+  }
+  function upLoanRow(i, field, value) {
+    setLoanRows(prev => {
+      const next = prev.map((r,idx)=>idx===i?{...r,[field]:value}:r);
+      const total = next.filter(r=>!r.skip).reduce((s,r)=>s+toNum(r.payment),0);
+      setPayroll(p=>({...p, loans: total.toFixed(2)}));
+      return next;
+    });
+  }
+  function addDedRow() {
+    setOtherDedRows(prev => [...prev, { description:'', employee_share:'', employer_share:'', date_start:'', date_end:'', skip:false }]);
+  }
+  function deleteDedRow() {
+    if (selectedDedRow === null) return;
+    setOtherDedRows(prev => {
+      const next = prev.filter((_, i) => i !== selectedDedRow);
+      const total = next.filter(r=>!r.skip).reduce((s,r)=>s+toNum(r.employee_share),0);
+      setPayroll(p=>({...p, other_deductions: total.toFixed(2)}));
+      return next;
+    });
+    setSelectedDedRow(null);
+  }
+  function upDedRow(i, field, value) {
+    setOtherDedRows(prev => {
+      const next = prev.map((r,idx)=>idx===i?{...r,[field]:value}:r);
+      const total = next.filter(r=>!r.skip).reduce((s,r)=>s+toNum(r.employee_share),0);
+      setPayroll(p=>({...p, other_deductions: total.toFixed(2)}));
+      return next;
+    });
+  }
+  function upLeaveRow(i, field, value) {
+    const dailyRate = toNum(payroll.basic_salary) / 26;
+    setLeaveRows(prev => {
+      const next = prev.map((r, idx) => idx === i ? {...r, [field]: value} : r);
+      if (field === 'used') {
+        next[i] = {...next[i], amount: parseFloat((toNum(value) * dailyRate).toFixed(2))};
+      }
+      const total = next.reduce((s, r) => s + toNum(r.amount), 0);
+      setPayroll(p => ({...p, total_leaves_used: total.toFixed(2)}));
+      return next;
+    });
+  }
+
   async function loadRunEmployees(rid) {
     const { data } = await api.get('/employees_for_payroll_run', {
       params: {
@@ -454,39 +523,43 @@ export default function PayrollComputationPage() {
 
   async function loadEmpData(empId, rid) {
     const effectiveRunId = rid || runId;
-    const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
-    const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
-    const [settingsResp, hrisResp] = await Promise.all([
-      api.get(`/employee_payroll_settings/${empId}`, {
-        params:{ run_id:effectiveRunId, group_id:(selectedGrp?.group_name||'').toLowerCase(), periodOption:selectedPeriod?.period_name||'' }
-      }),
-      (filters.month && filters.year && filters.payroll_period)
-        ? api.get('/payroll/hris-data', {
-            params:{ employee_id:empId, month_id:(selectedMon?.month_name||'').toLowerCase(), year_id:filters.year, period_id:(selectedPeriod?.period_name||'').toLowerCase(), run_id:effectiveRunId||'', group_id:(selectedGrp?.group_name||'').toLowerCase() }
-          }).catch(() => ({ data: null }))
-        : Promise.resolve({ data: null }),
-    ]);
+    // Fetch settings first so we can pass basic_salary to the HRIS endpoint
+    const settingsResp = await api.get(`/employee_payroll_settings/${empId}`, {
+      params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
+    });
     const { data } = settingsResp;
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
     const rec = data.data || {};
-    const hris = hrisResp?.data?.success ? hrisResp.data : null;
 
-    const nextP = makeEmptyPayroll();
-    Object.keys(nextP).forEach(k => { if(rec[k]!=null) nextP[k]=rec[k]; });
-
-    // Always recompute basic_salary from main_computation using the selected payroll group period,
-    // so it is never driven by the employee's own payroll_period setting.
+    // Compute basic_salary from settings so we can pass it to HRIS
+    let computedBasicSalary = toNum(rec.basic_salary);
     if (rec.main_computation) {
       const rawSalary = toNum(rec.main_computation);
       if (rawSalary > 0) {
         const grp = (meta.payrollGroups || []).find(g => String(g.group_id) === String(filters.payroll_group));
         const gName = (grp?.group_name || '').toUpperCase();
         const weekInYear = toNum(rec.week_in_year) || 52;
-        if (gName.includes('SEMI')) nextP.basic_salary = Math.round(rawSalary / 2 * 100) / 100;
-        else if (gName.includes('WEEK')) nextP.basic_salary = Math.round(rawSalary * 12 / weekInYear * 100) / 100;
-        else nextP.basic_salary = rawSalary;
+        if (gName.includes('SEMI')) computedBasicSalary = Math.round(rawSalary / 2 * 100) / 100;
+        else if (gName.includes('WEEK')) computedBasicSalary = Math.round(rawSalary * 12 / weekInYear * 100) / 100;
+        else computedBasicSalary = rawSalary;
       }
     }
+
+    // Fetch HRIS with the correct basic_salary so deductions are computed properly
+    let hris = null;
+    if (filters.month && filters.year && filters.payroll_period) {
+      try {
+        const hrisResp = await api.get('/payroll/hris-data', {
+          params:{ employee_id:empId, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:effectiveRunId||'', group_id:filters.payroll_group||'', basic_salary:computedBasicSalary||'' }
+        });
+        if (hrisResp.data?.success) hris = hrisResp.data;
+      } catch { /* no HRIS data available */ }
+    }
+
+    const nextP = makeEmptyPayroll();
+    Object.keys(nextP).forEach(k => { if(rec[k]!=null) nextP[k]=rec[k]; });
+    // Use the already-computed basic_salary (same logic run above for HRIS call)
+    if (computedBasicSalary > 0) nextP.basic_salary = computedBasicSalary;
     if (rec.previousYtd) {
       const ytd = rec.previousYtd;
       if (!nextP.ytd_sss)        nextP.ytd_sss        = ytd.ytd_sss||'';
@@ -511,40 +584,75 @@ export default function PayrollComputationPage() {
       if (totalDeductionRows > 0) nextP.total_deductions = totalDeductionRows;
     }
 
-    // Auto-populate attendance fields from HRIS when values are not yet saved
-    const attendanceUnset =
-      !toNum(nextP.absence_time) && !toNum(nextP.absence_deduction) &&
-      !toNum(nextP.late_time)    && !toNum(nextP.late_deduction) &&
-      !toNum(nextP.undertime)    && !toNum(nextP.undertime_deduction) &&
-      !toNum(nextP.overtime);
-    if (hris && attendanceUnset) {
-      nextP.absence_time        = Math.round((hris.absences?.total_days || 0) * 480);
-      nextP.absence_deduction   = hris.absences?.computed_deduction || 0;
-      nextP.late_time           = hris.attendance?.late_minutes || 0;
-      nextP.late_deduction      = hris.attendance?.late_deduction || 0;
-      nextP.undertime           = hris.attendance?.undertime_minutes || 0;
-      nextP.undertime_deduction = hris.attendance?.undertime_deduction || 0;
-      nextP.overtime            = hris.ot?.computed_amount || 0;
-    }
-
     const nextOt  = makeEmptyOtNd();    const otR = rec.ot_nd||{};       Object.keys(nextOt).forEach(k=>{if(otR[k]!=null)nextOt[k]=otR[k];});
     const nextAdj = makeEmptyOtNdAdj(); const aR  = rec.ot_nd_adj||{};   Object.keys(nextAdj).forEach(k=>{if(aR[k]!=null)nextAdj[k]=aR[k];});
     const nextAtt = makeEmptyAttAdj();  const atR = rec.attendance_adj||{}; Object.keys(nextAtt).forEach(k=>{if(atR[k]!=null)nextAtt[k]=atR[k];});
     if (hris) {
       const hrisAbsenceMinutes = Math.round((hris.absences?.total_days || 0) * 480);
-      const hrisLateMinutes = hris.attendance?.late_minutes || 0;
+      const hrisLateMinutes    = hris.attendance?.late_minutes || 0;
       const hrisUndertimeMinutes = hris.attendance?.undertime_minutes || 0;
-      const hrisOtMinutes = Math.round((hris.ot?.total_hours || 0) * 60);
-      if (!toNum(nextAtt.absences_time) && hrisAbsenceMinutes) nextAtt.absences_time = hrisAbsenceMinutes;
-      if (!toNum(nextAtt.absences_amt) && toNum(hris.absences?.computed_deduction)) nextAtt.absences_amt = hris.absences.computed_deduction;
-      if (!toNum(nextAtt.late_time) && hrisLateMinutes) nextAtt.late_time = hrisLateMinutes;
-      if (!toNum(nextAtt.late_amt) && toNum(hris.attendance?.late_deduction)) nextAtt.late_amt = hris.attendance.late_deduction;
-      if (!toNum(nextAtt.undertime_time) && hrisUndertimeMinutes) nextAtt.undertime_time = hrisUndertimeMinutes;
-      if (!toNum(nextAtt.undertime_amt) && toNum(hris.attendance?.undertime_deduction)) nextAtt.undertime_amt = hris.attendance.undertime_deduction;
-      if (!toNum(nextAdj.ot_adj_rg_ot_time) && hrisOtMinutes) nextAdj.ot_adj_rg_ot_time = hrisOtMinutes;
-      if (!toNum(nextAdj.ot_adj_rg_ot) && toNum(hris.ot?.computed_amount)) nextAdj.ot_adj_rg_ot = hris.ot.computed_amount;
+      const hrisOtMinutes      = Math.round((hris.ot?.total_hours || 0) * 60);
+      nextP.absence_time        = hrisAbsenceMinutes;
+      nextP.absence_deduction   = hris.absences?.computed_deduction || 0;
+      nextP.late_time           = hrisLateMinutes;
+      nextP.late_deduction      = hris.attendance?.late_deduction || 0;
+      nextP.undertime           = hrisUndertimeMinutes;
+      nextP.undertime_deduction = hris.attendance?.undertime_deduction || 0;
+      nextP.overtime            = hris.ot?.computed_amount || 0;
+      nextAtt.absences_time  = hrisAbsenceMinutes;
+      nextAtt.absences_amt   = hris.absences?.computed_deduction || 0;
+      nextAtt.late_time      = hrisLateMinutes;
+      nextAtt.late_amt       = hris.attendance?.late_deduction || 0;
+      nextAtt.undertime_time = hrisUndertimeMinutes;
+      nextAtt.undertime_amt  = hris.attendance?.undertime_deduction || 0;
+      nextAdj.ot_adj_rg_ot_time = hrisOtMinutes;
+      nextAdj.ot_adj_rg_ot      = hris.ot?.computed_amount || 0;
     }
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
+  }
+
+  async function loadLoansAndLeaves(empId, basicSalary = 0) {
+    setLoansLoading(true); setLeavesLoading(true);
+    try {
+      const [loansResp, leavesResp] = await Promise.all([
+        api.get('/loan_deductions', { params: { employee_id: empId, status: 'Active' } }).catch(() => ({ data: { loans: [] } })),
+        api.get('/payroll/employee-leaves', { params: { employee_id: empId } }).catch(() => ({ data: { leaveBalances: [], leaveRequests: [] } })),
+      ]);
+      const loans = loansResp.data.loans || [];
+      const balances = leavesResp.data.leaveBalances || [];
+      setEmpLoans(loans);
+      setEmpLeaveData({ leaveBalances: balances, leaveRequests: leavesResp.data.leaveRequests || [] });
+      // Build loan rows from active loans
+      const lrows = loans.map(l => ({
+        description: [l.loan_category, l.loan_reference].filter(Boolean).join(' — '),
+        loan_amount: toNum(l.balance_amount),
+        amortization: toNum(l.amortization_amount),
+        date_start: l.start_date || '',
+        date_end: l.end_date || '',
+        balance: toNum(l.balance_amount),
+        skip: false,
+        payment: toNum(l.amortization_amount),
+      }));
+      setLoanRows(lrows);
+      setSelectedLoanRow(null);
+      const loanTotal = lrows.reduce((s,r)=>s+toNum(r.payment),0);
+      setPayroll(p=>({...p, loans: loanTotal.toFixed(2)}));
+      setOtherDedRows([]);
+      setSelectedDedRow(null);
+      // Build leave rows
+      const dailyRate = toNum(basicSalary) / 26;
+      const newRows = makeEmptyLeaveRows();
+      balances.slice(0, 8).forEach((b, i) => {
+        const used = toNum(b.used_days);
+        const amount = parseFloat((used * dailyRate).toFixed(2));
+        newRows[i] = { leave_type_id: String(b.leave_type_id), used, amount };
+      });
+      setLeaveRows(newRows);
+      const totalLeavesAmt = newRows.reduce((s, r) => s + toNum(r.amount), 0);
+      setPayroll(p => ({...p, total_leaves_used: totalLeavesAmt.toFixed(2)}));
+    } finally {
+      setLoansLoading(false); setLeavesLoading(false);
+    }
   }
 
   async function selectEmployee(emp) {
@@ -555,6 +663,7 @@ export default function PayrollComputationPage() {
       setAllowances(d.allowances); setDeductions(d.deductions);
       setHrisData(d.hrisData || null);
       setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
+      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary));
       return;
     }
     setLoading(true);
@@ -565,6 +674,7 @@ export default function PayrollComputationPage() {
       setAllowances(d.allowances); setDeductions(d.deductions);
       setHrisData(d.hrisData || null);
       setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
+      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary));
     } catch(err) {
       flash(getApiMessage(err,'Failed to load employee payroll.'),'warning');
     } finally {
@@ -721,6 +831,8 @@ export default function PayrollComputationPage() {
       if (!data.success) throw new Error(data.message||'Failed to delete.');
       flash('Employee payroll record deleted.','success');
       setShowDeleteModal(false); setSelectedEmp(null); setPayroll(makeEmptyPayroll());
+      setLeaveRows(makeEmptyLeaveRows()); setLoanRows([]); setOtherDedRows([]);
+      setSelectedLoanRow(null); setSelectedDedRow(null);
       await loadRunEmployees(runId);
     } catch(err) {
       flash(getApiMessage(err,'Failed to delete.'),'warning');
@@ -732,6 +844,8 @@ export default function PayrollComputationPage() {
   function goBackToSetup() {
     setStep('setup'); setSelectedEmp(null); setEmployees([]);
     setRunId(null); setIsEditing(false); setPayroll(makeEmptyPayroll()); setShowBackModal(false);
+    setLeaveRows(makeEmptyLeaveRows()); setLoanRows([]); setOtherDedRows([]);
+    setSelectedLoanRow(null); setSelectedDedRow(null);
   }
 
   function handleCancelEdit() {
@@ -743,7 +857,7 @@ export default function PayrollComputationPage() {
   const TABS = [
     {id:'payroll',label:'Payroll'},{id:'ot-nd',label:'OT / ND'},
     {id:'allowances',label:'Allowances'},{id:'deductions',label:'Deductions'},
-    {id:'loans',label:'Loans'},{id:'attendanceAdj',label:'Attendance Adj'},
+    {id:'loans',label:'Loans'},{id:'attendanceAdj',label:'Premium Adj'},
     {id:'ot-adj',label:'Overtime Adj'},{id:'otherDeductions',label:'Other Deductions'},
     {id:'leaves',label:'Leaves'},
   ];
@@ -822,7 +936,7 @@ export default function PayrollComputationPage() {
                       onChange={e => {
                         const val = e.target.value;
                         setYearInputText(val);
-                        const match = meta.payrollYears.find(y => y.year_value === val);
+                        const match = meta.payrollYears.find(y => String(y.year_value) === val);
                         upFilter('year', match ? match.year_id : val);
                       }}
                     />
@@ -832,7 +946,7 @@ export default function PayrollComputationPage() {
                     {showYearPicker && (
                       <div className="year-picker-dropdown">
                         {Array.from({ length: 21 }, (_, i) => 2015 + i).map(yr => {
-                          const found = meta.payrollYears.find(y => y.year_value === String(yr));
+                          const found = meta.payrollYears.find(y => String(y.year_value) === String(yr));
                           const isSelected = found ? String(found.year_id)===String(filters.year) : String(filters.year)===String(yr);
                           return (
                             <div
@@ -1223,43 +1337,102 @@ export default function PayrollComputationPage() {
               </div>
             )}
 
-            {activeTab==='loans' && <div className="summary-input" style={{padding:10,color:'#888'}}>Loan records will appear here.</div>}
+            {activeTab==='loans' && (
+              <div className="summary-input">
+                <div className="form-box">
+                  {loansLoading ? (
+                    <p style={{color:'#888',padding:8}}>Loading loans…</p>
+                  ) : (
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                      <thead>
+                        <tr style={{background:'#f0f0f0'}}>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc'}}>Description</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110,textAlign:'right'}}>Loan Amount</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110,textAlign:'right'}}>Amortization</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110}}>Date Start</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110}}>Date End</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110,textAlign:'right'}}>Balance</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:48,textAlign:'center'}}>Skip</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110,textAlign:'right'}}>Payment</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loanRows.length === 0
+                          ? <tr><td colSpan={8} style={{padding:'10px 8px',border:'1px solid #ccc',color:'#aaa',textAlign:'center'}}>No loans. Click "Add Loan" to add a row.</td></tr>
+                          : loanRows.map((row, i) => (
+                            <tr key={i} onClick={()=>setSelectedLoanRow(i)}
+                              style={{background:selectedLoanRow===i?'#d0e8ff':i%2===0?'#fff':'#f9f9f9',cursor:'pointer'}}>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="text" disabled={!isEditing} value={row.description}
+                                  onChange={e=>upLoanRow(i,'description',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',fontSize:13}} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="number" step="0.01" disabled={!isEditing} value={row.loan_amount}
+                                  onChange={e=>upLoanRow(i,'loan_amount',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="number" step="0.01" disabled={!isEditing} value={row.amortization}
+                                  onChange={e=>upLoanRow(i,'amortization',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="date" disabled={!isEditing} value={row.date_start}
+                                  onChange={e=>upLoanRow(i,'date_start',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',fontSize:12}} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="date" disabled={!isEditing} value={row.date_end}
+                                  onChange={e=>upLoanRow(i,'date_end',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',fontSize:12}} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="number" step="0.01" disabled={!isEditing} value={row.balance}
+                                  onChange={e=>upLoanRow(i,'balance',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc',textAlign:'center'}}>
+                                <input type="checkbox" disabled={!isEditing} checked={!!row.skip}
+                                  onChange={e=>upLoanRow(i,'skip',e.target.checked)} />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="number" step="0.01" disabled={!isEditing} value={row.payment}
+                                  onChange={e=>upLoanRow(i,'payment',e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
+                              </td>
+                            </tr>
+                          ))
+                        }
+                      </tbody>
+                    </table>
+                  )}
+                  <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:8}}>
+                    {isEditing && <button type="button" className="btn" style={{fontSize:13}} onClick={addLoanRow}>Add Loan</button>}
+                    {isEditing && <button type="button" className="btn delete-btn" style={{fontSize:13}} disabled={selectedLoanRow===null} onClick={deleteLoanRow}>Delete Loan</button>}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {activeTab==='attendanceAdj' && (
               <div className="summary-input">
-                <div className="attendance-adj-grid">
-                  <div className="form-box attendance-box">
-                    <h4>Attendance Adjustments</h4>
-                    <table className="ot-nd-table attendance-adjustment-table">
-                      <thead><tr><th></th><th style={{width:120}}>Time</th><th style={{width:120}}>Amount</th></tr></thead>
-                      <tbody>
-                        {ATT_ROWS.map(({key,label,hasTime})=>(
-                          <tr key={key}>
-                            <td>{label}</td>
-                            <td>{hasTime?<TimeInput dis={!isEditing} v={attAdj[`${key}_time`]} set={v=>upAttAdj(`${key}_time`,v)} />:null}</td>
-                            <td><Ni dis={!isEditing} v={attAdj[`${key}_amt`]} set={v=>upAttAdj(`${key}_amt`,v)} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="form-box premium-box">
-                    <h4>Premium Adjustments</h4>
-                    <table className="ot-nd-table premium-adjustment-table">
-                      <thead><tr><th>Type</th><th style={{width:120}}>Employee Share</th><th style={{width:120}}>Employer Share</th><th style={{width:120}}>ECC</th></tr></thead>
-                      <tbody>
-                        {PREM_ROWS.map(({key,label})=>(
-                          <tr key={key}>
-                            <td>{label}</td>
-                            <td><Ni dis={!isEditing} v={attAdj[`${key}_emp`]} set={v=>upAttAdj(`${key}_emp`,v)} /></td>
-                            <td><Ni dis={!isEditing} v={attAdj[`${key}_employer`]} set={v=>upAttAdj(`${key}_employer`,v)} /></td>
-                            <td><Ni dis={!isEditing} v={attAdj[`${key}_ecc`]} set={v=>upAttAdj(`${key}_ecc`,v)} /></td>
-                          </tr>
-                        ))}
-                        <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td></td><td></td></tr>
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="form-box premium-box">
+                  <h4>Premium Adjustments</h4>
+                  <table className="ot-nd-table premium-adjustment-table">
+                    <thead><tr><th>Type</th><th style={{width:120}}>Employee Share</th><th style={{width:120}}>Employer Share</th><th style={{width:120}}>ECC</th></tr></thead>
+                    <tbody>
+                      {PREM_ROWS.map(({key,label})=>(
+                        <tr key={key}>
+                          <td>{label}</td>
+                          <td><Ni dis={!isEditing} v={attAdj[`${key}_emp`]} set={v=>upAttAdj(`${key}_emp`,v)} /></td>
+                          <td><Ni dis={!isEditing} v={attAdj[`${key}_employer`]} set={v=>upAttAdj(`${key}_employer`,v)} /></td>
+                          <td><Ni dis={!isEditing} v={attAdj[`${key}_ecc`]} set={v=>upAttAdj(`${key}_ecc`,v)} /></td>
+                        </tr>
+                      ))}
+                      <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td></td><td></td></tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -1303,8 +1476,135 @@ export default function PayrollComputationPage() {
               </div>
             )}
 
-            {activeTab==='otherDeductions' && <div className="summary-input" style={{padding:10,color:'#888'}}>Other deductions will appear here.</div>}
-            {activeTab==='leaves'           && <div className="summary-input" style={{padding:10,color:'#888'}}>Leave records will appear here.</div>}
+            {activeTab==='otherDeductions' && (
+              <div className="summary-input">
+                <div className="form-box">
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                    <thead>
+                      <tr style={{background:'#f0f0f0'}}>
+                        <th style={{padding:'6px 10px',border:'1px solid #ccc'}}>Deduction(s)</th>
+                        <th style={{padding:'6px 10px',border:'1px solid #ccc',width:130,textAlign:'right'}}>Employee Share</th>
+                        <th style={{padding:'6px 10px',border:'1px solid #ccc',width:130,textAlign:'right'}}>Employer Share</th>
+                        <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110}}>Date Start</th>
+                        <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110}}>Date End</th>
+                        <th style={{padding:'6px 10px',border:'1px solid #ccc',width:48,textAlign:'center'}}>Skip</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {otherDedRows.length === 0
+                        ? <tr><td colSpan={6} style={{padding:'10px 8px',border:'1px solid #ccc',color:'#aaa',textAlign:'center'}}>No deductions. Click "Add Deduction" to add a row.</td></tr>
+                        : otherDedRows.map((row, i) => (
+                          <tr key={i} onClick={()=>setSelectedDedRow(i)}
+                            style={{background:selectedDedRow===i?'#d0e8ff':i%2===0?'#fff':'#f9f9f9',cursor:'pointer'}}>
+                            <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                              <input type="text" disabled={!isEditing} value={row.description}
+                                onChange={e=>upDedRow(i,'description',e.target.value)}
+                                style={{width:'100%',border:'none',background:'transparent',fontSize:13}} />
+                            </td>
+                            <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                              <input type="number" step="0.01" disabled={!isEditing} value={row.employee_share}
+                                onChange={e=>upDedRow(i,'employee_share',e.target.value)}
+                                style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
+                            </td>
+                            <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                              <input type="number" step="0.01" disabled={!isEditing} value={row.employer_share}
+                                onChange={e=>upDedRow(i,'employer_share',e.target.value)}
+                                style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
+                            </td>
+                            <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                              <input type="date" disabled={!isEditing} value={row.date_start}
+                                onChange={e=>upDedRow(i,'date_start',e.target.value)}
+                                style={{width:'100%',border:'none',background:'transparent',fontSize:12}} />
+                            </td>
+                            <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                              <input type="date" disabled={!isEditing} value={row.date_end}
+                                onChange={e=>upDedRow(i,'date_end',e.target.value)}
+                                style={{width:'100%',border:'none',background:'transparent',fontSize:12}} />
+                            </td>
+                            <td style={{padding:'3px 6px',border:'1px solid #ccc',textAlign:'center'}}>
+                              <input type="checkbox" disabled={!isEditing} checked={!!row.skip}
+                                onChange={e=>upDedRow(i,'skip',e.target.checked)} />
+                            </td>
+                          </tr>
+                        ))
+                      }
+                    </tbody>
+                  </table>
+                  <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:8}}>
+                    {isEditing && <button type="button" className="btn" style={{fontSize:13}} onClick={addDedRow}>Add Deduction</button>}
+                    {isEditing && selectedDedRow !== null && <button type="button" className="btn delete-btn" style={{fontSize:13}} onClick={deleteDedRow}>Delete</button>}
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeTab==='leaves' && (
+              <div className="summary-input">
+                {leavesLoading ? (
+                  <p style={{color:'#888',padding:8}}>Loading leave data…</p>
+                ) : (
+                  <div className="form-box">
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                      <thead>
+                        <tr style={{background:'#f0f0f0'}}>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:32}}></th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc'}}>Leaves</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:80,textAlign:'right'}}>Left</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110,textAlign:'right'}}>Used</th>
+                          <th style={{padding:'6px 10px',border:'1px solid #ccc',width:110,textAlign:'right'}}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaveRows.map((row, i) => {
+                          const bal = empLeaveData.leaveBalances.find(b => String(b.leave_type_id) === String(row.leave_type_id));
+                          const left = bal ? bal.remaining_days : 0;
+                          return (
+                            <tr key={i}>
+                              <td style={{padding:'4px 8px',border:'1px solid #ccc',textAlign:'center',color:'#555'}}>{i+1}.</td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <select
+                                  disabled={!isEditing}
+                                  value={row.leave_type_id}
+                                  onChange={e => upLeaveRow(i, 'leave_type_id', e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',fontSize:13}}
+                                >
+                                  <option value=""></option>
+                                  {empLeaveData.leaveBalances.map(b => (
+                                    <option key={b.leave_type_id} value={String(b.leave_type_id)}>{b.leave_name}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td style={{padding:'4px 8px',border:'1px solid #ccc',textAlign:'right'}}>{fmt(left)}</td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="number" step="0.01" min="0" disabled={!isEditing}
+                                  value={row.used}
+                                  onChange={e => upLeaveRow(i, 'used', e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}}
+                                />
+                              </td>
+                              <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
+                                <input type="number" step="0.01" min="0" disabled={!isEditing}
+                                  value={row.amount}
+                                  onChange={e => upLeaveRow(i, 'amount', e.target.value)}
+                                  style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{background:'#f0f0f0',fontWeight:600}}>
+                          <td colSpan={4} style={{padding:'6px 10px',border:'1px solid #ccc',textAlign:'right'}}>Total Amount</td>
+                          <td style={{padding:'6px 10px',border:'1px solid #ccc',textAlign:'right'}}>
+                            {fmt(leaveRows.reduce((s,r) => s + toNum(r.amount), 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="summary-bar">
               <label>

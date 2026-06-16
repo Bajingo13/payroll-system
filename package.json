@@ -3,7 +3,7 @@
     "start": "node server.js",
     "dev:react": "vite --config frontend-react/vite.config.js",
     "build": "vite build --config frontend-react/vite.config.js",
-    "dev": "concurrently \"npm start\" \"npm run dev:react\""
+    "dev": "concurrently \"node --watch server.js\" \"npm run dev:react\""
   },
   "dependencies": {
     "@vitejs/plugin-react": "^6.0.2",

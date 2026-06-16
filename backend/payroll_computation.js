@@ -356,7 +356,15 @@ module.exports = function (app, pool) {
             conn = await pool.getConnection();
 
             const [[monthRow]] = await conn.query("SELECT month_name FROM payroll_months WHERE month_id = ? LIMIT 1", [monthId]);
-            const [[yearRow]] = await conn.query("SELECT year_value FROM payroll_years WHERE year_id = ? LIMIT 1", [yearId]);
+            let [[yearRow]] = await conn.query("SELECT year_value FROM payroll_years WHERE year_id = ? LIMIT 1", [yearId]);
+            // Fallback: if year_id didn't match a DB row, try treating it as a year_value (e.g. 2026)
+            if (!yearRow) {
+                [[yearRow]] = await conn.query("SELECT year_value FROM payroll_years WHERE year_value = ? LIMIT 1", [yearId]);
+            }
+            // Last resort: if yearId looks like a valid calendar year, use it directly
+            if (!yearRow && yearId >= 2000 && yearId <= 2100) {
+                yearRow = { year_value: yearId };
+            }
             const [[periodRow]] = await conn.query("SELECT period_name FROM payroll_periods WHERE period_id = ? LIMIT 1", [periodId]);
 
             if (!monthRow || !yearRow || !periodRow) {
@@ -545,13 +553,31 @@ module.exports = function (app, pool) {
             // Determine the payroll_rate for the fallback path (no settings row).
             const effectivePayrollRate = settings?.payroll_rate || 'Monthly Rate';
 
-            if (effectiveSalary > 0) {
-                const hoursInDay = Number(settings?.hours_in_day || 8);
+            if (effectiveSalary > 0 || paramBasicSalary > 0) {
+                const hoursInDay  = Number(settings?.hours_in_day  || 8);
+                const daysInYear  = toMoney(settings?.days_in_year  || 313);
+                const daysInWeek  = toMoney(settings?.days_in_week  || 5);
+                const weekInYear  = toMoney(settings?.week_in_year  || 52);
 
-                dailyRate             = computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
+                if (paramBasicSalary > 0) {
+                    // Derive daily rate from the period salary sent by the frontend so
+                    // the result is consistent with the displayed Basic Salary regardless
+                    // of the employee's payroll_rate setting (e.g. 'Daily Rate' in DB while
+                    // the employee is actually monthly-paid).
+                    // Use Philippine standard: monthly salary / 26 = daily rate.
+                    const grpPeriod = normalizePayPeriod(groupName);
+                    let monthlySalary;
+                    if (grpPeriod === 'SEMI-MONTHLY')   monthlySalary = paramBasicSalary * 2;
+                    else if (grpPeriod === 'WEEKLY')     monthlySalary = Math.round(paramBasicSalary * weekInYear / 12 * 100) / 100;
+                    else                                 monthlySalary = paramBasicSalary; // MONTHLY
+                    const effectiveDaysInYear = daysInYear >= 26 ? daysInYear : 313;
+                    dailyRate = Math.round((monthlySalary * 12) / effectiveDaysInYear * 100) / 100;
+                } else {
+                    dailyRate = computeEffectiveDailyRate(effectiveSalary, effectivePayrollRate, settings || {});
+                }
+
                 exactAbsenceDailyRate = dailyRate;
                 hourlyRate            = Math.round((dailyRate / hoursInDay) * 100) / 100;
-
                 otAmount = Math.round(totalOtHours * hourlyRate * 1.25 * 100) / 100;
                 // absenceDeduction computed after attendance block once totalAbsentDays is known
             }

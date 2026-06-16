@@ -1054,4 +1054,56 @@ module.exports = function (app, pool) {
       if (conn) conn.release();
     }
   });
+
+  // Payroll context: get leave balances + recent requests by employee_id (no user_id needed)
+  app.get('/api/payroll/employee-leaves', async (req, res) => {
+    const employeeId = Number(req.query.employee_id || 0);
+    if (!employeeId) return res.status(400).json({ success: false, message: 'Missing employee_id' });
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await ensureLeaveTables(conn);
+
+      const [types] = await conn.execute(
+        'SELECT leave_type_id, leave_name, annual_allocation_days FROM leave_types ORDER BY leave_name ASC'
+      );
+
+      const [approvedUsage] = await conn.execute(
+        `SELECT leave_type_id, SUM(total_days) AS used_days
+         FROM employee_leave_requests
+         WHERE employee_id = ? AND status = 'Approved' AND YEAR(start_date) = YEAR(CURDATE())
+         GROUP BY leave_type_id`,
+        [employeeId]
+      );
+
+      const usageMap = new Map(approvedUsage.map(r => [Number(r.leave_type_id), Number(r.used_days || 0)]));
+
+      const leaveBalances = types.map(type => ({
+        leave_type_id: type.leave_type_id,
+        leave_name: type.leave_name,
+        allocation_days: Number(type.annual_allocation_days || 0),
+        used_days: usageMap.get(Number(type.leave_type_id)) || 0,
+        remaining_days: Math.max(Number(type.annual_allocation_days || 0) - (usageMap.get(Number(type.leave_type_id)) || 0), 0)
+      }));
+
+      const [requests] = await conn.execute(
+        `SELECT r.request_id, r.leave_type_id, t.leave_name, r.start_date, r.end_date,
+                r.total_days, r.reason, r.rejection_reason, r.status, r.created_at
+         FROM employee_leave_requests r
+         JOIN leave_types t ON t.leave_type_id = r.leave_type_id
+         WHERE r.employee_id = ?
+         ORDER BY r.created_at DESC
+         LIMIT 60`,
+        [employeeId]
+      );
+
+      return res.json({ success: true, leaveBalances, leaveRequests: requests });
+    } catch (err) {
+      console.error('Payroll employee leaves error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
 };
