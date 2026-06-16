@@ -1758,15 +1758,46 @@ module.exports = function (app, pool) {
                 return record && (record.type_option || "").toLowerCase() === "computed";
             }
 
+            // The Pag-IBIG "Computation" formulas encode their own rate/cap in the label,
+            // so they can be evaluated directly from the employee's Amount Rate (MC)
+            // instead of going through the salary-bracket table.
+            function computePagibigFormula(formula, mc) {
+                const f = String(formula || '').trim().toLowerCase();
+                const MC = toMoney(mc);
+                if (f === 'ee (2% of mc) max 100 & er (2% of mc) max 100') {
+                    return { ee_share: Math.min(roundMoney(MC * 0.02), 100), er_share: Math.min(roundMoney(MC * 0.02), 100) };
+                }
+                if (f === 'ee (2% of mc) & er (fix 100)') {
+                    return { ee_share: roundMoney(MC * 0.02), er_share: 100 };
+                }
+                if (f === 'ee (2% of mc + er - 100) & er (fix 100)') {
+                    const er = 100;
+                    return { ee_share: roundMoney(0.02 * (MC + er - 100)), er_share: er };
+                }
+                if (f === 'ee & er (2% of mc)') {
+                    return { ee_share: roundMoney(MC * 0.02), er_share: roundMoney(MC * 0.02) };
+                }
+                return null;
+            }
+
             const sssRecord = getContributionRecord(contributions, 1);
             const pagibigRecord = getContributionRecord(contributions, 2);
             const philhealthRecord = getContributionRecord(contributions, 3);
+            const wtaxRecord = getContributionRecord(contributions, 4);
 
             const computeSSS = shouldCompute(sssRecord);
             const computePagibig = shouldCompute(pagibigRecord);
             const computePhilhealth = shouldCompute(philhealthRecord);
+            const computeWtax = shouldCompute(wtaxRecord);
 
-            if (computeSSS) {
+            // "Fix" means the admin-entered figures on the contribution row ARE the
+            // amount to use, so the bracket-table lookup is skipped for that column.
+            const sssIsFix = computeSSS && String(sssRecord.computation || '').toLowerCase() === 'fix';
+            const pagibigFormula = computePagibig ? computePagibigFormula(pagibigRecord.computation, employee.main_computation) : null;
+            const pagibigIsFix = computePagibig && String(pagibigRecord.computation || '').toLowerCase() === 'fix';
+            const philhealthIsFix = computePhilhealth && String(philhealthRecord.computation || '').toLowerCase() === 'fix';
+
+            if (computeSSS && !sssIsFix) {
                 const monthlySalarySSS = computeMonthlySalaryFromRate(
                     employee.main_computation, employee.payroll_rate, employee
                 );
@@ -1806,8 +1837,11 @@ module.exports = function (app, pool) {
                     }
                 }
             }
-            
-            if (computePagibig) {
+
+            if (computePagibig && pagibigFormula) {
+                pagibigRecord.ee_share = pagibigFormula.ee_share;
+                pagibigRecord.er_share = pagibigFormula.er_share;
+            } else if (computePagibig && !pagibigIsFix) {
                 const monthlySalaryPagibig = computeMonthlySalaryFromRate(
                     employee.main_computation, employee.payroll_rate, employee
                 );
@@ -1842,8 +1876,8 @@ module.exports = function (app, pool) {
                     }
                 }
             }
-            
-            if (computePhilhealth) {
+
+            if (computePhilhealth && !philhealthIsFix) {
                 const monthlySalaryPH = computeMonthlySalaryFromRate(
                     employee.main_computation, employee.payroll_rate, employee
                 );
@@ -1879,6 +1913,27 @@ module.exports = function (app, pool) {
                 }
             }
 
+            if (computeWtax) {
+                const wtaxFormula = String(wtaxRecord.computation || '').toLowerCase();
+                if (wtaxFormula === 'gross taxable' || wtaxFormula === 'gross pay') {
+                    const monthlySalaryWtax = computeMonthlySalaryFromRate(
+                        employee.main_computation, employee.payroll_rate, employee
+                    );
+                    const normalizedPeriodWtax = normalizePayPeriod(effectivePayrollPeriod);
+                    const periodDivisorWtax = normalizedPeriodWtax === 'SEMI-MONTHLY' ? 2
+                        : normalizedPeriodWtax === 'WEEKLY' ? 4
+                        : 1;
+                    const periodBasisWtax = Math.round(monthlySalaryWtax / periodDivisorWtax * 100) / 100;
+                    const taxResult = await lookupWithholdingTax(conn, periodBasisWtax, effectivePayrollPeriod, employee.tax_status);
+                    wtaxRecord.ee_share = roundMoney(taxResult.amount);
+                } else if (wtaxFormula === 'ewt') {
+                    // No EWT rate/table is configured yet; keep the admin-entered figure
+                    // rather than guessing a percentage.
+                    console.warn(`Contribution ${employee.employee_id}: WTax formula "EWT" has no configured rate, using stored ee_share.`);
+                }
+                // 'fix' (or any unrecognized formula) keeps the stored ee_share as-is.
+            }
+
             // Map computed contribution amounts to the employee payroll fields when no
             // saved values were loaded from the DB (i.e., the field is still NULL).
             if (computeSSS && employee.sss_employee == null && sssRecord) {
@@ -1893,6 +1948,9 @@ module.exports = function (app, pool) {
             if (computePhilhealth && employee.philhealth_employee == null && philhealthRecord) {
                 employee.philhealth_employee = philhealthRecord.ee_share || 0;
                 employee.philhealth_employer = philhealthRecord.er_share || 0;
+            }
+            if (computeWtax && employee.tax_withheld == null && wtaxRecord) {
+                employee.tax_withheld = wtaxRecord.ee_share || 0;
             }
 
             // Check if there is a payroll record for this employee and run_id

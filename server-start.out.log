@@ -17,3 +17,10 @@ OK > Server running on port 12687
 OK > Active DB mode: local-mysql
 OK > db-test route registered
 OK > system_config tables ready
+✅ Audit logged: Admin → Payroll run created (April 1-15, 2026)
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Payroll run created (July 1-30, 2026)
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001
+✅ Audit logged: Admin → Updated Employee EMP-001

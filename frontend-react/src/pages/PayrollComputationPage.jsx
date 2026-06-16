@@ -220,11 +220,13 @@ function buildPeriodLeaveRows(hrisData, basicSalary = 0, leaveBalances = []) {
 
 function applyContributionRows(payroll, contributions = []) {
   const next = { ...payroll };
+  // contribution_type_id 4 is Withholding Tax (WTax) and only has an employee-side
+  // amount, which feeds tax_withheld directly — it is not GSIS.
   const map = {
     1: ['sss_employee', 'sss_employer', 'sss_ecc'],
     2: ['pagibig_employee', 'pagibig_employer', 'pagibig_ecc'],
     3: ['philhealth_employee', 'philhealth_employer', 'philhealth_ecc'],
-    4: ['gsis_employee', 'gsis_employer', 'gsis_ecc']
+    4: ['tax_withheld']
   };
 
   contributions.forEach((contribution) => {
@@ -233,8 +235,8 @@ function applyContributionRows(payroll, contributions = []) {
     if (!fields) return;
     const [employeeField, employerField, eccField] = fields;
     if (!toNum(next[employeeField])) next[employeeField] = toNum(contribution.ee_share);
-    if (!toNum(next[employerField])) next[employerField] = toNum(contribution.er_share);
-    if (!toNum(next[eccField])) next[eccField] = toNum(contribution.ecc);
+    if (employerField && !toNum(next[employerField])) next[employerField] = toNum(contribution.er_share);
+    if (eccField && !toNum(next[eccField])) next[eccField] = toNum(contribution.ecc);
   });
 
   return next;
