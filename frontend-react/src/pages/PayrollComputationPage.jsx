@@ -301,6 +301,7 @@ export default function PayrollComputationPage() {
   const [showEmpModal, setShowEmpModal]       = useState(false);
   const [availableEmps, setAvailableEmps]     = useState([]);
   const [selectedForModal, setSelectedForModal] = useState(new Set());
+  const [modalSelectMode, setModalSelectMode] = useState('');
   const [modalSearch, setModalSearch]         = useState('');
   const [modalSearchBy, setModalSearchBy]     = useState('employee_id');
   const [showSaveModal, setShowSaveModal]     = useState(false);
@@ -658,6 +659,7 @@ export default function PayrollComputationPage() {
       });
       setAvailableEmps(data.employees||[]);
       setSelectedForModal(new Set());
+      setModalSelectMode('');
       setModalSearch('');
       setShowEmpModal(true);
     } catch(err) {
@@ -691,10 +693,12 @@ export default function PayrollComputationPage() {
             department:filters.department||'', class:filters.class||'',
             position:filters.position||'', empType:filters.empType||'',
             salaryType:filters.salaryType||'',
+            payroll_period: selectedGrp?.group_name || ''
           }
         });
         setAvailableEmps(empData.employees||[]);
         setSelectedForModal(new Set());
+        setModalSelectMode('');
         setModalSearch('');
         setShowEmpModal(true);
       } else {
@@ -1085,11 +1089,20 @@ export default function PayrollComputationPage() {
   ];
 
   function toggleModal(empId) {
+    setModalSelectMode('');
     setSelectedForModal(prev => {
       const n = new Set(prev);
       n.has(empId) ? n.delete(empId) : n.add(empId);
       return n;
     });
+  }
+  function selectAllModalEmps() {
+    setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)));
+    setModalSelectMode('select_all');
+  }
+  function clearAllModalEmps() {
+    setSelectedForModal(new Set());
+    setModalSelectMode('clear_all');
   }
 
   // ============================================================
@@ -1233,8 +1246,8 @@ export default function PayrollComputationPage() {
               <h3>Select Employees to Add to Payroll</h3>
               <p>Choose the employees you want to include in this payroll run.</p>
               <div className="helper-tools" style={{margin:'10px 0'}}>
-                <label><input type="radio" name="ms" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)))} /> Select All</label>
-                <label style={{marginLeft:5}}><input type="radio" name="ms" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set())} /> Clear All</label>
+                <label><input type="radio" name="ms" checked={modalSelectMode==='select_all'} onChange={selectAllModalEmps} /> Select All</label>
+                <label style={{marginLeft:5}}><input type="radio" name="ms" checked={modalSelectMode==='clear_all'} onChange={clearAllModalEmps} /> Clear All</label>
                 <label style={{marginLeft:10}}>Quick Search:</label>
                 <select value={modalSearchBy} onChange={e=>setModalSearchBy(e.target.value)}>
                   <option value="employee_id">Employee ID</option>
@@ -1860,8 +1873,8 @@ export default function PayrollComputationPage() {
             <h3>Add Employees to Payroll Run</h3>
             <p>Choose the employees you want to include in this payroll run.</p>
             <div className="helper-tools" style={{margin:'10px 0'}}>
-              <label><input type="radio" name="ms2" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)))} /> Select All</label>
-              <label style={{marginLeft:5}}><input type="radio" name="ms2" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set())} /> Clear All</label>
+              <label><input type="radio" name="ms2" checked={modalSelectMode==='select_all'} onChange={selectAllModalEmps} /> Select All</label>
+              <label style={{marginLeft:5}}><input type="radio" name="ms2" checked={modalSelectMode==='clear_all'} onChange={clearAllModalEmps} /> Clear All</label>
               <label style={{marginLeft:10}}>Quick Search:</label>
               <select value={modalSearchBy} onChange={e=>setModalSearchBy(e.target.value)}>
                 <option value="employee_id">Employee ID</option>
