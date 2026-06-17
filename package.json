@@ -3,19 +3,9 @@
     "start": "node server.js",
     "dev:react": "vite --config frontend-react/vite.config.js",
     "build": "vite build --config frontend-react/vite.config.js",
-    "dev": "concurrently \"node --watch server.js\" \"npm run dev:react\"",
-    "mobile:build": "npm run build && cap sync",
-    "mobile:android": "npm run mobile:build && cap open android",
-    "mobile:ios": "npm run mobile:build && cap open ios",
-    "cap:sync": "cap sync",
-    "cap:add:android": "cap add android",
-    "cap:add:ios": "cap add ios"
+    "dev": "concurrently \"node --watch server.js\" \"npm run dev:react\""
   },
   "dependencies": {
-    "@capacitor/android": "^8.4.0",
-    "@capacitor/cli": "^8.4.0",
-    "@capacitor/core": "^8.4.0",
-    "@capacitor/ios": "^8.4.0",
     "@vitejs/plugin-react": "^6.0.2",
     "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",

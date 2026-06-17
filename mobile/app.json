@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Astreablue",
+    "slug": "astreablue-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1e40af"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1e40af"
+      },
+      "package": "com.astreablue.employee"
+    },
+    "ios": {
+      "bundleIdentifier": "com.astreablue.employee"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}

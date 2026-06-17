@@ -8,53 +8,6 @@ import NotificationBell from './NotificationBell.jsx';
 
 const SESSION_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_TIMEOUT_MS || 15 * 60 * 1000);
 
-const TAB_ICONS = {
-  home: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 10.5L12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z"/>
-      <polyline points="9,21 9,13 15,13 15,21"/>
-    </svg>
-  ),
-  leave: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
-      <path d="M8 14h.01M12 14h.01M16 14h.01"/>
-    </svg>
-  ),
-  overtime: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"/>
-      <polyline points="12,7 12,12 15.5,12"/>
-      <line x1="18.5" y1="5.5" x2="20" y2="4"/>
-    </svg>
-  ),
-  payroll: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2" y="6" width="20" height="13" rx="2"/>
-      <line x1="2" y1="11" x2="22" y2="11"/>
-      <circle cx="12" cy="15.5" r="1.5"/>
-    </svg>
-  ),
-  schedule: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
-      <polyline points="8,15 11,18 16,13"/>
-    </svg>
-  ),
-  profile: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-      <circle cx="12" cy="7" r="4"/>
-    </svg>
-  )
-};
-
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -67,11 +20,6 @@ export default function AppLayout() {
     payrollReports: false,
     advancedModules: false
   });
-  const [installPrompt, setInstallPrompt] = useState(null);
-  const [isAppInstalled, setIsAppInstalled] = useState(() => (
-    window.matchMedia?.('(display-mode: standalone)').matches ||
-    window.navigator?.standalone === true
-  ));
   const [, setRoleAccessVersion] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -150,25 +98,6 @@ export default function AppLayout() {
     };
   }, []);
 
-  useEffect(() => {
-    function handleBeforeInstallPrompt(event) {
-      event.preventDefault();
-      setInstallPrompt(event);
-    }
-
-    function handleInstalled() {
-      setInstallPrompt(null);
-      setIsAppInstalled(true);
-    }
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleInstalled);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleInstalled);
-    };
-  }, []);
-
   async function handleLogout(event) {
     event.preventDefault();
     await logout();
@@ -233,14 +162,6 @@ export default function AppLayout() {
     { to: '/employee-schedule', label: 'Schedule', feature: 'employee-schedule' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' }
   ];
-  const employeeMobileNav = [
-    { to: '/dashboard', label: 'Home', shortLabel: 'Home', icon: 'home', feature: 'dashboard' },
-    { to: '/employee-leave-request', label: 'Leave', shortLabel: 'Leave', icon: 'leave', feature: 'employee-leave-request' },
-    { to: '/employee-overtime-request', label: 'Overtime', shortLabel: 'OT', icon: 'overtime', feature: 'employee-overtime-request' },
-    { to: '/employee-payroll-information', label: 'Payroll', shortLabel: 'Pay', icon: 'payroll', feature: 'employee-payroll-information' },
-    { to: '/employee-schedule', label: 'Schedule', shortLabel: 'Sched', icon: 'schedule', feature: 'employee-schedule' },
-    { to: '/personal-management', label: 'Profile', shortLabel: 'Me', icon: 'profile', feature: 'personal-management' }
-  ];
 
   const hrWorkforceNav = [
     { to: '/employee-management', label: 'Employee File', feature: 'employee-management' },
@@ -278,7 +199,6 @@ export default function AppLayout() {
   ];
 
   const visibleEmployeeNav = employeeNav.filter((item) => hasFeature(item.feature));
-  const visibleEmployeeMobileNav = employeeMobileNav.filter((item) => hasFeature(item.feature));
   const visibleHrWorkforceNav = hrWorkforceNav.filter((item) => hasFeature(item.feature));
   const visibleHrToolsNav = hrToolsNav.filter((item) => hasFeature(item.feature));
   const visibleAdminReportNav = adminReportNav.filter((item) => hasFeature(item.feature));
@@ -300,22 +220,8 @@ export default function AppLayout() {
     }));
   }
 
-  async function handleInstallEmployeeApp() {
-    if (!installPrompt) {
-      window.alert('To download this employee app, open your browser menu and choose Add to Home Screen or Install App.');
-      return;
-    }
-
-    installPrompt.prompt();
-    const choice = await installPrompt.userChoice.catch(() => null);
-    if (choice?.outcome === 'accepted') {
-      setIsAppInstalled(true);
-    }
-    setInstallPrompt(null);
-  }
-
   return (
-    <div className={`app-shell${isEmployee ? ' employee-app-shell' : ''}`}>
+    <div className="app-shell">
       <aside className={`sidebar${drawerOpen ? ' mobile-open' : ''}`}>
         <div className="profile">
           <div className="logo">
@@ -437,82 +343,29 @@ export default function AppLayout() {
         </nav>
       </aside>
 
-      {drawerOpen && !isEmployee ? (
+      {drawerOpen ? (
         <div className="mobile-drawer-overlay" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
       ) : null}
 
-      {isEmployee ? (
-        <header className="employee-mobile-topbar">
-          <div className="employee-mobile-brand">
-            <img src={astreaBlueLogo} alt="AstreaBlue" />
-            <div>
-              <strong>{user?.full_name || 'Employee'}</strong>
-              <span>{user?.role || 'Employee'}</span>
-            </div>
-          </div>
-          <div className="employee-mobile-actions">
-            {!isAppInstalled ? (
-              <button
-                type="button"
-                className="employee-mobile-install"
-                onClick={handleInstallEmployeeApp}
-              >
-                Download App
-              </button>
-            ) : null}
-            <NotificationBell />
-            <details className="page-account-menu employee-mobile-account">
-              <summary aria-label="Open account menu">
-                <span className="page-account-avatar">
-                  {avatar ? <img src={avatar} alt={`${user?.full_name || 'User'} profile`} /> : <span>{accountInitials}</span>}
-                </span>
-              </summary>
-              <div className="page-account-dropdown">
-                <div className="page-account-card">
-                  <span className="page-account-avatar page-account-avatar-large">
-                    {avatar ? <img src={avatar} alt={`${user?.full_name || 'User'} profile`} /> : <span>{accountInitials}</span>}
-                  </span>
-                  <div>
-                    <strong>{user?.full_name || 'User'}</strong>
-                    <small>{user?.role || 'Employee'}</small>
-                  </div>
-                </div>
-                <button type="button" className="page-account-action" onClick={() => fileInputRef.current?.click()}>
-                  Change Picture
-                </button>
-                <NavLink className="page-account-action" to={accountSettingsPath}>
-                  Account Settings
-                </NavLink>
-                <button type="button" className="page-account-action danger" onClick={handleLogout}>
-                  Sign Out
-                </button>
-              </div>
-            </details>
-          </div>
-        </header>
-      ) : null}
-
-      <main className={`section${isEmployee ? ' employee-mobile-section' : ''}`}>
+      <main className="section">
         <div className="page-topbar">
-          {!isEmployee ? (
-            <button
-              type="button"
-              className="mobile-hamburger"
-              onClick={() => setDrawerOpen((prev) => !prev)}
-              aria-label={drawerOpen ? 'Close navigation' : 'Open navigation'}
-              aria-expanded={drawerOpen}
-            >
-              {drawerOpen ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
-                </svg>
-              )}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="mobile-hamburger"
+            onClick={() => setDrawerOpen((prev) => !prev)}
+            aria-label={drawerOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={drawerOpen}
+          >
+            {drawerOpen ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+              </svg>
+            )}
+          </button>
           <NotificationBell />
           <div className="topbar-divider" />
           <details className="page-account-menu">
@@ -549,17 +402,6 @@ export default function AppLayout() {
         </div>
         <Outlet />
       </main>
-
-      {isEmployee ? (
-        <nav className="employee-mobile-tabbar" aria-label="Employee mobile navigation">
-          {visibleEmployeeMobileNav.map((item) => (
-            <NavLink key={item.to} to={item.to} aria-label={item.label}>
-              <span className="employee-mobile-tab-icon">{TAB_ICONS[item.icon]}</span>
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-      ) : null}
     </div>
   );
 }
