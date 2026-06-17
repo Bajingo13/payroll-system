@@ -703,12 +703,12 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 const payroll_period =
                     ["Weekly", "Semi-Monthly", "Monthly"].includes(comp.payroll_period)
                     ? comp.payroll_period
-                    : "Weekly";
+                    : "Semi-Monthly";
 
                 const payroll_rate =
                     ["Piece Rate", "Hourly Rate", "Daily Rate", "Weekly Rate", "Monthly Rate"].includes(comp.payroll_rate)
                     ? comp.payroll_rate
-                    : "Daily Rate";
+                    : "Monthly Rate";
 
                 const ot_rate = comp.ot_rate || null;
 
