@@ -862,7 +862,8 @@ export default function EmployeeManagementPage() {
               username: account.username,
               password: account.password,
               full_name: fullName,
-              role: account.role || 'Employee'
+              role: account.role || 'Employee',
+              email: addForm.email
             });
 
         const { data } = await accountRequest;
@@ -940,7 +941,8 @@ export default function EmployeeManagementPage() {
         dependents: Array.isArray(detailForm.dependents) ? detailForm.dependents : [],
         taxInsurance: detailForm.taxInsurance || {},
         user_id: user?.user_id,
-        admin_name: user?.full_name
+        admin_name: user?.full_name,
+        actor_role: user?.role
       };
 
       const { data } = await api.put(`/employee/update/${encodeURIComponent(selectedEmpCode)}`, payload);

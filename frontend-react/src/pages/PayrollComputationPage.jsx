@@ -1490,7 +1490,7 @@ export default function PayrollComputationPage() {
           <>
             <div className="tab-buttons">
               {TABS.map(t=>(
-                <button key={t.id} className={`tab-btn${activeTab===t.id?' active':''}`} type="button" onClick={()=>setActiveTab(t.id)}>
+                <button key={t.id} style={{fontWeight: activeTab===t.id ? '800' : '700'}} className={`tab-btn${activeTab===t.id?' active':''}`} type="button" onClick={()=>setActiveTab(t.id)}>
                   {t.label}
                 </button>
               ))}
@@ -1498,92 +1498,92 @@ export default function PayrollComputationPage() {
 
             {/* Payroll Tab */}
             {activeTab==='payroll' && (
-              <div className="summary-input payroll-entry-surface">
-                <div className="payroll-entry-grid">
-                  <div className="payroll-entry-card gross-panel">
-                    <h4>Gross Earnings</h4>
-                    <div className="payroll-entry-head payroll-entry-gross-row"><span>Description</span><span>Time</span><span>Amount</span></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Basic Salary</span><span></span><Ni dis={!isEditing} v={payroll.basic_salary} set={v=>upPayroll('basic_salary',v)} /></div>
-                    {/* HRIS attendance banner */}
-                    <div style={{gridColumn:'1/-1',background:'#f0f7ff',border:'1px solid #bdd7f5',borderRadius:5,padding:'6px 10px',margin:'2px 0',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:12}}>
-                      <span style={{fontWeight:600,color:'#1a6fba'}}>HRIS Attendance</span>
-                      {hrisData ? (
-                        <>
-                          <span style={{color:'#444'}}>{hrisData.period_range}</span>
-                          <span style={{color:'#bbb'}}>|</span>
-                          <span style={{color:'#555'}}>
-                            {hrisData.attendance?.source==='computed_from_attendance'
-                              ? 'Source: Time Records'
-                              : hrisData.attendance?.source==='payroll_adjustment'
-                                ? 'Source: Manual Adj.'
-                                : 'Source: HRIS'}
-                          </span>
-                          <span style={{color:'#bbb'}}>|</span>
-                          <span style={{color:'#333'}}>
-                            Absent: <strong>{hrisData.absences?.total_days ?? 0}</strong> day(s)
-                            {toNum(hrisData.absences?.computed_deduction) > 0 && <span style={{color:'#c00',marginLeft:3}}>(-₱{fmt(hrisData.absences.computed_deduction)})</span>}
-                          </span>
-                          <span style={{color:'#333'}}>
-                            Late: <strong>{hrisData.attendance?.late_minutes ?? 0}</strong> min
-                            {toNum(hrisData.attendance?.late_deduction) > 0 && <span style={{color:'#c00',marginLeft:3}}>(-₱{fmt(hrisData.attendance.late_deduction)})</span>}
-                          </span>
-                          <span style={{color:'#333'}}>
-                            Undertime: <strong>{hrisData.attendance?.undertime_minutes ?? 0}</strong> min
-                            {toNum(hrisData.attendance?.undertime_deduction) > 0 && <span style={{color:'#c00',marginLeft:3}}>(-₱{fmt(hrisData.attendance.undertime_deduction)})</span>}
-                          </span>
-                          <span style={{color:'#333'}}>
-                            OT: <strong>{hrisData.ot?.total_hours ?? 0}</strong> hr(s)
-                            {toNum(hrisData.ot?.computed_amount) > 0 && <span style={{color:'#080',marginLeft:3}}>(+₱{fmt(hrisData.ot.computed_amount)})</span>}
-                          </span>
-                        </>
-                      ) : (
-                        <span style={{color:'#999',fontStyle:'italic'}}>No HRIS data loaded</span>
-                      )}
-                      {isEditing && (
-                        <button type="button" disabled={hrisLoading} onClick={syncFromHris}
-                          style={{marginLeft:'auto',padding:'3px 10px',fontSize:12,cursor:'pointer',background:'#1a6fba',color:'#fff',border:'none',borderRadius:4,opacity:hrisLoading?0.7:1}}>
-                          {hrisLoading ? 'Syncing…' : '↻ Sync from HRIS'}
-                        </button>
-                      )}
+                <div className="summary-input payroll-entry-surface">
+                  <div className="payslip-grid payroll-entry-grid">
+                    <div className="panel gross-panel payroll-entry-card">
+                      <h4>Gross Earnings</h4>
+                      <table className="payroll-entry-table gross-table">
+                        <thead>
+                          <tr><th>Description</th><th>Time</th><th>Amount</th></tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>Basic Salary</td><td></td><td><Ni dis={!isEditing} v={payroll.basic_salary} set={v=>upPayroll('basic_salary',v)} /></td></tr>
+                          <tr>
+                            <td colSpan={3}>
+                              <div className="hris-attendance-banner">
+                                <span className="hris-attendance-title">HRIS Attendance</span>
+                                {hrisData ? (
+                                  <>
+                                    <span>{hrisData.period_range}</span>
+                                    <span className="hris-separator">|</span>
+                                    <span>
+                                      {hrisData.attendance?.source==='computed_from_attendance'
+                                        ? 'Source: Time Records'
+                                        : hrisData.attendance?.source==='payroll_adjustment'
+                                          ? 'Source: Manual Adj.'
+                                          : 'Source: HRIS'}
+                                    </span>
+                                    <span className="hris-separator">|</span>
+                                    <span>Absent: <strong>{hrisData.absences?.total_days ?? 0}</strong> day(s){toNum(hrisData.absences?.computed_deduction) > 0 && <span className="hris-negative">(-&#8369;{fmt(hrisData.absences.computed_deduction)})</span>}</span>
+                                    <span>Late: <strong>{hrisData.attendance?.late_minutes ?? 0}</strong> min{toNum(hrisData.attendance?.late_deduction) > 0 && <span className="hris-negative">(-&#8369;{fmt(hrisData.attendance.late_deduction)})</span>}</span>
+                                    <span>Undertime: <strong>{hrisData.attendance?.undertime_minutes ?? 0}</strong> min{toNum(hrisData.attendance?.undertime_deduction) > 0 && <span className="hris-negative">(-&#8369;{fmt(hrisData.attendance.undertime_deduction)})</span>}</span>
+                                    <span>OT: <strong>{hrisData.ot?.total_hours ?? 0}</strong> hr(s){toNum(hrisData.ot?.computed_amount) > 0 && <span className="hris-positive">(+&#8369;{fmt(hrisData.ot.computed_amount)})</span>}</span>
+                                  </>
+                                ) : (
+                                  <span className="hris-empty">No HRIS data loaded</span>
+                                )}
+                                {isEditing && (
+                                  <button type="button" disabled={hrisLoading} onClick={syncFromHris} className="hris-sync-btn">
+                                    {hrisLoading ? 'Syncing...' : 'Sync from HRIS'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                          <tr><td>Absences (-)</td><td><Ti dis={!isEditing} v={payroll.absence_time} set={v=>upPayroll('absence_time',v)} /></td><td><Ni dis={!isEditing} v={payroll.absence_deduction} set={v=>upPayroll('absence_deduction',v)} /></td></tr>
+                          <tr><td>Late (-)</td><td><Ti dis={!isEditing} v={payroll.late_time} set={v=>upPayroll('late_time',v)} /></td><td><Ni dis={!isEditing} v={payroll.late_deduction} set={v=>upPayroll('late_deduction',v)} /></td></tr>
+                          <tr><td>Undertime (-)</td><td><Ti dis={!isEditing} v={payroll.undertime} set={v=>upPayroll('undertime',v)} /></td><td><Ni dis={!isEditing} v={payroll.undertime_deduction} set={v=>upPayroll('undertime_deduction',v)} /></td></tr>
+                          <tr><td>Total Overtime (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.overtime} set={v=>upPayroll('overtime',v)} /></td></tr>
+                          <tr><td>Holiday Pay (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.holiday_pay} set={v=>upPayroll('holiday_pay',v)} /></td></tr>
+                          <tr><td>Taxable Allowances (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.taxable_allowances} set={v=>upPayroll('taxable_allowances',v)} /></td></tr>
+                          <tr><td>Non-Taxable Allow. (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.non_taxable_allowances} set={v=>upPayroll('non_taxable_allowances',v)} /></td></tr>
+                          <tr><td>Adj. Compensation (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></td></tr>
+                          <tr><td>Adj. Non-Comp. (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_non_comp} set={v=>upPayroll('adj_non_comp',v)} /></td></tr>
+                          <tr><td>Total Leaves Used (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></td></tr>
+                          <tr className="payroll-entry-total-row"><td>Gross Pay</td><td></td><td><strong>&#8369;{fmt(totals.gross)}</strong></td></tr>
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Absences (-)</span><Ti dis={!isEditing} v={payroll.absence_time} set={v=>upPayroll('absence_time',v)} /><Ni dis={!isEditing} v={payroll.absence_deduction} set={v=>upPayroll('absence_deduction',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Late (-)</span><Ti dis={!isEditing} v={payroll.late_time} set={v=>upPayroll('late_time',v)} /><Ni dis={!isEditing} v={payroll.late_deduction} set={v=>upPayroll('late_deduction',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Undertime (-)</span><Ti dis={!isEditing} v={payroll.undertime} set={v=>upPayroll('undertime',v)} /><Ni dis={!isEditing} v={payroll.undertime_deduction} set={v=>upPayroll('undertime_deduction',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Total Overtime (+)</span><span></span><Ni dis={!isEditing} v={payroll.overtime} set={v=>upPayroll('overtime',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Holiday Pay (+)</span><span></span><Ni dis={!isEditing} v={payroll.holiday_pay} set={v=>upPayroll('holiday_pay',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Taxable Allowances (+)</span><span></span><Ni dis={!isEditing} v={payroll.taxable_allowances} set={v=>upPayroll('taxable_allowances',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Non-Taxable Allow. (+)</span><span></span><Ni dis={!isEditing} v={payroll.non_taxable_allowances} set={v=>upPayroll('non_taxable_allowances',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Adj. Compensation (+)</span><span></span><Ni dis={!isEditing} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Adj. Non-Comp. (+)</span><span></span><Ni dis={!isEditing} v={payroll.adj_non_comp} set={v=>upPayroll('adj_non_comp',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-gross-row"><span>Total Leaves Used (+)</span><span></span><Ni dis={!isEditing} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></div>
-                    <div className="payroll-entry-total payroll-entry-gross-row"><span>Gross Pay</span><span></span><strong>₱{fmt(totals.gross)}</strong></div>
-                  </div>
-                  <div className="payroll-entry-card deduction-panel">
-                    <h4>Deductions</h4>
-                    <div className="payroll-entry-head payroll-entry-ded-row"><span>Description</span><span>Employee</span><span>Employer</span><span>ECC</span></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>GSIS</span><Ni dis={!isEditing} v={payroll.gsis_employee} set={v=>upPayroll('gsis_employee',v)} /><Ni dis={!isEditing} v={payroll.gsis_employer} set={v=>upPayroll('gsis_employer',v)} /><Ni dis={!isEditing} v={payroll.gsis_ecc} set={v=>upPayroll('gsis_ecc',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>SSS</span><Ni dis={!isEditing} v={payroll.sss_employee} set={v=>upPayroll('sss_employee',v)} /><Ni dis={!isEditing} v={payroll.sss_employer} set={v=>upPayroll('sss_employer',v)} /><Ni dis={!isEditing} v={payroll.sss_ecc} set={v=>upPayroll('sss_ecc',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Pag-ibig</span><Ni dis={!isEditing} v={payroll.pagibig_employee} set={v=>upPayroll('pagibig_employee',v)} /><Ni dis={!isEditing} v={payroll.pagibig_employer} set={v=>upPayroll('pagibig_employer',v)} /><Ni dis={!isEditing} v={payroll.pagibig_ecc} set={v=>upPayroll('pagibig_ecc',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Philhealth</span><Ni dis={!isEditing} v={payroll.philhealth_employee} set={v=>upPayroll('philhealth_employee',v)} /><Ni dis={!isEditing} v={payroll.philhealth_employer} set={v=>upPayroll('philhealth_employer',v)} /><Ni dis={!isEditing} v={payroll.philhealth_ecc} set={v=>upPayroll('philhealth_ecc',v)} /></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Tax Withheld</span><Ni dis={!isEditing} v={payroll.tax_withheld} set={v=>upPayroll('tax_withheld',v)} /><span></span><span></span></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Total Deductions</span><Ni dis={!isEditing} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /><span></span><span></span></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Loans</span><Ni dis={!isEditing} v={payroll.loans} set={v=>upPayroll('loans',v)} /><span></span><span></span></div>
-                    <div className="payroll-entry-row payroll-entry-ded-row"><span>Other Deductions</span><Ni dis={!isEditing} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /><span>Premium Adj.</span><Ni dis={!isEditing} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></div>
-                    <div className="payroll-entry-total payroll-entry-ded-row"><span>Total Deductions</span><span></span><span></span><strong>₱{fmt(totals.ded)}</strong></div>
-                    <div className="payroll-ytd-title">Year-to-Date (YTD)</div>
-                    <div className="payroll-ytd-grid">
-                      <span>YTD SSS</span><Ni dis={!isEditing} v={payroll.ytd_sss} set={v=>upPayroll('ytd_sss',v)} />
-                      <span>YTD Wtax</span><Ni dis={!isEditing} v={payroll.ytd_wtax} set={v=>upPayroll('ytd_wtax',v)} />
-                      <span>YTD Philhealth</span><Ni dis={!isEditing} v={payroll.ytd_philhealth} set={v=>upPayroll('ytd_philhealth',v)} />
-                      <span>YTD GSIS</span><Ni dis={!isEditing} v={payroll.ytd_gsis} set={v=>upPayroll('ytd_gsis',v)} />
-                      <span>YTD Pag-ibig</span><Ni dis={!isEditing} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} />
-                      <span>YTD Gross</span><Ni dis={!isEditing} v={payroll.ytd_gross} set={v=>upPayroll('ytd_gross',v)} />
+                    <div className="panel deduction-panel payroll-entry-card">
+                      <h4>Deductions</h4>
+                      <table className="payroll-entry-table deduction-table">
+                        <thead>
+                          <tr><th></th><th>Employee</th><th>Employer</th><th>ECC</th></tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>GSIS</td><td><Ni dis={!isEditing} v={payroll.gsis_employee} set={v=>upPayroll('gsis_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.gsis_employer} set={v=>upPayroll('gsis_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.gsis_ecc} set={v=>upPayroll('gsis_ecc',v)} /></td></tr>
+                          <tr><td>SSS</td><td><Ni dis={!isEditing} v={payroll.sss_employee} set={v=>upPayroll('sss_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.sss_employer} set={v=>upPayroll('sss_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.sss_ecc} set={v=>upPayroll('sss_ecc',v)} /></td></tr>
+                          <tr><td>Pag-ibig</td><td><Ni dis={!isEditing} v={payroll.pagibig_employee} set={v=>upPayroll('pagibig_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.pagibig_employer} set={v=>upPayroll('pagibig_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.pagibig_ecc} set={v=>upPayroll('pagibig_ecc',v)} /></td></tr>
+                          <tr><td>Philhealth</td><td><Ni dis={!isEditing} v={payroll.philhealth_employee} set={v=>upPayroll('philhealth_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.philhealth_employer} set={v=>upPayroll('philhealth_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.philhealth_ecc} set={v=>upPayroll('philhealth_ecc',v)} /></td></tr>
+                          <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={payroll.tax_withheld} set={v=>upPayroll('tax_withheld',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Total Deductions</td><td><Ni dis={!isEditing} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Loans</td><td><Ni dis={!isEditing} v={payroll.loans} set={v=>upPayroll('loans',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Other Deductions</td><td><Ni dis={!isEditing} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /></td><td>Premium Adj.</td><td><Ni dis={!isEditing} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></td></tr>
+                          <tr className="payroll-entry-total-row deduction-total-row"><td>Total Deductions</td><td colSpan={2}></td><td><strong>&#8369;{fmt(totals.ded)}</strong></td></tr>
+                        </tbody>
+                      </table>
+                      <div className="payroll-ytd-title">Year-to-Date (YTD)</div>
+                      <table className="payroll-entry-table ytd payroll-ytd-table">
+                        <tbody>
+                          <tr><td>YTD SSS</td><td><Ni dis={!isEditing} v={payroll.ytd_sss} set={v=>upPayroll('ytd_sss',v)} /></td><td>YTD Wtax</td><td><Ni dis={!isEditing} v={payroll.ytd_wtax} set={v=>upPayroll('ytd_wtax',v)} /></td></tr>
+                          <tr><td>YTD Philhealth</td><td><Ni dis={!isEditing} v={payroll.ytd_philhealth} set={v=>upPayroll('ytd_philhealth',v)} /></td><td>YTD GSIS</td><td><Ni dis={!isEditing} v={payroll.ytd_gsis} set={v=>upPayroll('ytd_gsis',v)} /></td></tr>
+                          <tr><td>YTD Pag-ibig</td><td><Ni dis={!isEditing} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} /></td><td>YTD Gross</td><td><Ni dis={!isEditing} v={payroll.ytd_gross} set={v=>upPayroll('ytd_gross',v)} /></td></tr>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
-              </div>
             )}
-
             {activeTab==='ot-nd' && (
               <div className="summary-input">
                 <div className="ot-nd-payroll-grid">

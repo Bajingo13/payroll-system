@@ -5877,6 +5877,120 @@ select:focus {
   font-weight: 700;
 }
 
+.payroll-entry-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.payroll-entry-table th,
+.payroll-entry-table td {
+  padding: 5px 6px;
+  vertical-align: middle;
+  border-bottom: 1px solid #e8edf3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.payroll-entry-table th {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #111827;
+  font-weight: 700;
+  text-align: center;
+}
+
+.payroll-entry-table td:first-child,
+.payroll-entry-table th:first-child {
+  text-align: left;
+}
+
+.payroll-entry-table td:not(:first-child),
+.payroll-entry-table th:not(:first-child) {
+  text-align: right;
+}
+
+.gross-table col:first-child,
+.gross-table th:first-child,
+.gross-table td:first-child {
+  width: 46%;
+}
+
+.gross-table th:nth-child(2),
+.gross-table td:nth-child(2) {
+  width: 24%;
+}
+
+.deduction-panel .payroll-entry-table th:first-child,
+.deduction-panel .payroll-entry-table td:first-child {
+  width: 34%;
+}
+
+.payroll-entry-total-row {
+  background: #eef8ef;
+  font-weight: 800;
+}
+
+.deduction-total-row {
+  background: #fdeceb;
+}
+
+.hris-attendance-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border: 1px solid #bdd7f5;
+  border-radius: 5px;
+  background: #f0f7ff;
+  color: #333;
+  font-size: 12px;
+  text-align: left;
+}
+
+.hris-attendance-title {
+  color: #1a6fba;
+  font-weight: 700;
+}
+
+.hris-separator {
+  color: #94a3b8;
+}
+
+.hris-negative {
+  margin-left: 3px;
+  color: #c00;
+}
+
+.hris-positive {
+  margin-left: 3px;
+  color: #080;
+}
+
+.hris-empty {
+  color: #777;
+  font-style: italic;
+}
+
+.hris-sync-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #1a6fba;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.hris-sync-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .payroll-entry-head,
 .payroll-entry-row,
 .payroll-entry-total {
@@ -5916,6 +6030,10 @@ select:focus {
 .payroll-entry-head > :not(:first-child),
 .payroll-entry-total > :not(:first-child) {
   text-align: right;
+}
+
+.payroll-entry-spacer {
+  display: block;
 }
 
 .payroll-entry-card input[type="number"],
@@ -5997,6 +6115,10 @@ select:focus {
   .payroll-entry-total > :not(:first-child) {
     text-align: left;
   }
+
+  .payroll-entry-spacer {
+    display: none;
+  }
 }
 
 /* Payroll modal overlay (different from the existing .modal) */
@@ -6069,8 +6191,6 @@ select:focus {
 /* ============================================================
    Payroll Computation (PC) — Step 1 & Step 2
    ============================================================ */
-
-.payroll-setup {}
 
 .pc-setup-grid {
   display: grid;

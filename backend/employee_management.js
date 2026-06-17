@@ -16,7 +16,7 @@ module.exports = function (app, pool) {
              FROM INFORMATION_SCHEMA.COLUMNS
              WHERE TABLE_SCHEMA = DATABASE()
                AND TABLE_NAME = 'users'
-               AND COLUMN_NAME IN ('account_status', 'deactivated_at', 'deleted_at')`
+               AND COLUMN_NAME IN ('account_status', 'deactivated_at', 'deleted_at', 'email')`
         );
         const existing = new Set(columns.map((column) => column.COLUMN_NAME));
 
@@ -28,6 +28,9 @@ module.exports = function (app, pool) {
         }
         if (!existing.has('deleted_at')) {
             await conn.execute('ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL');
+        }
+        if (!existing.has('email')) {
+            await conn.execute('ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL DEFAULT NULL');
         }
     }
 
@@ -130,6 +133,7 @@ module.exports = function (app, pool) {
         const password = String(account.password || '');
         const role = allowedSystemAccountRoles.includes(account.role) ? account.role : 'Employee';
         const userId = Number(account.user_id || 0);
+        const email = String(body.email || '').trim();
 
         if (!username && !password && !userId) return null;
 
@@ -138,9 +142,39 @@ module.exports = function (app, pool) {
             username,
             password,
             role,
+            email: email || null,
             fullName: String(fullName || '').trim(),
             employeeCode: String(employeeCode || '').trim()
         };
+    }
+
+    async function syncEmployeeUserEmail(conn, { email, userId, employeeCode, previousEmployeeCode, fullName }) {
+        await ensureUserAccountColumns(conn);
+
+        const normalizedEmail = String(email || '').trim() || null;
+        const targetUserId = Number(userId || 0);
+
+        if (targetUserId) {
+            await conn.execute('UPDATE users SET email = ? WHERE user_id = ?', [normalizedEmail, targetUserId]);
+            return;
+        }
+
+        const matchValues = [
+            employeeCode,
+            previousEmployeeCode,
+            fullName
+        ].map((value) => String(value || '').trim()).filter(Boolean);
+
+        if (!matchValues.length) return;
+
+        const conditions = matchValues.map(() => 'LOWER(TRIM(username)) = LOWER(TRIM(?)) OR LOWER(TRIM(full_name)) = LOWER(TRIM(?))');
+        const params = [normalizedEmail];
+        matchValues.forEach((value) => params.push(value, value));
+
+        await conn.execute(
+            `UPDATE users SET email = ? WHERE ${conditions.map((condition) => `(${condition})`).join(' OR ')}`,
+            params
+        );
     }
 
     async function saveSystemAccount(conn, account, actorRole) {
@@ -209,13 +243,13 @@ module.exports = function (app, pool) {
                 const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
                 const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
                 await conn.execute(
-                    "UPDATE users SET username = ?, password = ?, full_name = ?, role = ?, account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?",
-                    [account.username, hashedPassword, account.fullName, account.role, targetUserId]
+                    "UPDATE users SET username = ?, password = ?, full_name = ?, role = ?, email = ?, account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?",
+                    [account.username, hashedPassword, account.fullName, account.role, account.email, targetUserId]
                 );
             } else {
                 await conn.execute(
-                    "UPDATE users SET username = ?, full_name = ?, role = ?, account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?",
-                    [account.username, account.fullName, account.role, targetUserId]
+                    "UPDATE users SET username = ?, full_name = ?, role = ?, email = ?, account_status = 'Active', deactivated_at = NULL, deleted_at = NULL WHERE user_id = ?",
+                    [account.username, account.fullName, account.role, account.email, targetUserId]
                 );
             }
 
@@ -230,8 +264,8 @@ module.exports = function (app, pool) {
         const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
         const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
         const [result] = await conn.execute(
-            "INSERT INTO users (username, password, full_name, role, account_status) VALUES (?, ?, ?, ?, 'Active')",
-            [account.username, hashedPassword, account.fullName, account.role]
+            "INSERT INTO users (username, password, full_name, role, email, account_status) VALUES (?, ?, ?, ?, ?, 'Active')",
+            [account.username, hashedPassword, account.fullName, account.role, account.email]
         );
 
         return {
@@ -816,6 +850,12 @@ app.get("/api/employee_details/:id", async (req, res) => {
             }
 
             const systemAccountResult = await saveSystemAccount(conn, systemAccount, body.actor_role);
+            await syncEmployeeUserEmail(conn, {
+                email,
+                userId: systemAccountResult?.user_id || systemAccount?.userId,
+                employeeCode: emp_code,
+                fullName: employeeFullName
+            });
 
             await conn.commit();
             conn.release();
@@ -2035,6 +2075,13 @@ app.get("/api/employee_details/:id", async (req, res) => {
             const employeeFullName = [safe(body.first_name), safe(body.last_name)].filter(Boolean).join(" ").trim();
             const systemAccount = normalizeSystemAccount(body, employeeFullName, safe(body.emp_code) || empCode);
             const systemAccountResult = await saveSystemAccount(conn, systemAccount, body.actor_role);
+            await syncEmployeeUserEmail(conn, {
+                email: safe(body.email),
+                userId: systemAccountResult?.user_id || systemAccount?.userId || body.systemAccount?.user_id,
+                employeeCode: safe(body.emp_code) || empCode,
+                previousEmployeeCode: empCode,
+                fullName: employeeFullName
+            });
 
             await conn.commit();
             await logAudit(pool, req.body.user_id, req.body.admin_name, `Updated Employee ${empCode}`, 'Success');
