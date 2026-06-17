@@ -1,0 +1,9 @@
+{
+  "appId": "com.astreablue.employee",
+  "appName": "Astrea Employee",
+  "webDir": "frontend-react/dist",
+  "server": {
+    "url": "http://localhost:12687",
+    "cleartext": true
+  }
+}

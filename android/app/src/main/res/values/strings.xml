@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Astrea Employee</string>
+    <string name="title_activity_main">Astrea Employee</string>
+    <string name="package_name">com.astreablue.employee</string>
+    <string name="custom_url_scheme">com.astreablue.employee</string>
+</resources>

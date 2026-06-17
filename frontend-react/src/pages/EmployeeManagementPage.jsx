@@ -1025,10 +1025,13 @@ export default function EmployeeManagementPage() {
     }
   }
 
-  function renderFormRow(label, control) {
+  function renderFormRow(label, control, options = {}) {
     return (
-      <div className="legacy-form-row">
-        <label>{label}</label>
+      <div className={`legacy-form-row${options.required ? ' required' : ''}`}>
+        <label>
+          {label}
+          {options.required ? <span className="required-marker" aria-label="required">*</span> : null}
+        </label>
         {control}
       </div>
     );
@@ -1038,9 +1041,10 @@ export default function EmployeeManagementPage() {
     return (
       <div className="legacy-info-grid">
         <div className="legacy-form-box">
-          {renderFormRow('Employee ID:', <input value={addForm.emp_code} onChange={(event) => updateAddField('emp_code', event.target.value)} />)}
-          {renderFormRow('Last Name:', <input value={addForm.last_name} onChange={(event) => updateAddField('last_name', event.target.value)} />)}
-          {renderFormRow('First Name:', <input value={addForm.first_name} onChange={(event) => updateAddField('first_name', event.target.value)} />)}
+          <p className="required-fields-note">Required: Employee ID, Last Name, First Name, Email, Date Hired.</p>
+          {renderFormRow('Employee ID:', <input required aria-required="true" value={addForm.emp_code} onChange={(event) => updateAddField('emp_code', event.target.value)} />, { required: true })}
+          {renderFormRow('Last Name:', <input required aria-required="true" value={addForm.last_name} onChange={(event) => updateAddField('last_name', event.target.value)} />, { required: true })}
+          {renderFormRow('First Name:', <input required aria-required="true" value={addForm.first_name} onChange={(event) => updateAddField('first_name', event.target.value)} />, { required: true })}
           {renderFormRow('Middle Name:', <input value={addForm.middle_name} onChange={(event) => updateAddField('middle_name', event.target.value)} />)}
           {renderFormRow('Nickname:', <input value={addForm.nickname} onChange={(event) => updateAddField('nickname', event.target.value)} />)}
           {renderFormRow('Gender:', (
@@ -1064,7 +1068,7 @@ export default function EmployeeManagementPage() {
           {renderFormRow('City:', <input value={addForm.city} onChange={(event) => updateAddField('city', event.target.value)} />)}
           {renderFormRow('Country:', <input value={addForm.country} onChange={(event) => updateAddField('country', event.target.value)} />)}
           {renderFormRow('ZIP Code:', <input value={addForm.zip_code} onChange={(event) => updateAddField('zip_code', event.target.value)} />)}
-          {renderFormRow('Date Hired:', <input type="date" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />)}
+          {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
         </div>
 
         <div className="legacy-info-right">
@@ -1073,7 +1077,7 @@ export default function EmployeeManagementPage() {
             {renderFormRow('Tel. No.:', <input value={addForm.tel_no} onChange={(event) => updateAddField('tel_no', event.target.value)} />)}
             {renderFormRow('Mobile No.:', <input value={addForm.mobile_no} onChange={(event) => updateAddField('mobile_no', event.target.value)} />)}
             {renderFormRow('Fax No.:', <input value={addForm.fax_no} onChange={(event) => updateAddField('fax_no', event.target.value)} />)}
-            {renderFormRow('Email:', <input type="email" placeholder="sample@gmail.com" value={addForm.email} onChange={(event) => updateAddField('email', event.target.value)} />)}
+            {renderFormRow('Email:', <input type="email" required aria-required="true" placeholder="sample@gmail.com" value={addForm.email} onChange={(event) => updateAddField('email', event.target.value)} />, { required: true })}
             {renderFormRow('Website:', <input type="url" placeholder="https://example.com" value={addForm.website} onChange={(event) => updateAddField('website', event.target.value)} />)}
           </div>
 

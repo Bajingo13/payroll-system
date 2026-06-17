@@ -210,6 +210,29 @@ module.exports = function (app, pool) {
         return roundMoney(daysInYear > 0 ? (amount * 12) / daysInYear : 0);
     }
 
+    function computeOvertimeAmount(totalHours, settings = {}, fallbackHourlyRate = 0, mainComputation = 0, payrollRate = 'Monthly Rate') {
+        const otHours = toMoney(totalHours);
+        if (otHours <= 0 || Number(settings.strict_no_overtime || 0) === 1) return 0;
+
+        const hoursInDay = toMoney(settings.hours_in_day || 8) || 8;
+        const rateBasisOt = toMoney(settings.rate_basis_ot);
+        const daysInYearOt = toMoney(settings.days_in_year_ot || settings.days_in_year || 313);
+        let otHourlyRate = toMoney(fallbackHourlyRate);
+
+        if (rateBasisOt > 0) {
+            otHourlyRate = roundMoney(rateBasisOt / hoursInDay);
+        } else if (toMoney(mainComputation) > 0 && daysInYearOt > 0) {
+            const otDailyRate = computeEffectiveDailyRate(mainComputation, payrollRate, {
+                ...settings,
+                days_in_year: daysInYearOt
+            });
+            otHourlyRate = roundMoney(otDailyRate / hoursInDay);
+        }
+
+        if (otHourlyRate <= 0) return 0;
+        return roundMoney(otHours * otHourlyRate * 1.25);
+    }
+
     function computePeriodSalaryFromMonthly(monthlySalary, payrollPeriod, daysInYear = 313) {
         const salary = toMoney(monthlySalary);
         const normalizedPeriod = normalizePayPeriod(payrollPeriod);
@@ -539,7 +562,9 @@ module.exports = function (app, pool) {
             // Employee salary/work-schedule settings
             const [[settings]] = await conn.query(
                 `SELECT main_computation, payroll_period, payroll_rate,
-                        days_in_year, days_in_week, hours_in_day, week_in_year
+                        days_in_year, days_in_week, hours_in_day, week_in_year,
+                        strict_no_overtime, ot_rate, days_in_year_ot, rate_basis_ot,
+                        basis_absences, basis_overtime
                  FROM employee_payroll_settings
                  WHERE employee_id = ? LIMIT 1`,
                 [employeeId]
@@ -711,7 +736,7 @@ module.exports = function (app, pool) {
 
                 exactAbsenceDailyRate = dailyRate;
                 hourlyRate            = Math.round((dailyRate / hoursInDay) * 100) / 100;
-                otAmount = Math.round(totalOtHours * hourlyRate * 1.25 * 100) / 100;
+                otAmount = computeOvertimeAmount(totalOtHours, settings || {}, hourlyRate, effectiveSalary, effectivePayrollRate);
                 // absenceDeduction computed after attendance block once totalAbsentDays is known
             }
 
@@ -816,7 +841,7 @@ module.exports = function (app, pool) {
                         }
                         if (totalHrisOtHours > 0 && hourlyRate > 0) {
                             totalOtHours = totalHrisOtHours;
-                            otAmount = Math.round(totalHrisOtHours * hourlyRate * 1.25 * 100) / 100;
+                            otAmount = computeOvertimeAmount(totalHrisOtHours, settings || {}, hourlyRate, effectiveSalary, effectivePayrollRate);
                         }
                         attendanceSource = 'hris_attendance';
                     } else {
@@ -910,6 +935,10 @@ module.exports = function (app, pool) {
             absenceDeduction = periodSalaryForAbsence > 0
                 ? Math.min(rawAbsenceDeduction, roundMoney(periodSalaryForAbsence))
                 : rawAbsenceDeduction;
+            if (Number(settings?.strict_no_overtime || 0) === 1) {
+                totalOtHours = 0;
+                otAmount = 0;
+            }
             const displayedOtHours = totalOtHours > 0
                 ? totalOtHours
                 : (otAmount > 0 && hourlyRate > 0 ? Math.round((otAmount / hourlyRate / 1.25) * 100) / 100 : 0);
@@ -1622,6 +1651,11 @@ module.exports = function (app, pool) {
                         eps.days_in_week,
                         eps.hours_in_day,
                         eps.week_in_year,
+                        eps.strict_no_overtime,
+                        eps.ot_rate,
+                        eps.rate_basis_ot,
+                        eps.basis_absences,
+                        eps.basis_overtime,
                         ea.sss_no,
                         ea.gsis_no,
                         ea.pagibig_no,
