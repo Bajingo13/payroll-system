@@ -307,6 +307,7 @@ export default function PayrollComputationPage() {
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [pendingAddEmps, setPendingAddEmps]   = useState([]);
   const [pendingAddRunId, setPendingAddRunId] = useState(null);
+  const [incompleteAction, setIncompleteAction] = useState('proceed');
   const [showSaveModal, setShowSaveModal]     = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -677,6 +678,25 @@ export default function PayrollComputationPage() {
     }
   }
 
+  async function getEmployeesMissingFromRun(rid) {
+    const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
+    const [{ data:empCheck }, { data:empData }] = await Promise.all([
+      api.get(`/payroll_runs/${rid}/employees`),
+      api.get('/employees_for_payroll', {
+        params: {
+          option:'active',
+          company:filters.company||'', location:filters.location||'',
+          branch:filters.branch||'', division:filters.division||'',
+          department:filters.department||'', class:filters.class||'',
+          position:filters.position||'', empType:filters.empType||'',
+          salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || ''
+        }
+      })
+    ]);
+    const existingRunEmpIds = new Set((empCheck.employees || []).map(emp => String(emp.employee_id)));
+    return (empData.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id)));
+  }
+
   async function proceedToComputation() {
     if (!periodReady) { flash('Select Payroll Group, Period, Month, and Year first.','warning'); return; }
     setLoading(true);
@@ -693,28 +713,16 @@ export default function PayrollComputationPage() {
       if (!runData.success) throw new Error(runData.message||'Failed to create payroll run.');
       const rid = runData.run_id;
       setRunId(rid);
-      const [{ data:empCheck }, { data:empData }] = await Promise.all([
-        api.get(`/payroll_runs/${rid}/employees`),
-        api.get('/employees_for_payroll', {
-          params: {
-            option:'active',
-            company:filters.company||'', location:filters.location||'',
-            branch:filters.branch||'', division:filters.division||'',
-            department:filters.department||'', class:filters.class||'',
-            position:filters.position||'', empType:filters.empType||'',
-            salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || ''
-          }
-        })
-      ]);
-      const existingRunEmpIds = new Set((empCheck.employees || []).map(emp => String(emp.employee_id)));
-      const employeesToAdd = (empData.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id)));
+      const employeesToAdd = await getEmployeesMissingFromRun(rid);
       if (employeesToAdd.length) {
         setPendingAddEmps(employeesToAdd);
         setPendingAddRunId(rid);
+        setIncompleteAction('proceed');
         setShowIncompleteModal(true);
       } else {
         setPendingAddEmps([]);
         setPendingAddRunId(null);
+        setIncompleteAction('proceed');
         await loadRunEmployees(rid);
         setStep('computation');
       }
@@ -739,13 +747,42 @@ export default function PayrollComputationPage() {
     if (!rid) { flash('No payroll run loaded.','warning'); return; }
     setLoading(true);
     try {
+      const action = incompleteAction;
       setShowIncompleteModal(false);
       setPendingAddEmps([]);
       setPendingAddRunId(null);
+      setIncompleteAction('proceed');
       await loadRunEmployees(rid);
-      setStep('computation');
+      if (action === 'save') {
+        setShowSaveModal(true);
+      } else {
+        setStep('computation');
+      }
     } catch(err) {
       flash(getApiMessage(err,'Failed to load payroll run.'),'warning');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSavePayrollClick() {
+    if (!runId) { flash('No payroll run loaded.','warning'); return; }
+    setLoading(true);
+    try {
+      const employeesToAdd = await getEmployeesMissingFromRun(runId);
+      if (employeesToAdd.length) {
+        setPendingAddEmps(employeesToAdd);
+        setPendingAddRunId(runId);
+        setIncompleteAction('save');
+        setShowIncompleteModal(true);
+      } else {
+        setPendingAddEmps([]);
+        setPendingAddRunId(null);
+        setIncompleteAction('proceed');
+        setShowSaveModal(true);
+      }
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to check payroll employees.'),'warning');
     } finally {
       setLoading(false);
     }
@@ -759,6 +796,7 @@ export default function PayrollComputationPage() {
       setShowEmpModal(false);
       setPendingAddEmps([]);
       setPendingAddRunId(null);
+      setIncompleteAction('proceed');
       await loadRunEmployees(runId);
       setStep('computation');
     } catch(err) {
@@ -1129,6 +1167,40 @@ export default function PayrollComputationPage() {
     {id:'leaves',label:'Leaves'},
   ];
 
+  function renderIncompleteModal() {
+    if (!showIncompleteModal) return null;
+    return (
+      <div className="payroll-modal">
+        <div
+          className="modal-content"
+        >
+          <h3>Incomplete Payroll</h3>
+          <p>
+            There {pendingAddEmps.length === 1 ? 'is' : 'are'} {pendingAddEmps.length} employee{pendingAddEmps.length === 1 ? '' : 's'} not yet included in this payroll run.
+          </p>
+          <div style={{display:'flex', justifyContent:'center', gap:22, flexWrap:'wrap'}}>
+            <button
+              type="button"
+              className="btn proceed"
+              disabled={loading}
+              onClick={chooseAddMissingEmployees}
+            >
+              Add<br/>Employees
+            </button>
+            <button
+              type="button"
+              className="btn cancel-select"
+              disabled={loading}
+              onClick={continueWithoutAdding}
+            >
+              Continue Without<br/>Adding
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function toggleModal(empId) {
     setModalSelectMode('');
     setSelectedForModal(prev => {
@@ -1281,36 +1353,7 @@ export default function PayrollComputationPage() {
           </div>
         </section>
 
-        {showIncompleteModal && (
-          <div className="payroll-modal">
-            <div
-              className="modal-content"
-            >
-              <h3>Incomplete Payroll</h3>
-              <p>
-                There {pendingAddEmps.length === 1 ? 'is' : 'are'} {pendingAddEmps.length} employee{pendingAddEmps.length === 1 ? '' : 's'} not yet included in this payroll run.
-              </p>
-              <div style={{display:'flex', justifyContent:'center', gap:22, flexWrap:'wrap'}}>
-                <button
-                  type="button"
-                  className="btn proceed"
-                  disabled={loading}
-                  onClick={chooseAddMissingEmployees}
-                >
-                  Add<br/>Employees
-                </button>
-                <button
-                  type="button"
-                  className="btn cancel-select"
-                  disabled={loading}
-                  onClick={continueWithoutAdding}
-                >
-                  Continue Without<br/>Adding
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderIncompleteModal()}
 
         {showEmpModal && (
           <div className="payroll-modal">
@@ -1934,10 +1977,12 @@ export default function PayrollComputationPage() {
           <button type="button" className="add-employee-btn" onClick={openEmpModal}>+ Add New Employee</button>
           <div className="right-buttons">
             <button type="button" className="btn" onClick={()=>isEditing?setShowBackModal(true):goBackToSetup()}>← Back to Filters</button>
-            <button type="button" className="btn save-payroll-btn" disabled={loading} onClick={()=>setShowSaveModal(true)}>&#128190; Save Payroll</button>
+            <button type="button" className="btn save-payroll-btn" disabled={loading} onClick={handleSavePayrollClick}>&#128190; Save Payroll</button>
           </div>
         </div>
       </section>
+
+      {renderIncompleteModal()}
 
       {showEmpModal && (
         <div className="payroll-modal">
