@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import MobileAttendanceFlow from '../components/MobileAttendanceFlow.jsx';
 
 function formatDateTime(value) {
   if (!value) return '-';
@@ -86,6 +87,7 @@ export default function EmployeeDashboardPage() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [mobileFlowOpen, setMobileFlowOpen] = useState(false);
 
   async function loadDashboard() {
     if (!user?.user_id) return;
@@ -186,6 +188,16 @@ export default function EmployeeDashboardPage() {
         <div className="card"><span>Payroll Status</span><strong>{payrollSummary?.payroll_status || '-'}</strong></div>
       </section>
 
+      {/* Mobile attendance flow */}
+      <MobileAttendanceFlow
+        open={mobileFlowOpen}
+        onClose={() => setMobileFlowOpen(false)}
+        employee={employee}
+        todayState={todayState}
+        onSubmit={submitTimeEntry}
+        busy={busy}
+      />
+
       {/* Timekeeping */}
       <section className="table-section employee-modern-panel employee-time-panel">
         <div className="table-header employee-mgmt-header">
@@ -201,6 +213,20 @@ export default function EmployeeDashboardPage() {
             ))}
           </div>
         </div>
+
+        <button
+          type="button"
+          className="mat-record-banner"
+          onClick={() => setMobileFlowOpen(true)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: 18, height: 18, flexShrink: 0 }}>
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            <path d="M17 12l2 2 4-4" />
+          </svg>
+          <span>Record Attendance</span>
+          <span className="mat-record-badge">Mobile Flow</span>
+        </button>
 
         <ClockRing workedSeconds={workedSeconds} status={clockStatus} />
 
