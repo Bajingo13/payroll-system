@@ -301,8 +301,12 @@ export default function PayrollComputationPage() {
   const [showEmpModal, setShowEmpModal]       = useState(false);
   const [availableEmps, setAvailableEmps]     = useState([]);
   const [selectedForModal, setSelectedForModal] = useState(new Set());
+  const [modalSelectMode, setModalSelectMode] = useState('');
   const [modalSearch, setModalSearch]         = useState('');
   const [modalSearchBy, setModalSearchBy]     = useState('employee_id');
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
+  const [pendingAddEmps, setPendingAddEmps]   = useState([]);
+  const [pendingAddRunId, setPendingAddRunId] = useState(null);
   const [showSaveModal, setShowSaveModal]     = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -646,18 +650,26 @@ export default function PayrollComputationPage() {
 
   async function openEmpModal() {
     try {
-      const { data } = await api.get('/employees_for_payroll', {
-        params: {
-          option:'active',
-          company:filters.company||'', location:filters.location||'',
-          branch:filters.branch||'', division:filters.division||'',
-          department:filters.department||'', class:filters.class||'',
-          position:filters.position||'', empType:filters.empType||'',
-          salaryType:filters.salaryType||'',
-        }
-      });
-      setAvailableEmps(data.employees||[]);
+      const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
+      const [{ data }, { data: runEmpData }] = await Promise.all([
+        api.get('/employees_for_payroll', {
+          params: {
+            option:'active',
+            company:filters.company||'', location:filters.location||'',
+            branch:filters.branch||'', division:filters.division||'',
+            department:filters.department||'', class:filters.class||'',
+            position:filters.position||'', empType:filters.empType||'',
+            salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || ''
+          }
+        }),
+        runId
+          ? api.get(`/payroll_runs/${runId}/employees`)
+          : Promise.resolve({ data: { employees: [] } })
+      ]);
+      const existingRunEmpIds = new Set((runEmpData.employees || []).map(emp => String(emp.employee_id)));
+      setAvailableEmps((data.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id))));
       setSelectedForModal(new Set());
+      setModalSelectMode('');
       setModalSearch('');
       setShowEmpModal(true);
     } catch(err) {
@@ -681,28 +693,59 @@ export default function PayrollComputationPage() {
       if (!runData.success) throw new Error(runData.message||'Failed to create payroll run.');
       const rid = runData.run_id;
       setRunId(rid);
-      const { data:empCheck } = await api.get(`/payroll_runs/${rid}/employees`);
-      if (!empCheck.exists || !(empCheck.employees||[]).length) {
-        const { data:empData } = await api.get('/employees_for_payroll', {
+      const [{ data:empCheck }, { data:empData }] = await Promise.all([
+        api.get(`/payroll_runs/${rid}/employees`),
+        api.get('/employees_for_payroll', {
           params: {
             option:'active',
             company:filters.company||'', location:filters.location||'',
             branch:filters.branch||'', division:filters.division||'',
             department:filters.department||'', class:filters.class||'',
             position:filters.position||'', empType:filters.empType||'',
-            salaryType:filters.salaryType||'',
+            salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || ''
           }
-        });
-        setAvailableEmps(empData.employees||[]);
-        setSelectedForModal(new Set());
-        setModalSearch('');
-        setShowEmpModal(true);
+        })
+      ]);
+      const existingRunEmpIds = new Set((empCheck.employees || []).map(emp => String(emp.employee_id)));
+      const employeesToAdd = (empData.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id)));
+      if (employeesToAdd.length) {
+        setPendingAddEmps(employeesToAdd);
+        setPendingAddRunId(rid);
+        setShowIncompleteModal(true);
       } else {
+        setPendingAddEmps([]);
+        setPendingAddRunId(null);
         await loadRunEmployees(rid);
         setStep('computation');
       }
     } catch(err) {
       flash(getApiMessage(err,'Failed to proceed.'),'warning');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function chooseAddMissingEmployees() {
+    setAvailableEmps(pendingAddEmps);
+    setSelectedForModal(new Set());
+    setModalSelectMode('');
+    setModalSearch('');
+    setShowIncompleteModal(false);
+    setShowEmpModal(true);
+  }
+
+  async function continueWithoutAdding() {
+    const rid = pendingAddRunId || runId;
+    if (!rid) { flash('No payroll run loaded.','warning'); return; }
+    setLoading(true);
+    try {
+      setShowIncompleteModal(false);
+      setPendingAddEmps([]);
+      setPendingAddRunId(null);
+      await loadRunEmployees(rid);
+      setStep('computation');
+    } catch(err) {
+      flash(getApiMessage(err,'Failed to load payroll run.'),'warning');
     } finally {
       setLoading(false);
     }
@@ -714,6 +757,8 @@ export default function PayrollComputationPage() {
     try {
       await api.post(`/payroll_runs/${runId}/employees`, { employees:Array.from(selectedForModal) });
       setShowEmpModal(false);
+      setPendingAddEmps([]);
+      setPendingAddRunId(null);
       await loadRunEmployees(runId);
       setStep('computation');
     } catch(err) {
@@ -1085,11 +1130,20 @@ export default function PayrollComputationPage() {
   ];
 
   function toggleModal(empId) {
+    setModalSelectMode('');
     setSelectedForModal(prev => {
       const n = new Set(prev);
       n.has(empId) ? n.delete(empId) : n.add(empId);
       return n;
     });
+  }
+  function selectAllModalEmps() {
+    setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)));
+    setModalSelectMode('select_all');
+  }
+  function clearAllModalEmps() {
+    setSelectedForModal(new Set());
+    setModalSelectMode('clear_all');
   }
 
   // ============================================================
@@ -1227,14 +1281,45 @@ export default function PayrollComputationPage() {
           </div>
         </section>
 
+        {showIncompleteModal && (
+          <div className="payroll-modal">
+            <div
+              className="modal-content"
+            >
+              <h3>Incomplete Payroll</h3>
+              <p>
+                There {pendingAddEmps.length === 1 ? 'is' : 'are'} {pendingAddEmps.length} employee{pendingAddEmps.length === 1 ? '' : 's'} not yet included in this payroll run.
+              </p>
+              <div style={{display:'flex', justifyContent:'center', gap:22, flexWrap:'wrap'}}>
+                <button
+                  type="button"
+                  className="btn proceed"
+                  disabled={loading}
+                  onClick={chooseAddMissingEmployees}
+                >
+                  Add<br/>Employees
+                </button>
+                <button
+                  type="button"
+                  className="btn cancel-select"
+                  disabled={loading}
+                  onClick={continueWithoutAdding}
+                >
+                  Continue Without<br/>Adding
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showEmpModal && (
           <div className="payroll-modal">
             <div className="modal-content large-modal">
               <h3>Select Employees to Add to Payroll</h3>
               <p>Choose the employees you want to include in this payroll run.</p>
               <div className="helper-tools" style={{margin:'10px 0'}}>
-                <label><input type="radio" name="ms" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)))} /> Select All</label>
-                <label style={{marginLeft:5}}><input type="radio" name="ms" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set())} /> Clear All</label>
+                <label><input type="radio" name="ms" checked={modalSelectMode==='select_all'} onChange={selectAllModalEmps} /> Select All</label>
+                <label style={{marginLeft:5}}><input type="radio" name="ms" checked={modalSelectMode==='clear_all'} onChange={clearAllModalEmps} /> Clear All</label>
                 <label style={{marginLeft:10}}>Quick Search:</label>
                 <select value={modalSearchBy} onChange={e=>setModalSearchBy(e.target.value)}>
                   <option value="employee_id">Employee ID</option>
@@ -1860,8 +1945,8 @@ export default function PayrollComputationPage() {
             <h3>Add Employees to Payroll Run</h3>
             <p>Choose the employees you want to include in this payroll run.</p>
             <div className="helper-tools" style={{margin:'10px 0'}}>
-              <label><input type="radio" name="ms2" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set(filteredModalEmps.map(e=>e.employee_id)))} /> Select All</label>
-              <label style={{marginLeft:5}}><input type="radio" name="ms2" checked={false} onChange={()=>{}} onClick={()=>setSelectedForModal(new Set())} /> Clear All</label>
+              <label><input type="radio" name="ms2" checked={modalSelectMode==='select_all'} onChange={selectAllModalEmps} /> Select All</label>
+              <label style={{marginLeft:5}}><input type="radio" name="ms2" checked={modalSelectMode==='clear_all'} onChange={clearAllModalEmps} /> Clear All</label>
               <label style={{marginLeft:10}}>Quick Search:</label>
               <select value={modalSearchBy} onChange={e=>setModalSearchBy(e.target.value)}>
                 <option value="employee_id">Employee ID</option>

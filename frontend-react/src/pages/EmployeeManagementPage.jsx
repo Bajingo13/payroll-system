@@ -1068,7 +1068,6 @@ export default function EmployeeManagementPage() {
           {renderFormRow('City:', <input value={addForm.city} onChange={(event) => updateAddField('city', event.target.value)} />)}
           {renderFormRow('Country:', <input value={addForm.country} onChange={(event) => updateAddField('country', event.target.value)} />)}
           {renderFormRow('ZIP Code:', <input value={addForm.zip_code} onChange={(event) => updateAddField('zip_code', event.target.value)} />)}
-          {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
         </div>
 
         <div className="legacy-info-right">
@@ -1109,7 +1108,7 @@ export default function EmployeeManagementPage() {
         <div className="legacy-payroll-grid">
           <div>
             {renderFormRow('Training Date:', <input type="date" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />)}
-            {renderFormRow('Date Hired:', <input type="date" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />)}
+          {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
             {renderFormRow('Date Regular:', <input type="date" value={addForm.date_regular} onChange={(event) => updateAddField('date_regular', event.target.value)} />)}
             {renderFormRow('Date Resigned:', <input type="date" value={addForm.date_resigned} onChange={(event) => updateAddField('date_resigned', event.target.value)} />)}
             {renderFormRow('Date Terminated:', <input type="date" value={addForm.date_terminated} onChange={(event) => updateAddField('date_terminated', event.target.value)} />)}

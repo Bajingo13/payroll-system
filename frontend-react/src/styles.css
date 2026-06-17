@@ -6001,15 +6001,34 @@ select:focus {
 
 /* Payroll modal overlay (different from the existing .modal) */
 .payroll-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:2000; }
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 999; transition: opacity 0.3s ease; opacity: 1; }
 .modal-content { background:#fff; padding:25px 30px; border-radius:8px; text-align:center; max-width:400px; width:100%; box-shadow:0 4px 8px rgba(0,0,0,0.2); }
 .large-modal { width:625px; max-width:95vw; max-height:90vh; overflow-y:auto; }
 .modal-buttons { display:flex; justify-content:center; gap:15px; margin-top:20px; }
 .confirm-delete { background:#dc3545 !important; color:#fff; }
 .cancel-delete, .cancel-select, .continue-without-adding { background:#6c757d !important; color:#fff; }
 .proceed, .add-employees { background:#5ab75a !important; color:#fff; }
-.employee-select-container { max-height:50vh; overflow-y:auto; margin:10px 0; border:1px solid #ddd; }
-.helper-tools { font-size:13px; }
-.helper-tools label { color:#555; }
+.employee-select-container { max-height:50vh; overflow-y:auto; overflow-x:hidden; margin:10px 0; border:1px solid #ddd; }
+.employee-select-container table { table-layout:fixed; width:100%; min-width:0; }
+.employee-select-container th,
+.employee-select-container td { padding-left:4px !important; padding-right:4px !important; overflow-wrap:anywhere; word-break:break-word; }
+.employee-select-container th:first-child,
+.employee-select-container td:first-child { width:14%; text-align:center; }
+.employee-select-container th:nth-child(2),
+.employee-select-container td:nth-child(2) { width:25%; }
+.employee-select-container th:nth-child(3),
+.employee-select-container td:nth-child(3) { width:30%; }
+.employee-select-container th:nth-child(4),
+.employee-select-container td:nth-child(4) { width:31%; }
+.helper-tools { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; font-size:13px; }
+.helper-tools label { display:flex; align-items:center; gap:6px; min-height:36px; color:#555; }
+.helper-tools label,
+.helper-tools select,
+.helper-tools input { margin-left:0 !important; }
+.helper-tools input[type="radio"] { margin:0; }
+.helper-tools select,
+.helper-tools input[type="text"] { height:36px; }
+.helper-tools input[type="text"] { flex:1 1 180px; min-width:0; max-width:280px; }
 
 /* Covered date options */
 .covered-date-options { margin-bottom:10px; }
