@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
+import AttendanceFlow from '../components/AttendanceFlow';
 
 function parseDateTime(value) {
   if (!value) return null;
@@ -49,6 +50,7 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
   const [now, setNow] = useState(() => new Date());
+  const [flowOpen, setFlowOpen] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -167,6 +169,15 @@ export default function DashboardScreen() {
   });
 
   return (
+    <>
+    <AttendanceFlow
+      visible={flowOpen}
+      onClose={() => setFlowOpen(false)}
+      employee={employee}
+      todayState={todayState}
+      onSubmit={submitTimeEntry}
+      busy={busy}
+    />
     <ScrollView
       style={s.root}
       contentContainerStyle={[s.content, { paddingTop: insets.top + 8 }]}
@@ -228,6 +239,12 @@ export default function DashboardScreen() {
           />
         </View>
         <Text style={s.progressLabel}>{progressPercent}% of 8-hour shift</Text>
+
+        {/* Record Attendance button */}
+        <TouchableOpacity style={s.recordBtn} onPress={() => setFlowOpen(true)}>
+          <Text style={s.recordBtnText}>📍  Record Attendance</Text>
+          <View style={s.recordBtnBadge}><Text style={s.recordBtnBadgeText}>Mobile Flow</Text></View>
+        </TouchableOpacity>
 
         {/* Time entry buttons */}
         <View style={s.btnRow}>
@@ -299,6 +316,7 @@ export default function DashboardScreen() {
 
       {message ? <Text style={s.errorText}>{message}</Text> : null}
     </ScrollView>
+    </>
   );
 }
 
@@ -414,4 +432,25 @@ const s = StyleSheet.create({
   },
   statusPillText: { fontSize: 12, fontWeight: '600' },
   errorText: { color: '#b91c1c', textAlign: 'center', marginTop: 8 },
+  recordBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e40af',
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#1e40af',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  recordBtnText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
+  recordBtnBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  recordBtnBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 });
