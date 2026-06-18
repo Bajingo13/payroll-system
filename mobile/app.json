@@ -12,10 +12,22 @@
       "adaptiveIcon": {
         "backgroundColor": "#1e40af"
       },
-      "package": "com.astreablue.employee"
+      "package": "com.astreablue.employee",
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "ios": {
-      "bundleIdentifier": "com.astreablue.employee"
+      "bundleIdentifier": "com.astreablue.employee",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to capture your face for attendance verification.",
+        "NSLocationWhenInUseUsageDescription": "Location is used to verify you are at the office when recording attendance."
+      }
     },
     "extra": {
       "eas": {
@@ -23,7 +35,28 @@
       }
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#1e40af",
+          "androidMode": "default",
+          "androidCollapsedTitle": "Astreablue"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for face verification.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to verify you are at the office."
+        }
+      ]
     ]
   }
 }

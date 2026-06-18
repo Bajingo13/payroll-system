@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -10,9 +11,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
+import { API_BASE_URL } from '../config';
+import { io } from 'socket.io-client';
 import AttendanceFlow from '../components/AttendanceFlow';
+
+const BASE_URL = API_BASE_URL.replace('/api', '');
 
 function parseDateTime(value) {
   if (!value) return null;
@@ -42,7 +48,7 @@ function money(value) {
   return `₱ ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }) {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState(null);
@@ -51,6 +57,8 @@ export default function DashboardScreen() {
   const [message, setMessage] = useState('');
   const [now, setNow] = useState(() => new Date());
   const [flowOpen, setFlowOpen] = useState(false);
+  const [flowAction, setFlowAction] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -78,9 +86,29 @@ export default function DashboardScreen() {
 
   useEffect(() => { loadDashboard(); }, [user?.user_id]);
 
+  // Real-time notification count via Socket.io
+  useEffect(() => {
+    if (!user?.user_id) return;
+    // Initial fetch
+    api.get('/notifications', { params: { user_id: user.user_id } })
+      .then(({ data }) => setUnreadCount(Number(data.unread_count || 0)))
+      .catch(() => {});
+    // Socket.io live updates
+    const socket = io(BASE_URL, {
+      query: { user_id: user.user_id },
+      transports: ['websocket'],
+      reconnectionAttempts: 5,
+    });
+    socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
+    return () => socket.disconnect();
+  }, [user?.user_id]);
+
   const todayState = data?.todayTime || {};
   const employee = data?.employee || {};
   const payrollSummary = data?.payrollSummary || null;
+  const profilePhotoUrl = data?.profilePhotoUrl
+    ? `${BASE_URL}${data.profilePhotoUrl}`
+    : null;
 
   const workedSeconds = useMemo(() => {
     const timeIn = parseDateTime(todayState.timeIn);
@@ -134,13 +162,29 @@ export default function DashboardScreen() {
     ];
   }, [todayState]);
 
-  async function submitTimeEntry(type) {
+  async function submitTimeEntry(type, location, photoCapture) {
     if (!user?.user_id || busy) return;
     setBusy(true);
     try {
-      const { data: payload } = await api.post('/employee/time-entry', {
-        user_id: user.user_id,
-        type,
+      const formData = new FormData();
+      formData.append('user_id', String(user.user_id));
+      formData.append('type', type);
+      if (location?.latitude != null)  formData.append('latitude',   String(location.latitude));
+      if (location?.longitude != null) formData.append('longitude',  String(location.longitude));
+      if (location?.distance_m != null) formData.append('distance_m', String(location.distance_m));
+      const frontPhoto = photoCapture?.front || null;
+      const backPhoto = photoCapture?.back || null;
+      const selectedPhoto = frontPhoto || backPhoto;
+      if (photoCapture?.mode) formData.append('camera_mode', photoCapture.mode);
+      if (selectedPhoto?.uri) {
+        formData.append('photo', {
+          uri: selectedPhoto.uri,
+          type: 'image/jpeg',
+          name: `attendance_${user.user_id}_${Date.now()}_${photoCapture?.mode || 'photo'}.jpg`,
+        });
+      }
+      const { data: payload } = await api.post('/employee/time-entry', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (!payload.success) throw new Error(payload.message);
       if (payload.todayTime) {
@@ -152,6 +196,16 @@ export default function DashboardScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function openFlow(action = null) {
+    setFlowAction(action);
+    setFlowOpen(true);
+  }
+
+  function closeFlow() {
+    setFlowOpen(false);
+    setFlowAction(null);
   }
 
   function confirmLogout() {
@@ -168,284 +222,233 @@ export default function DashboardScreen() {
     year: 'numeric',
   });
 
+  const BTN_ICONS = { time_in: 'log-in-outline', break_out: 'cafe-outline', break_in: 'return-down-back-outline', time_out: 'log-out-outline' };
+
   return (
     <>
     <AttendanceFlow
       visible={flowOpen}
-      onClose={() => setFlowOpen(false)}
+      onClose={closeFlow}
       employee={employee}
       todayState={todayState}
       onSubmit={submitTimeEntry}
       busy={busy}
+      initialAction={flowAction}
     />
     <ScrollView
       style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 8 }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => loadDashboard(true)}
-          tintColor="#1e40af"
-        />
-      }
+      contentContainerStyle={s.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadDashboard(true)} tintColor="#fff" />}
     >
-      {/* Header */}
-      <View style={s.header}>
-        <View style={s.headerLeft}>
-          <Text style={s.greeting}>
-            Hello, {employee.first_name || user?.full_name || 'there'} 👋
-          </Text>
-          <Text style={s.date}>{today}</Text>
-        </View>
-        <TouchableOpacity style={s.logoutBtn} onPress={confirmLogout}>
-          <Text style={s.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Info chips */}
-      <View style={s.infoRow}>
-        <View style={s.infoChip}>
-          <Text style={s.infoLabel}>ID</Text>
-          <Text style={s.infoValue}>{employee.emp_code || '-'}</Text>
-        </View>
-        <View style={[s.infoChip, { flex: 2 }]}>
-          <Text style={s.infoLabel}>Department</Text>
-          <Text style={s.infoValue} numberOfLines={1}>{employee.department || '-'}</Text>
-        </View>
-        <View style={[s.infoChip, { flex: 2 }]}>
-          <Text style={s.infoLabel}>Position</Text>
-          <Text style={s.infoValue} numberOfLines={1}>{employee.position || '-'}</Text>
-        </View>
-      </View>
-
-      {/* Timekeeping card */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Timekeeping</Text>
-
-        {/* Status */}
-        <View style={s.statusRow}>
-          <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-          <Text style={[s.statusLabel, { color: statusColor }]}>{clockStatus}</Text>
-          <Text style={s.workedText}>  •  {formatDuration(workedSeconds)} worked</Text>
-        </View>
-
-        {/* Progress bar */}
-        <View style={s.progressBg}>
-          <View
-            style={[
-              s.progressFill,
-              { width: `${progressPercent}%`, backgroundColor: statusColor },
-            ]}
-          />
-        </View>
-        <Text style={s.progressLabel}>{progressPercent}% of 8-hour shift</Text>
-
-        {/* Record Attendance button */}
-        <TouchableOpacity style={s.recordBtn} onPress={() => setFlowOpen(true)}>
-          <Text style={s.recordBtnText}>📍  Record Attendance</Text>
-          <View style={s.recordBtnBadge}><Text style={s.recordBtnBadgeText}>Mobile Flow</Text></View>
-        </TouchableOpacity>
-
-        {/* Time entry buttons */}
-        <View style={s.btnRow}>
-          {timeButtons.map((btn) => (
-            <TouchableOpacity
-              key={btn.key}
-              style={[s.timeBtn, btn.disabled && s.timeBtnOff]}
-              onPress={() => submitTimeEntry(btn.key)}
-              disabled={btn.disabled || busy}
-            >
-              <Text style={[s.timeBtnText, btn.disabled && s.timeBtnTextOff]}>
-                {btn.label}
-              </Text>
+      {/* ── Blue Header ── */}
+      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
+        <View style={s.headerTop}>
+          <View style={s.headerLeft}>
+            <Text style={s.greeting}>Good day, {employee.first_name || user?.full_name || 'there'} 👋</Text>
+            <Text style={s.date}>{today}</Text>
+          </View>
+          <View style={s.headerIcons}>
+            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')}>
+              <Ionicons name="notifications-outline" size={22} color="rgba(255,255,255,0.85)" />
+              {unreadCount > 0 && (
+                <View style={s.badge}><Text style={s.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
+              )}
             </TouchableOpacity>
-          ))}
+            <TouchableOpacity style={s.avatarBtn}
+              onPress={() => navigation.navigate('Settings', { employee, profilePhotoUrl: data?.profilePhotoUrl })}>
+              {profilePhotoUrl
+                ? <Image source={{ uri: profilePhotoUrl }} style={s.avatarBtnImg} />
+                : <Text style={s.avatarBtnText}>{String(employee.first_name || user?.full_name || 'U')[0].toUpperCase()}</Text>}
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {busy && <ActivityIndicator color="#1e40af" style={{ marginBottom: 8 }} />}
-
-        {/* Time details grid */}
-        <View style={s.timeGrid}>
+        {/* Employee info pills */}
+        <View style={s.infoPills}>
           {[
-            { label: 'Time In', value: formatTime(todayState.timeIn) },
-            { label: 'Break Out', value: formatTime(todayState.breakOut) },
-            { label: 'Break In', value: formatTime(todayState.breakIn) },
-            { label: 'Time Out', value: formatTime(todayState.timeOut) },
+            { icon: 'card-outline', label: employee.emp_code || '-' },
+            { icon: 'business-outline', label: employee.department || '-' },
+            { icon: 'briefcase-outline', label: employee.position || '-' },
           ].map((item) => (
-            <View key={item.label} style={s.timeItem}>
-              <Text style={s.timeItemLabel}>{item.label}</Text>
-              <Text style={s.timeItemValue}>{item.value}</Text>
+            <View key={item.icon} style={s.infoPill}>
+              <Ionicons name={item.icon} size={11} color="#93c5fd" />
+              <Text style={s.infoPillText} numberOfLines={1}>{item.label}</Text>
             </View>
           ))}
         </View>
 
-        {/* Overtime */}
-        <View style={s.otRow}>
-          <Text style={s.otLabel}>Overtime Today</Text>
-          <Text style={[s.otValue, { color: workedSeconds > 28800 ? '#15803d' : '#94a3b8' }]}>
-            {formatDuration(Math.max(0, workedSeconds - 28800))}
-          </Text>
+        {/* Status + duration in header */}
+        <View style={s.statusWrap}>
+          <View style={[s.statusDot, { backgroundColor: statusColor === '#64748b' ? '#94a3b8' : statusColor }]} />
+          <Text style={s.statusLabel}>{clockStatus}</Text>
+          <Text style={s.workedText}> · {formatDuration(workedSeconds)} worked</Text>
         </View>
+
+        {/* Progress bar */}
+        <View style={s.progressBg}>
+          <View style={[s.progressFill, { width: `${progressPercent}%` }]} />
+        </View>
+        <Text style={s.progressLabel}>{progressPercent}% of 8-hour shift</Text>
       </View>
 
-      {/* Latest Payroll card */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Latest Payroll</Text>
-        <Text style={s.periodText}>{payrollSummary?.payroll_range || 'No payroll data yet'}</Text>
-        <View style={s.payRow}>
-          <Text style={s.payLabel}>Gross Pay</Text>
-          <Text style={s.payValue}>{money(payrollSummary?.gross_pay)}</Text>
+      {/* ── Body ── */}
+      <View style={s.body}>
+        {/* Time entry buttons */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Record Attendance</Text>
+          <View style={s.btnGrid}>
+            {timeButtons.map((btn) => (
+              <TouchableOpacity
+                key={btn.key}
+                style={[s.timeBtn, btn.disabled && s.timeBtnOff]}
+                onPress={() => openFlow(btn.key)}
+                disabled={btn.disabled || busy}
+              >
+                <Ionicons name={BTN_ICONS[btn.key]} size={20} color={btn.disabled ? '#cbd5e1' : '#fff'} />
+                <Text style={[s.timeBtnText, btn.disabled && s.timeBtnTextOff]}>{btn.label}</Text>
+                {btn.disabled && <Ionicons name="checkmark-circle" size={14} color="#22c55e" style={s.timeBtnCheck} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+          {busy && <ActivityIndicator color="#1e40af" size="small" style={{ marginTop: 8 }} />}
         </View>
-        <View style={s.payRow}>
-          <Text style={s.payLabel}>Deductions</Text>
-          <Text style={[s.payValue, { color: '#b91c1c' }]}>{money(payrollSummary?.total_deductions)}</Text>
-        </View>
-        <View style={s.divider} />
-        <View style={s.payRow}>
-          <Text style={[s.payLabel, { fontWeight: '700' }]}>Net Pay</Text>
-          <Text style={[s.payValue, { color: '#15803d', fontSize: 20, fontWeight: '800' }]}>
-            {money(payrollSummary?.net_pay)}
-          </Text>
-        </View>
-        <View style={[s.statusPill, { backgroundColor: '#dbeafe' }]}>
-          <Text style={[s.statusPillText, { color: '#1e40af' }]}>
-            Status: {payrollSummary?.payroll_status || '-'}
-          </Text>
-        </View>
-      </View>
 
-      {message ? <Text style={s.errorText}>{message}</Text> : null}
+        {/* Today's time entries */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Today's Log</Text>
+          <View style={s.timeRow}>
+            {[
+              { label: 'Time In', value: formatTime(todayState.timeIn), color: '#22c55e', icon: 'log-in' },
+              { label: 'Break Out', value: formatTime(todayState.breakOut), color: '#f59e0b', icon: 'cafe' },
+              { label: 'Break In', value: formatTime(todayState.breakIn), color: '#f59e0b', icon: 'return-down-back' },
+              { label: 'Time Out', value: formatTime(todayState.timeOut), color: '#ef4444', icon: 'log-out' },
+            ].map((item) => (
+              <View key={item.label} style={s.timeEntry}>
+                <View style={[s.timeEntryIcon, { backgroundColor: item.value === '-' ? '#f1f5f9' : item.color + '20' }]}>
+                  <Ionicons name={item.icon + '-outline'} size={16} color={item.value === '-' ? '#cbd5e1' : item.color} />
+                </View>
+                <Text style={[s.timeEntryVal, item.value === '-' && { color: '#cbd5e1' }]}>{item.value}</Text>
+                <Text style={s.timeEntryLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={s.otRow}>
+            <Ionicons name="time-outline" size={14} color="#94a3b8" />
+            <Text style={s.otLabel}>Overtime Today</Text>
+            <Text style={[s.otValue, { color: workedSeconds > 28800 ? '#15803d' : '#94a3b8' }]}>
+              {formatDuration(Math.max(0, workedSeconds - 28800))}
+            </Text>
+          </View>
+        </View>
+
+        {/* Latest Payroll */}
+        <View style={s.payrollCard}>
+          <View style={s.payrollHeader}>
+            <View>
+              <Text style={s.payrollLabel}>Latest Payroll</Text>
+              <Text style={s.payrollPeriod}>{payrollSummary?.payroll_range || 'No payroll data yet'}</Text>
+            </View>
+            <View style={s.payrollStatus}>
+              <Text style={s.payrollStatusText}>{payrollSummary?.payroll_status || 'N/A'}</Text>
+            </View>
+          </View>
+          <View style={s.payrollDivider} />
+          <View style={s.payrollRow}>
+            <Text style={s.payrollRowLabel}>Gross Pay</Text>
+            <Text style={s.payrollRowValue}>{money(payrollSummary?.gross_pay)}</Text>
+          </View>
+          <View style={s.payrollRow}>
+            <Text style={s.payrollRowLabel}>Deductions</Text>
+            <Text style={[s.payrollRowValue, { color: '#fca5a5' }]}>{money(payrollSummary?.total_deductions)}</Text>
+          </View>
+          <View style={s.payrollDivider} />
+          <View style={s.payrollRow}>
+            <Text style={[s.payrollRowLabel, { fontWeight: '700', color: '#fff' }]}>Net Pay</Text>
+            <Text style={s.payrollNet}>{money(payrollSummary?.net_pay)}</Text>
+          </View>
+        </View>
+
+        {message ? (
+          <View style={s.errorWrap}>
+            <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+            <Text style={s.errorText}>{message}</Text>
+          </View>
+        ) : null}
+      </View>
     </ScrollView>
     </>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f0f4ff' },
-  content: { padding: 16, paddingBottom: 40 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  headerLeft: { flex: 1, marginRight: 12 },
-  greeting: { fontSize: 20, fontWeight: '700', color: '#1e293b' },
-  date: { fontSize: 11, color: '#64748b', marginTop: 2 },
-  logoutBtn: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  logoutText: { color: '#b91c1c', fontWeight: '600', fontSize: 13 },
-  infoRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  infoChip: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  infoLabel: { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 },
-  infoValue: { fontSize: 12, fontWeight: '600', color: '#1e293b', marginTop: 2 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-  statusLabel: { fontSize: 15, fontWeight: '600' },
-  workedText: { fontSize: 13, color: '#475569' },
-  progressBg: {
-    height: 8,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  progressFill: { height: '100%', borderRadius: 4 },
-  progressLabel: { fontSize: 11, color: '#94a3b8', marginBottom: 16 },
-  btnRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  timeBtn: {
-    flex: 1,
-    backgroundColor: '#1e40af',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  timeBtnOff: { backgroundColor: '#e2e8f0' },
-  timeBtnText: { color: '#fff', fontWeight: '600', fontSize: 11 },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { paddingBottom: 48 },
+  // ── Header ──
+  header: { backgroundColor: '#1e3a8a', paddingHorizontal: 20, paddingBottom: 24 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  headerLeft: { flex: 1, marginRight: 8 },
+  greeting: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  date: { fontSize: 11, color: '#93c5fd', marginTop: 3 },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  avatarBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  avatarBtnImg: { width: 38, height: 38, borderRadius: 19 },
+  avatarBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  badge: { position: 'absolute', top: 4, right: 4, backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  infoPills: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 16 },
+  infoPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  infoPillText: { fontSize: 11, color: '#bfdbfe', fontWeight: '600', maxWidth: 100 },
+  statusWrap: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  statusLabel: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  workedText: { fontSize: 13, color: '#93c5fd' },
+  progressBg: { height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
+  progressFill: { height: '100%', borderRadius: 3, backgroundColor: '#22c55e' },
+  progressLabel: { fontSize: 11, color: '#93c5fd' },
+
+  // ── Body ──
+  body: { padding: 16, gap: 14 },
+  card: { backgroundColor: '#fff', borderRadius: 20, padding: 16, elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10 },
+  cardTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 14 },
+
+  // Time entry buttons
+  btnGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timeBtn: { width: '47%', backgroundColor: '#1e40af', borderRadius: 14, paddingVertical: 12, alignItems: 'center', gap: 4, shadowColor: '#1e40af', shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
+  timeBtnOff: { backgroundColor: '#f1f5f9', shadowOpacity: 0 },
+  timeBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   timeBtnTextOff: { color: '#94a3b8' },
-  timeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
-  },
-  timeItem: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 10,
-  },
-  timeItemLabel: { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase' },
-  timeItemValue: { fontSize: 13, fontWeight: '600', color: '#1e293b', marginTop: 2 },
-  otRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    paddingTop: 10,
-    marginTop: 4,
-  },
-  otLabel: { fontSize: 13, color: '#64748b' },
-  otValue: { fontSize: 14, fontWeight: '700' },
-  periodText: { fontSize: 12, color: '#64748b', marginTop: -6, marginBottom: 12 },
-  payRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  payLabel: { fontSize: 14, color: '#475569' },
-  payValue: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
-  divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 10 },
-  statusPill: {
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    alignSelf: 'flex-start',
-    marginTop: 10,
-  },
-  statusPillText: { fontSize: 12, fontWeight: '600' },
-  errorText: { color: '#b91c1c', textAlign: 'center', marginTop: 8 },
-  recordBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1e40af',
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    shadowColor: '#1e40af',
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  recordBtnText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
+  timeBtnCheck: { position: 'absolute', top: 6, right: 6 },
+
+  // Today's log
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  timeEntry: { alignItems: 'center', gap: 4, flex: 1 },
+  timeEntryIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  timeEntryVal: { fontSize: 12, fontWeight: '800', color: '#0f172a' },
+  timeEntryLabel: { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 },
+  otRow: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 10 },
+  otLabel: { fontSize: 12, color: '#64748b', flex: 1 },
+  otValue: { fontSize: 13, fontWeight: '700' },
+
+  // Payroll card
+  payrollCard: { backgroundColor: '#1e3a8a', borderRadius: 20, padding: 18, gap: 8, elevation: 6, shadowColor: '#1e3a8a', shadowOpacity: 0.3, shadowRadius: 10 },
+  payrollHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  payrollLabel: { fontSize: 11, color: '#93c5fd', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  payrollPeriod: { fontSize: 13, color: '#bfdbfe', marginTop: 2 },
+  payrollStatus: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  payrollStatusText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  payrollDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+  payrollRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  payrollRowLabel: { fontSize: 13, color: '#93c5fd' },
+  payrollRowValue: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  payrollNet: { fontSize: 22, fontWeight: '900', color: '#86efac' },
+
+  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12 },
+  errorText: { color: '#b91c1c', fontSize: 13, flex: 1 },
+
+  // Legacy stubs (kept to avoid missing style warnings)
+  logoutBtn: { backgroundColor: '#fee2e2', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  logoutText: { color: '#b91c1c', fontWeight: '600', fontSize: 13 },
   recordBtnBadge: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,

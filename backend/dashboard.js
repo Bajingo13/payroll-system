@@ -1,6 +1,259 @@
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 module.exports = function (app, pool) {
+
+  // ── Multer: save attendance selfies to uploads/attendance/ ──────────
+  const attendanceUploadDir = path.join(__dirname, '../uploads/attendance');
+  if (!fs.existsSync(attendanceUploadDir)) fs.mkdirSync(attendanceUploadDir, { recursive: true });
+
+  const attendanceUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, attendanceUploadDir),
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `${req.body.user_id}_${Date.now()}_${req.body.type}_${file.fieldname}${ext}`);
+      },
+    }),
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+  });
+
+  function getOfficeLocationConfig() {
+    const latitude = Number(process.env.OFFICE_LAT || 14.5512);
+    const longitude = Number(process.env.OFFICE_LNG || 121.0188);
+    const radiusM = Number(process.env.OFFICE_RADIUS_M || 250);
+    return {
+      latitude,
+      longitude,
+      radius_m: Number.isFinite(radiusM) && radiusM > 0 ? radiusM : 250,
+      name: process.env.OFFICE_NAME || 'Main Office'
+    };
+  }
+
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const a =
+      Math.sin(toRad(lat2 - lat1) / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(toRad(lng2 - lng1) / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // ── Ensure audit_logs has location + photo columns (runs once at startup) ──
+  async function ensureAuditLogsLocationColumns(conn) {
+    const [cols] = await conn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'audit_logs'
+         AND COLUMN_NAME IN ('latitude', 'longitude', 'distance_m', 'photo_filename')`
+    );
+    const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+    if (!existing.has('latitude'))
+      await conn.execute('ALTER TABLE audit_logs ADD COLUMN latitude DECIMAL(10,7) DEFAULT NULL');
+    if (!existing.has('longitude'))
+      await conn.execute('ALTER TABLE audit_logs ADD COLUMN longitude DECIMAL(10,7) DEFAULT NULL');
+    if (!existing.has('distance_m'))
+      await conn.execute('ALTER TABLE audit_logs ADD COLUMN distance_m DECIMAL(10,2) DEFAULT NULL');
+    if (!existing.has('photo_filename'))
+      await conn.execute('ALTER TABLE audit_logs ADD COLUMN photo_filename VARCHAR(255) DEFAULT NULL');
+  }
+
+  // ── Ensure users.profile_photo and push_token columns exist ─────────
+  async function ensureUsersProfilePhoto(conn) {
+    const [cols] = await conn.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'users'
+         AND COLUMN_NAME IN ('profile_photo', 'push_token')`
+    );
+    const existing = new Set(cols.map((c) => c.COLUMN_NAME));
+    if (!existing.has('profile_photo'))
+      await conn.execute('ALTER TABLE users ADD COLUMN profile_photo VARCHAR(255) DEFAULT NULL');
+    if (!existing.has('push_token'))
+      await conn.execute('ALTER TABLE users ADD COLUMN push_token VARCHAR(512) DEFAULT NULL');
+  }
+
+  (async () => {
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await ensureAuditLogsLocationColumns(conn);
+      await ensureUsersProfilePhoto(conn);
+    } catch (err) {
+      console.error('Failed to ensure schema columns:', err.message);
+    } finally {
+      if (conn) conn.release();
+    }
+  })();
+
+  // ── GET /api/geoip ───────────────────────────────────────────────────
+  // Proxies IP geolocation from the server (3 fallback services).
+  // Mobile calls this via api.get('/geoip') — works on Android emulator
+  // because the server always has full internet access.
+  app.get('/api/geoip', async (_req, res) => {
+    const office = getOfficeLocationConfig();
+    const axios = require('axios');
+
+    const services = [
+      {
+        url: 'https://ipwho.is/',
+        extract: (d) => d.success && d.latitude ? { latitude: d.latitude, longitude: d.longitude, city: d.city } : null,
+      },
+      {
+        url: 'http://ip-api.com/json/?fields=status,lat,lon,city',
+        extract: (d) => d.status === 'success' ? { latitude: d.lat, longitude: d.lon, city: d.city } : null,
+      },
+      {
+        url: 'https://ipapi.co/json/',
+        extract: (d) => d.latitude ? { latitude: Number(d.latitude), longitude: Number(d.longitude), city: d.city } : null,
+      },
+    ];
+
+    for (const svc of services) {
+      try {
+        const { data } = await axios.get(svc.url, { timeout: 6000 });
+        const coords = svc.extract(data);
+        if (coords) {
+          return res.json({
+            success: true,
+            latitude: Number(coords.latitude),
+            longitude: Number(coords.longitude),
+            city: coords.city || '',
+            office: { lat: office.latitude, lng: office.longitude, name: office.name, radius_m: office.radius_m },
+          });
+        }
+      } catch (_) {}
+    }
+
+    res.status(503).json({ success: false, message: 'Geolocation unavailable' });
+  });
+
+  // ── GET /api/employee/payslip/:payrollId ────────────────────────────
+  app.get('/api/employee/payslip/:payrollId', async (req, res) => {
+    const payrollId = Number(req.params.payrollId);
+    if (!payrollId) return res.status(400).json({ success: false, message: 'Invalid payroll ID' });
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+
+      const [rows] = await conn.execute(`
+        SELECT
+          ep.payroll_id, ep.payroll_status,
+          ep.basic_salary, ep.overtime, ep.holiday_pay,
+          ep.taxable_allowances, ep.non_taxable_allowances,
+          ep.absence_time, ep.absence_deduction,
+          ep.late_time, ep.late_deduction,
+          ep.undertime, ep.undertime_deduction,
+          ep.sss_employee, ep.philhealth_employee, ep.pagibig_employee,
+          ep.gsis_employee, ep.tax_withheld,
+          ep.loans, ep.other_deductions, ep.deductions, ep.adj_comp, ep.adj_non_comp,
+          ep.gross_pay, ep.total_deductions, ep.net_pay,
+          e.first_name, e.last_name, e.middle_name, e.emp_code,
+          ee.position, ee.department, ee.company,
+          pr.payroll_range, pr.status AS run_status
+        FROM employee_payroll ep
+        LEFT JOIN employees e ON e.employee_id = ep.employee_id
+        LEFT JOIN employee_employment ee ON ee.employee_id = ep.employee_id
+        LEFT JOIN payroll_runs pr ON pr.run_id = ep.run_id
+        WHERE ep.payroll_id = ?
+        LIMIT 1
+      `, [payrollId]);
+
+      if (!rows.length) return res.status(404).json({ success: false, message: 'Payslip not found' });
+
+      const payroll = rows[0];
+
+      const [allowances] = await conn.execute(`
+        SELECT epa.amount, at.allowance_name, at.is_taxable
+        FROM employee_payroll_allowances epa
+        LEFT JOIN allowance_types at ON at.allowance_type_id = epa.allowance_type_id
+        WHERE epa.payroll_id = ?
+      `, [payrollId]);
+
+      const [deductions] = await conn.execute(`
+        SELECT epd.amount, dt.deduction_name
+        FROM employee_payroll_deductions epd
+        LEFT JOIN deduction_types dt ON dt.deduction_type_id = epd.deduction_type_id
+        WHERE epd.payroll_id = ?
+      `, [payrollId]);
+
+      return res.json({ success: true, payslip: { ...payroll, allowances, deductions } });
+    } catch (err) {
+      console.error('Payslip error:', err);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  // ── Save device push token ───────────────────────────────────────────
+  app.post('/api/employee/push-token', async (req, res) => {
+    const userId = Number(req.body.user_id);
+    const pushToken = String(req.body.push_token || '').trim();
+    if (!userId || !pushToken) {
+      return res.status(400).json({ success: false, message: 'Missing user_id or push_token' });
+    }
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await conn.execute('UPDATE users SET push_token = ? WHERE user_id = ?', [pushToken, userId]);
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  // ── Profile photo upload ─────────────────────────────────────────────
+  const profileUploadDir = path.join(__dirname, '../uploads/profiles');
+  if (!fs.existsSync(profileUploadDir)) fs.mkdirSync(profileUploadDir, { recursive: true });
+
+  const profileUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, profileUploadDir),
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `user_${req.body.user_id}_${Date.now()}${ext}`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+  });
+
+  app.post('/api/employee/profile-photo', profileUpload.single('photo'), async (req, res) => {
+    const userId = Number(req.body.user_id);
+    if (!userId || !req.file) {
+      return res.status(400).json({ success: false, message: 'Missing user_id or photo' });
+    }
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      // Delete old profile photo file if it exists
+      const [existing] = await conn.execute('SELECT profile_photo FROM users WHERE user_id = ? LIMIT 1', [userId]);
+      if (existing[0]?.profile_photo) {
+        const oldPath = path.join(profileUploadDir, existing[0].profile_photo);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+      await conn.execute('UPDATE users SET profile_photo = ? WHERE user_id = ?', [req.file.filename, userId]);
+      return res.json({ success: true, filename: req.file.filename, url: `/uploads/profiles/${req.file.filename}` });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.get('/api/attendance/location-config', (_req, res) => {
+    const office = getOfficeLocationConfig();
+    return res.json({ success: true, office });
+  });
+
   const ID_CIPHER_PREFIX = 'enc:v1';
 
   function getEncryptionKey() {
@@ -579,7 +832,7 @@ module.exports = function (app, pool) {
       conn = await pool.getConnection();
 
       const [users] = await conn.execute(
-        'SELECT user_id, username, full_name, role FROM users WHERE user_id = ? LIMIT 1',
+        'SELECT user_id, username, full_name, role, profile_photo FROM users WHERE user_id = ? LIMIT 1',
         [userId]
       );
 
@@ -618,6 +871,7 @@ module.exports = function (app, pool) {
 
         const [historyRows] = await conn.execute(
           `SELECT
+              ep.payroll_id,
               ep.date_generated,
               ep.gross_pay,
               ep.total_deductions,
@@ -676,6 +930,10 @@ module.exports = function (app, pool) {
         [userId]
       );
 
+      const profilePhotoUrl = user.profile_photo
+        ? `/uploads/profiles/${user.profile_photo}`
+        : null;
+
       return res.json({
         success: true,
         user,
@@ -686,7 +944,8 @@ module.exports = function (app, pool) {
         evaluationSummary,
         attendanceSummary,
         todayTime,
-        attendanceLogs: attendanceRows
+        attendanceLogs: attendanceRows,
+        profilePhotoUrl,
       });
     } catch (err) {
       console.error('Employee dashboard error:', err);
@@ -696,9 +955,20 @@ module.exports = function (app, pool) {
     }
   });
 
-  app.post('/api/employee/time-entry', async (req, res) => {
+  app.post('/api/employee/time-entry', attendanceUpload.single('photo'), async (req, res) => {
     const userId = Number(req.body.user_id);
     const type = String(req.body.type || '').toLowerCase();
+    const latitude = req.body.latitude != null ? Number(req.body.latitude) : null;
+    const longitude = req.body.longitude != null ? Number(req.body.longitude) : null;
+    const postedDistanceM = req.body.distance_m != null ? Number(req.body.distance_m) : null;
+    const cameraMode = String(req.body.camera_mode || '').toLowerCase();
+    const uploadedPhotoFilename = req.file ? req.file.filename : null;
+    const photoFilename = [
+      cameraMode && `mode:${cameraMode}`,
+      uploadedPhotoFilename && `photo:${uploadedPhotoFilename}`
+    ]
+      .filter(Boolean)
+      .join(';') || null;
 
     if (!userId || !['time_in', 'break_out', 'break_in', 'time_out'].includes(type)) {
       return res.status(400).json({ success: false, message: 'Invalid request' });
@@ -768,9 +1038,19 @@ module.exports = function (app, pool) {
       };
 
       const action = actionMap[type];
+      const office = getOfficeLocationConfig();
+      const computedDistanceM =
+        Number.isFinite(latitude) && Number.isFinite(longitude)
+          ? haversineMeters(latitude, longitude, office.latitude, office.longitude)
+          : postedDistanceM;
+
       await conn.execute(
-        'INSERT INTO audit_logs (user_id, admin_name, action, status) VALUES (?, ?, ?, ?)',
-        [user.user_id, user.full_name, action, 'Success']
+        'INSERT INTO audit_logs (user_id, admin_name, action, status, latitude, longitude, distance_m, photo_filename) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [user.user_id, user.full_name, action, 'Success',
+          Number.isFinite(latitude) ? latitude : null,
+          Number.isFinite(longitude) ? longitude : null,
+          Number.isFinite(computedDistanceM) ? computedDistanceM : null,
+          photoFilename]
       );
 
       const updatedState = await getTodayTimeEntries(conn, userId);
@@ -1112,6 +1392,7 @@ module.exports = function (app, pool) {
     const today = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
     const fromDate = datePattern.test(String(req.query.from || '')) ? String(req.query.from) : today;
     const toDate = datePattern.test(String(req.query.to || '')) ? String(req.query.to) : fromDate;
+    const filterUserId = Number(req.query.user_id || 0) || null;
     const fromMs = Date.parse(`${fromDate}T00:00:00Z`);
     const toMs = Date.parse(`${toDate}T00:00:00Z`);
 
@@ -1160,6 +1441,7 @@ module.exports = function (app, pool) {
                LIMIT 1
              )
            WHERE LOWER(TRIM(u.role)) = 'employee'
+             AND (? IS NULL OR u.user_id = ?)
          ),
          log_summary AS (
            SELECT
@@ -1168,7 +1450,20 @@ module.exports = function (app, pool) {
               MIN(CASE WHEN action = 'Employee Time In' THEN log_time END) AS time_in,
               MIN(CASE WHEN action = 'Employee Break Out' THEN log_time END) AS break_out,
               MIN(CASE WHEN action = 'Employee Break In' THEN log_time END) AS break_in,
-              MAX(CASE WHEN action = 'Employee Time Out' THEN log_time END) AS time_out
+              MAX(CASE WHEN action = 'Employee Time Out' THEN log_time END) AS time_out,
+              MIN(CASE WHEN action = 'Employee Time In' THEN latitude END) AS time_in_lat,
+              MIN(CASE WHEN action = 'Employee Time In' THEN longitude END) AS time_in_lng,
+              MIN(CASE WHEN action = 'Employee Time In' THEN distance_m END) AS time_in_dist,
+              MIN(CASE WHEN action = 'Employee Time In' THEN photo_filename END) AS time_in_photo,
+              MIN(CASE WHEN action = 'Employee Break Out' THEN latitude END) AS break_out_lat,
+              MIN(CASE WHEN action = 'Employee Break Out' THEN longitude END) AS break_out_lng,
+              MIN(CASE WHEN action = 'Employee Break Out' THEN distance_m END) AS break_out_dist,
+              MIN(CASE WHEN action = 'Employee Break In' THEN latitude END) AS break_in_lat,
+              MIN(CASE WHEN action = 'Employee Break In' THEN longitude END) AS break_in_lng,
+              MIN(CASE WHEN action = 'Employee Break In' THEN distance_m END) AS break_in_dist,
+              MAX(CASE WHEN action = 'Employee Time Out' THEN latitude END) AS time_out_lat,
+              MAX(CASE WHEN action = 'Employee Time Out' THEN longitude END) AS time_out_lng,
+              MAX(CASE WHEN action = 'Employee Time Out' THEN distance_m END) AS time_out_dist
            FROM audit_logs
            WHERE action IN ('Employee Time In', 'Employee Break Out', 'Employee Break In', 'Employee Time Out')
              AND DATE(log_time) BETWEEN ? AND ?
@@ -1186,6 +1481,19 @@ module.exports = function (app, pool) {
             ls.break_out,
             ls.break_in,
             ls.time_out,
+            ls.time_in_lat,
+            ls.time_in_lng,
+            ls.time_in_dist,
+            ls.time_in_photo,
+            ls.break_out_lat,
+            ls.break_out_lng,
+            ls.break_out_dist,
+            ls.break_in_lat,
+            ls.break_in_lng,
+            ls.break_in_dist,
+            ls.time_out_lat,
+            ls.time_out_lng,
+            ls.time_out_dist,
             ROUND(
               GREATEST(
                 ((
@@ -1232,7 +1540,7 @@ module.exports = function (app, pool) {
            ON ls.user_id = eu.user_id
           AND ls.attendance_date = sd.attendance_date
          ORDER BY sd.attendance_date DESC, eu.employee_name ASC`,
-        [fromDate, toDate, fromDate, toDate]
+        [fromDate, toDate, filterUserId, filterUserId, fromDate, toDate]
       );
 
       res.json({

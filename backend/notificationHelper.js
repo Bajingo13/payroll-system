@@ -1,3 +1,5 @@
+const https = require('https');
+
 async function ensureNotificationsTable(conn) {
   await conn.execute(`
     CREATE TABLE IF NOT EXISTS notifications (
@@ -16,6 +18,73 @@ async function ensureNotificationsTable(conn) {
   `);
 }
 
+// Send a real Expo push notification to a device token (fire-and-forget)
+function sendExpoPush(pushToken, title, body, data = {}) {
+  if (!pushToken || !pushToken.startsWith('ExponentPushToken')) return;
+
+  const payload = JSON.stringify({
+    to: pushToken,
+    title,
+    body,
+    data,
+    sound: 'default',
+    priority: 'high',
+    channelId: 'default',
+  });
+
+  const options = {
+    hostname: 'exp.host',
+    path: '/api/v2/push/send',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip, deflate',
+    },
+  };
+
+  const req = https.request(options, (res) => {
+    let raw = '';
+    res.on('data', (chunk) => { raw += chunk; });
+    res.on('end', () => {
+      try {
+        const json = JSON.parse(raw);
+        if (json?.data?.status === 'error') {
+          console.warn('[Push] Expo error:', json.data.message);
+        }
+      } catch (_) {}
+    });
+  });
+  req.on('error', (err) => console.warn('[Push] Request error:', err.message));
+  req.write(payload);
+  req.end();
+}
+
+// Get push token for a user
+async function getUserPushToken(conn, userId) {
+  try {
+    const [rows] = await conn.execute(
+      'SELECT push_token FROM users WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+    return rows[0]?.push_token || null;
+  } catch (_) { return null; }
+}
+
+function emitUnreadCount(userId, pool) {
+  if (!global._io) return;
+  pool.getConnection()
+    .then((conn) => conn.execute(
+      'SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0',
+      [userId]
+    ).then(([rows]) => {
+      global._io.to(`user_${userId}`).emit('notification_count', Number(rows[0]?.cnt || 0));
+      conn.release();
+    }).catch(() => conn.release()))
+    .catch(() => {});
+}
+
 async function createNotification(pool, userId, type, title, message) {
   let conn;
   try {
@@ -25,7 +94,12 @@ async function createNotification(pool, userId, type, title, message) {
       'INSERT INTO notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)',
       [userId, type, title, message]
     );
+    // Send real push notification
+    const token = await getUserPushToken(conn, userId);
+    sendExpoPush(token, title, message, { type });
     console.log(`[Notification] Created for user_id=${userId} type=${type}`);
+    // Emit real-time count update via Socket.io
+    emitUnreadCount(userId, pool);
   } catch (err) {
     console.error('[Notification] createNotification error:', err.message);
   } finally {
@@ -39,19 +113,20 @@ async function createNotificationsForAdminHr(pool, type, title, message) {
     conn = await pool.getConnection();
     await ensureNotificationsTable(conn);
     const [adminUsers] = await conn.execute(`
-      SELECT user_id, role FROM users
+      SELECT user_id, push_token FROM users
       WHERE (LOWER(role) LIKE '%admin%' OR LOWER(role) LIKE '%hr%' OR LOWER(role) LIKE '%human resource%')
         AND (account_status IS NULL OR LOWER(account_status) NOT IN ('deactivated','deleted'))
       LIMIT 100
     `);
-    console.log(`[Notification] Admin/HR targets for type=${type}:`, adminUsers.map(u => u.user_id));
     for (const u of adminUsers) {
       await conn.execute(
         'INSERT INTO notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)',
         [u.user_id, type, title, message]
       );
+      sendExpoPush(u.push_token, title, message, { type });
+      emitUnreadCount(u.user_id, pool);
     }
-    console.log(`[Notification] Inserted ${adminUsers.length} admin/hr notifications for type=${type}`);
+    console.log(`[Notification] Sent to ${adminUsers.length} admin/hr users for type=${type}`);
   } catch (err) {
     console.error('[Notification] createNotificationsForAdminHr error:', err.message);
   } finally {
@@ -65,17 +140,18 @@ async function createNotificationsForAllUsers(pool, type, title, message) {
     conn = await pool.getConnection();
     await ensureNotificationsTable(conn);
     const [allUsers] = await conn.execute(`
-      SELECT user_id FROM users
+      SELECT user_id, push_token FROM users
       WHERE account_status IS NULL OR LOWER(account_status) NOT IN ('deactivated','deleted')
       LIMIT 1000
     `);
-    console.log(`[Notification] All-users targets for type=${type}: ${allUsers.length} users`);
     for (const u of allUsers) {
       await conn.execute(
         'INSERT INTO notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)',
         [u.user_id, type, title, message]
       );
+      sendExpoPush(u.push_token, title, message, { type });
     }
+    console.log(`[Notification] Sent to ${allUsers.length} users for type=${type}`);
   } catch (err) {
     console.error('[Notification] createNotificationsForAllUsers error:', err.message);
   } finally {
@@ -87,5 +163,5 @@ module.exports = {
   ensureNotificationsTable,
   createNotification,
   createNotificationsForAdminHr,
-  createNotificationsForAllUsers
+  createNotificationsForAllUsers,
 };

@@ -1,12 +1,19 @@
-// Set this to your backend URL before running the app.
+// ── Switch between environments here ──────────────────────
 //
-// For local development (using Android emulator):
-//   'http://10.0.2.2:3000/api'   <- emulator → your PC localhost
+// LOCAL (WiFi, same network as PC):
+//   'http://192.168.68.128:12687/api'
 //
-// For local development (using a real phone on the same Wi-Fi):
-//   'http://YOUR_PC_LOCAL_IP:3000/api'  (e.g. http://192.168.1.5:3000/api)
+// PRODUCTION (Railway — works on any internet connection):
+//   'https://YOUR-APP.up.railway.app/api'
 //
-// For production (deployed backend):
-//   'https://your-deployed-backend.com/api'
+// Change ACTIVE_ENV below to switch.
 
-export const API_BASE_URL = 'http://10.0.2.2:12687/api';
+const ENV = {
+  local:      'http://192.168.68.128:12687/api',
+  production: 'https://YOUR-APP.up.railway.app/api',  // ← replace with your Railway URL
+};
+
+// Set to 'production' before building the APK
+const ACTIVE_ENV = 'local';
+
+export const API_BASE_URL = ENV[ACTIVE_ENV];

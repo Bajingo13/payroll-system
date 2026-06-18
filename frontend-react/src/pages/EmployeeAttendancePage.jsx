@@ -78,6 +78,24 @@ function attendanceStatus(record) {
   return { label: 'Present', className: 'present' };
 }
 
+function mapsUrl(lat, lng) {
+  return `https://www.google.com/maps?q=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+}
+
+function attendancePhotoUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const parts = raw.split(';').map((part) => part.trim()).filter(Boolean);
+  const photoPart = parts.find((part) => part.startsWith('photo:'))
+    || parts.find((part) => part.startsWith('front:'))
+    || parts.find((part) => part.startsWith('back:'))
+    || raw;
+
+  const filename = photoPart.includes(':') ? photoPart.split(':').slice(1).join(':') : photoPart;
+  return filename ? `/uploads/attendance/${encodeURIComponent(filename)}` : '';
+}
+
 export default function EmployeeAttendancePage() {
   const { user } = useAuth();
   const [records, setRecords] = useState([]);
@@ -149,13 +167,18 @@ export default function EmployeeAttendancePage() {
       'OT Hours',
       'Late (min)',
       'Undertime (min)',
-      'Status'
+      'Status',
+      'Time-In Location',
+      'Time-In Distance (m)'
     ];
 
     const rows = filteredRecords.map((record) => {
       const status = attendanceStatus(record);
       const totalHours = computeHours(record);
       const ot = totalHours === '-' ? '-' : Math.max(0, Number(totalHours) - 8).toFixed(2);
+      const locationStr = record.time_in_lat != null && record.time_in_lng != null
+        ? `${Number(record.time_in_lat).toFixed(6)}, ${Number(record.time_in_lng).toFixed(6)}`
+        : '-';
 
       return [
         record.emp_code || 'N/A',
@@ -170,7 +193,9 @@ export default function EmployeeAttendancePage() {
         record.ot_hours != null ? Number(record.ot_hours).toFixed(2) : ot,
         record.late_minutes != null ? Number(record.late_minutes) : '-',
         record.undertime_minutes != null ? Number(record.undertime_minutes) : '-',
-        status.label
+        status.label,
+        locationStr,
+        record.time_in_dist != null ? Math.round(record.time_in_dist) : '-'
       ];
     });
 
@@ -306,18 +331,21 @@ export default function EmployeeAttendancePage() {
                 <th>Late (min)</th>
                 <th>Undertime (min)</th>
                 <th>Status</th>
+                <th>Selfie</th>
+                <th>Location (Time In)</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan="14">No attendance records found.</td></tr>
+                <tr><td colSpan="16">No attendance records found.</td></tr>
               ) : filteredRecords.map((record) => {
                 const status = attendanceStatus(record);
                 const totalHours = computeHours(record);
                 const ot = totalHours === '-' ? '-' : Math.max(0, Number(totalHours) - 8).toFixed(2);
                 const lateMin = record.late_minutes != null ? Number(record.late_minutes) : null;
                 const undertimeMin = record.undertime_minutes != null ? Number(record.undertime_minutes) : null;
+                const selfieUrl = attendancePhotoUrl(record.time_in_photo);
                 return (
                   <tr key={`${record.attendance_date}-${record.emp_code}-${record.time_in || ''}`}>
                     <td>{record.emp_code || 'N/A'}</td>
@@ -337,6 +365,38 @@ export default function EmployeeAttendancePage() {
                       {undertimeMin != null ? (undertimeMin > 0 ? undertimeMin : '-') : '-'}
                     </td>
                     <td><span className={`status ${status.className}`}>{status.label}</span></td>
+                    <td style={{ textAlign: 'center' }}>
+                      {selfieUrl ? (
+                        <a href={selfieUrl} target="_blank" rel="noreferrer">
+                          <img
+                            src={selfieUrl}
+                            alt="selfie"
+                            style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid #e2e8f0' }}
+                          />
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {record.time_in_lat != null && record.time_in_lng != null ? (
+                        <a
+                          href={mapsUrl(record.time_in_lat, record.time_in_lng)}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#0a66d9', textDecoration: 'none', fontSize: '12px' }}
+                        >
+                          📍 {Number(record.time_in_lat).toFixed(4)}, {Number(record.time_in_lng).toFixed(4)}
+                          {record.time_in_dist != null && (
+                            <span style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              color: Number(record.time_in_dist) > 100 ? '#b91c1c' : '#15803d'
+                            }}>
+                              {Math.round(record.time_in_dist)}m from office
+                            </span>
+                          )}
+                        </a>
+                      ) : '-'}
+                    </td>
                     <td>
                       <button type="button" className="btn secondary" onClick={() => openEditAttendance(record)}>
                         Edit

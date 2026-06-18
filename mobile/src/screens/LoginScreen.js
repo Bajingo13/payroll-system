@@ -1,17 +1,25 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { getApiMessage } from '../api/client';
+
+const { width: SW } = Dimensions.get('window');
 
 function normalizeRole(raw) {
   const role = String(raw || '').trim().toLowerCase();
@@ -23,27 +31,24 @@ function normalizeRole(raw) {
 
 export default function LoginScreen() {
   const { login, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uFocus, setUFocus] = useState(false);
+  const [pFocus, setPFocus] = useState(false);
 
   async function handleLogin() {
-    if (!username.trim() || !password) {
-      setError('Please enter username and password.');
-      return;
-    }
-    setError('');
-    setLoading(true);
+    if (!username.trim() || !password) { setError('Please enter your username and password.'); return; }
+    setError(''); setLoading(true);
     try {
       const user = await login(username.trim(), password);
-      const role = normalizeRole(user.role);
-      if (role === 'admin') {
+      if (normalizeRole(user.role) === 'admin') {
         await logout();
-        setError('Admin accounts are not allowed on the mobile app. Please use the web system instead.');
+        setError('Admin accounts must use the web system.');
         setLoading(false);
-        return;
       }
     } catch (err) {
       setError(getApiMessage(err, 'Invalid username or password.'));
@@ -52,131 +57,231 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Hero */}
-        <View style={s.hero}>
-          <View style={s.logoCircle}>
-            <Text style={s.logoText}>A</Text>
-          </View>
-          <Text style={s.brand}>Astreablue</Text>
-          <Text style={s.tagline}>Intelligence Inc.</Text>
-          <Text style={s.sub}>HRIS & Payroll Mobile</Text>
-        </View>
+    <>
+      <StatusBar barStyle="light-content" />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
-        {/* Card */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Sign In</Text>
-          <Text style={s.cardSub}>Enter your credentials to continue</Text>
+        {/* Mid-tone blue gradient */}
+        <LinearGradient
+          colors={['#0f2044', '#163370', '#1a4090']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
 
-          <TextInput
-            style={s.input}
-            placeholder="Username"
-            placeholderTextColor="#94a3b8"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+        {/* Soft decorative circles */}
+        <View style={s.circle1} />
+        <View style={s.circle2} />
+        <View style={s.circle3} />
 
-          <View style={s.passwordRow}>
-            <TextInput
-              style={[s.input, s.passwordInput]}
-              placeholder="Password"
-              placeholderTextColor="#94a3b8"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
+        <ScrollView
+          contentContainerStyle={[s.scroll, { paddingTop: insets.top + 28 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+
+          {/* ── Hero / Logo ── */}
+          <View style={s.hero}>
+            <Image
+              source={require('../../assets/logo.png')}
+              style={s.logo}
+              resizeMode="contain"
             />
-            <TouchableOpacity
-              style={s.eyeBtn}
-              onPress={() => setShowPassword((v) => !v)}
-            >
-              <Text style={s.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
-            </TouchableOpacity>
+            <Text style={s.company}>Intelligence Inc.</Text>
+            <View style={s.pill}>
+              <View style={s.pillDot} />
+              <Text style={s.pillText}>HRIS Mobile</Text>
+            </View>
           </View>
 
-          {error ? <Text style={s.error}>{error}</Text> : null}
+          {/* ── White Card ── */}
+          <View style={s.card}>
+            {/* Top accent line */}
+            <LinearGradient
+              colors={['transparent', '#3b82f6', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={s.accentLine}
+            />
 
-          <TouchableOpacity
-            style={[s.btn, loading && s.btnDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={s.btnText}>Login</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            <Text style={s.title}>Welcome back 👋</Text>
+            <Text style={s.subtitle}>Sign in to continue to HRIS</Text>
 
-        <Text style={s.footer}>
-          Astreablue Intelligence Inc. © {new Date().getFullYear()}
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* Username */}
+            <View style={s.fieldWrap}>
+              <Text style={s.label}>Username</Text>
+              <View style={[s.field, uFocus && s.fieldOn]}>
+                <View style={[s.iconBox, uFocus && s.iconBoxOn]}>
+                  <Ionicons name="person" size={15} color={uFocus ? '#fff' : '#94a3b8'} />
+                </View>
+                <TextInput
+                  style={s.input}
+                  placeholder="Enter your username"
+                  placeholderTextColor="#cbd5e1"
+                  value={username}
+                  onChangeText={v => { setUsername(v); setError(''); }}
+                  autoCapitalize="none" autoCorrect={false}
+                  onFocus={() => setUFocus(true)}
+                  onBlur={() => setUFocus(false)}
+                />
+              </View>
+            </View>
+
+            {/* Password */}
+            <View style={s.fieldWrap}>
+              <Text style={s.label}>Password</Text>
+              <View style={[s.field, pFocus && s.fieldOn]}>
+                <View style={[s.iconBox, pFocus && s.iconBoxOn]}>
+                  <Ionicons name="lock-closed" size={15} color={pFocus ? '#fff' : '#94a3b8'} />
+                </View>
+                <TextInput
+                  style={[s.input, { flex: 1 }]}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#cbd5e1"
+                  value={password}
+                  onChangeText={v => { setPassword(v); setError(''); }}
+                  secureTextEntry={!showPassword}
+                  onFocus={() => setPFocus(true)}
+                  onBlur={() => setPFocus(false)}
+                  onSubmitEditing={handleLogin}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={s.eye}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Error */}
+            {error ? (
+              <View style={s.errBox}>
+                <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+                <Text style={s.errText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* Sign In button */}
+            <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.87} style={s.btnWrap}>
+              <LinearGradient
+                colors={loading ? ['#94a3b8', '#94a3b8'] : ['#1d4ed8', '#3b82f6']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={s.btn}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <>
+                      <Text style={s.btnText}>Sign In</Text>
+                      <View style={s.btnArrow}>
+                        <Ionicons name="arrow-forward" size={16} color="#1d4ed8" />
+                      </View>
+                    </>}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Footer */}
+            <View style={s.footerRow}>
+              <View style={s.footerLine} />
+              <Text style={s.footerText}>Astreablue Intelligence Inc. © {new Date().getFullYear()}</Text>
+              <View style={s.footerLine} />
+            </View>
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#1e40af' },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  hero: { alignItems: 'center', marginBottom: 36 },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+  scroll: { flexGrow: 1, paddingBottom: 0 },
+
+  // Decorative circles on blue bg
+  circle1: {
+    position: 'absolute', width: 300, height: 300, borderRadius: 150,
+    backgroundColor: 'rgba(255,255,255,0.07)', top: -80, right: -80,
   },
-  logoText: { fontSize: 36, fontWeight: '800', color: '#fff' },
-  brand: { fontSize: 30, fontWeight: '800', color: '#fff' },
-  tagline: { fontSize: 14, color: '#bfdbfe', marginTop: 2 },
-  sub: { fontSize: 12, color: '#93c5fd', marginTop: 6 },
+  circle2: {
+    position: 'absolute', width: 180, height: 180, borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.05)', top: 160, left: -60,
+  },
+  circle3: {
+    position: 'absolute', width: 120, height: 120, borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.06)', top: 80, left: SW * 0.6,
+  },
+
+  // Hero
+  hero: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 32, gap: 6 },
+  logo: { width: 190, height: 95, marginBottom: 6 },
+  company: {
+    fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '700',
+    letterSpacing: 2, textTransform: 'uppercase',
+  },
+  pill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+  },
+  pillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' },
+  pillText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+
+  // Mid-dark card
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
+    backgroundColor: '#122040',
+    borderTopLeftRadius: 36, borderTopRightRadius: 36,
+    paddingHorizontal: 28, paddingTop: 10, paddingBottom: 40,
+    flex: 1,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderBottomWidth: 0,
+    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 24, elevation: 18,
   },
-  cardTitle: { fontSize: 22, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
-  cardSub: { fontSize: 13, color: '#64748b', marginBottom: 22 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 15,
-    color: '#1e293b',
-    marginBottom: 12,
-    backgroundColor: '#f8fafc',
+  accentLine: { height: 3, width: 60, borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
+  title: { fontSize: 26, fontWeight: '900', color: '#f1f5f9', marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#94a3b8', marginBottom: 28 },
+
+  // Fields
+  fieldWrap: { marginBottom: 18 },
+  label: {
+    fontSize: 12, fontWeight: '700', color: '#7ea8d4',
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8,
   },
-  passwordRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  passwordInput: { flex: 1, marginBottom: 0, marginRight: 8 },
-  eyeBtn: { padding: 10 },
-  eyeIcon: { fontSize: 20 },
-  error: { color: '#b91c1c', fontSize: 13, marginBottom: 12 },
+  field: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#0d1a30', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#1e3a5f', height: 56,
+  },
+  fieldOn: {
+    borderColor: '#3b82f6', backgroundColor: '#0f2248',
+    shadowColor: '#3b82f6', shadowOpacity: 0.2, shadowRadius: 8, elevation: 3,
+  },
+  iconBox: {
+    width: 36, height: 36, borderRadius: 10, margin: 10,
+    backgroundColor: '#1e3a5f', alignItems: 'center', justifyContent: 'center',
+  },
+  iconBoxOn: { backgroundColor: '#3b82f6' },
+  input: { flex: 1, fontSize: 15, color: '#e2e8f0', fontWeight: '500' },
+  eye: { padding: 14 },
+
+  // Error
+  errBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 18,
+  },
+  errText: { color: '#f87171', fontSize: 13, flex: 1 },
+
+  // Button
+  btnWrap: { borderRadius: 16, overflow: 'hidden', marginBottom: 28, marginTop: 4 },
   btn: {
-    backgroundColor: '#1e40af',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 4,
+    height: 58, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 10,
   },
-  btnDisabled: { opacity: 0.7 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  footer: { textAlign: 'center', color: '#93c5fd', fontSize: 11, marginTop: 24 },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  btnArrow: {
+    width: 30, height: 30, borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Footer
+  footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  footerLine: { flex: 1, height: 1, backgroundColor: '#1e3a5f', opacity: 0.6 },
+  footerText: { fontSize: 10, color: '#64748b', fontWeight: '500' },
 });

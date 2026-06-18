@@ -295,6 +295,8 @@ if (fs.existsSync(reactDistPath)) {
   app.use('/assets', express.static(path.join(reactDistPath, 'assets')));
 }
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 if (useReactFrontend) {
   app.use((req, res, next) => {
     if (!req.path.startsWith('/api/') && !req.path.startsWith('/assets/')) {
@@ -495,10 +497,30 @@ if (useReactFrontend) {
 
     const PORT = Number(process.env.PORT || 3000);
 
-    app.listen(PORT, '0.0.0.0', () => {
+    const http = require('http');
+    const { Server: SocketServer } = require('socket.io');
+    const httpServer = http.createServer(app);
+
+    const io = new SocketServer(httpServer, {
+      cors: { origin: '*', methods: ['GET', 'POST'] },
+    });
+
+    // Each user joins their own room so we can push to specific users
+    io.on('connection', (socket) => {
+      const userId = socket.handshake.query.user_id;
+      if (userId) {
+        socket.join(`user_${userId}`);
+      }
+    });
+
+    // Expose io globally so notificationHelper can emit events
+    global._io = io;
+
+    httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`OK > Server running on port ${PORT}`);
       console.log(`OK > Active DB mode: ${dbMode}`);
       console.log('OK > db-test route registered');
+      console.log('OK > Socket.io ready');
     });
   } catch (err) {
     console.error('❌ APP START FAILED:', err);

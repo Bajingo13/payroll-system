@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -8,37 +9,36 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
+import HeaderActions from '../components/HeaderActions';
 
 function todayStr() {
   const d = new Date();
-  return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0'),
-  ].join('-');
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 }
 
 function formatDateLabel(value) {
   if (!value) return '-';
   const d = new Date(`${value}T00:00:00`);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' });
 }
 
 function formatTime(value) {
-  if (!value) return '-';
+  if (!value) return null;
   const d = new Date(String(value).replace(' ', 'T'));
-  if (Number.isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function computeHours(record) {
-  if (!record.time_in || !record.time_out) return '-';
+  if (!record.time_in || !record.time_out) return null;
   const t1 = new Date(String(record.time_in).replace(' ', 'T')).getTime();
   const t2 = new Date(String(record.time_out).replace(' ', 'T')).getTime();
-  if (t2 <= t1) return '0.00';
+  if (t2 <= t1) return null;
   let breakMs = 0;
   if (record.break_out && record.break_in) {
     const b1 = new Date(String(record.break_out).replace(' ', 'T')).getTime();
@@ -49,13 +49,14 @@ function computeHours(record) {
 }
 
 function getStatus(record) {
-  if (!record.time_in) return { label: 'Absent', color: '#b91c1c', bg: '#fee2e2' };
+  if (!record.time_in) return { label: 'Absent', color: '#b91c1c', bg: '#fee2e2', icon: 'close-circle' };
   if (!record.time_out || (record.break_out && !record.break_in))
-    return { label: 'Incomplete', color: '#d97706', bg: '#fef3c7' };
-  return { label: 'Present', color: '#15803d', bg: '#dcfce7' };
+    return { label: 'Incomplete', color: '#d97706', bg: '#fef3c7', icon: 'time' };
+  return { label: 'Present', color: '#15803d', bg: '#dcfce7', icon: 'checkmark-circle' };
 }
 
-export default function AttendanceScreen() {
+export default function AttendanceScreen({ navigation }) {
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [records, setRecords] = useState([]);
   const [from, setFrom] = useState(todayStr);
@@ -68,7 +69,7 @@ export default function AttendanceScreen() {
     setError('');
     try {
       const { data } = await api.get('/attendance_overview', {
-        params: { from: f, to: t || f },
+        params: { from: f, to: t || f, user_id: user?.user_id },
       });
       setRecords(data.records || []);
     } catch (err) {
@@ -81,183 +82,198 @@ export default function AttendanceScreen() {
   useEffect(() => { load(from, to); }, []);
 
   const present = records.filter((r) => getStatus(r).label === 'Present').length;
-  const absent = records.filter((r) => getStatus(r).label === 'Absent').length;
+  const absent  = records.filter((r) => getStatus(r).label === 'Absent').length;
   const incomplete = records.filter((r) => getStatus(r).label === 'Incomplete').length;
 
   return (
     <ScrollView
       style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 12 }]}
-      refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={() => load(from, to)} tintColor="#1e40af" />
-      }
+      contentContainerStyle={s.content}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load(from, to)} tintColor="#fff" />}
     >
-      <Text style={s.title}>Attendance</Text>
-      <Text style={s.sub}>View your timekeeping records by date range</Text>
+      {/* ── Header ── */}
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <View>
+            <Text style={s.headerTitle}>Attendance</Text>
+            <Text style={s.headerSub}>View your timekeeping records</Text>
+          </View>
+          <HeaderActions navigation={navigation} />
+        </View>
 
-      {/* Filter */}
-      <View style={s.filterCard}>
+        {/* Summary pills */}
+        <View style={s.summaryRow}>
+          {[
+            { label: 'Present', count: present, color: '#86efac', bg: 'rgba(34,197,94,0.15)', icon: 'checkmark-circle' },
+            { label: 'Absent', count: absent, color: '#fca5a5', bg: 'rgba(239,68,68,0.15)', icon: 'close-circle' },
+            { label: 'Incomplete', count: incomplete, color: '#fcd34d', bg: 'rgba(245,158,11,0.15)', icon: 'time' },
+            { label: 'Total', count: records.length, color: '#bfdbfe', bg: 'rgba(255,255,255,0.1)', icon: 'calendar' },
+          ].map((item) => (
+            <View key={item.label} style={[s.summaryPill, { backgroundColor: item.bg }]}>
+              <Ionicons name={item.icon + '-outline'} size={16} color={item.color} />
+              <Text style={[s.summaryCount, { color: item.color }]}>{item.count}</Text>
+              <Text style={s.summaryLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Date filter */}
         <View style={s.filterRow}>
-          <View style={s.filterField}>
-            <Text style={s.filterLabel}>From</Text>
+          <View style={s.filterInput}>
+            <Ionicons name="calendar-outline" size={14} color="#93c5fd" />
             <TextInput
-              style={s.filterInput}
+              style={s.filterText}
               value={from}
               onChangeText={setFrom}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#94a3b8"
+              placeholder="From"
+              placeholderTextColor="rgba(147,197,253,0.6)"
             />
           </View>
-          <View style={s.filterField}>
-            <Text style={s.filterLabel}>To</Text>
+          <Text style={s.filterSep}>→</Text>
+          <View style={s.filterInput}>
+            <Ionicons name="calendar-outline" size={14} color="#93c5fd" />
             <TextInput
-              style={s.filterInput}
+              style={s.filterText}
               value={to}
               onChangeText={setTo}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#94a3b8"
+              placeholder="To"
+              placeholderTextColor="rgba(147,197,253,0.6)"
             />
           </View>
+          <TouchableOpacity style={s.applyBtn} onPress={() => load(from, to)}>
+            <Ionicons name="search-outline" size={16} color="#fff" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={s.applyBtn} onPress={() => load(from, to)}>
-          <Text style={s.applyText}>Apply Filter</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Summary counts */}
-      <View style={s.summaryRow}>
-        {[
-          { label: 'Total', count: records.length, color: '#1e293b', bg: '#fff' },
-          { label: 'Present', count: present, color: '#15803d', bg: '#dcfce7' },
-          { label: 'Incomplete', count: incomplete, color: '#d97706', bg: '#fef3c7' },
-          { label: 'Absent', count: absent, color: '#b91c1c', bg: '#fee2e2' },
-        ].map((item) => (
-          <View key={item.label} style={[s.summaryChip, { backgroundColor: item.bg }]}>
-            <Text style={[s.summaryCount, { color: item.color }]}>{item.count}</Text>
-            <Text style={s.summaryLabel}>{item.label}</Text>
+      {/* ── Records ── */}
+      <View style={s.body}>
+        {error ? (
+          <View style={s.errorWrap}>
+            <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+            <Text style={s.errorText}>{error}</Text>
           </View>
-        ))}
+        ) : null}
+
+        {records.length === 0 && !loading ? (
+          <View style={s.empty}>
+            <Ionicons name="calendar-outline" size={52} color="#cbd5e1" />
+            <Text style={s.emptyText}>No attendance records</Text>
+            <Text style={s.emptySub}>Try adjusting the date range</Text>
+          </View>
+        ) : null}
+
+        {records.map((record, i) => {
+          const status = getStatus(record);
+          const hours = computeHours(record);
+          const lateMin = record.late_minutes != null ? Number(record.late_minutes) : 0;
+          const utMin = record.undertime_minutes != null ? Number(record.undertime_minutes) : 0;
+          const tIn = formatTime(record.time_in);
+          const tOut = formatTime(record.time_out);
+          const bOut = formatTime(record.break_out);
+          const bIn = formatTime(record.break_in);
+
+          return (
+            <View key={`${record.attendance_date}-${i}`} style={s.card}>
+              {/* Card header */}
+              <View style={s.cardHeader}>
+                <View style={s.cardDate}>
+                  <Text style={s.cardDateText}>{formatDateLabel(record.attendance_date)}</Text>
+                </View>
+                <View style={[s.statusBadge, { backgroundColor: status.bg }]}>
+                  <Ionicons name={status.icon + '-outline'} size={11} color={status.color} />
+                  <Text style={[s.statusText, { color: status.color }]}>{status.label}</Text>
+                </View>
+              </View>
+
+              {/* Time entries row */}
+              <View style={s.entryRow}>
+                {[
+                  { label: 'In', value: tIn, color: '#22c55e', icon: 'log-in' },
+                  { label: 'Break Out', value: bOut, color: '#f59e0b', icon: 'cafe' },
+                  { label: 'Break In', value: bIn, color: '#f59e0b', icon: 'return-down-back' },
+                  { label: 'Out', value: tOut, color: '#ef4444', icon: 'log-out' },
+                ].map((entry) => (
+                  <View key={entry.label} style={s.entryItem}>
+                    <View style={[s.entryIcon, { backgroundColor: entry.value ? entry.color + '18' : '#f1f5f9' }]}>
+                      <Ionicons name={entry.icon + '-outline'} size={13} color={entry.value ? entry.color : '#cbd5e1'} />
+                    </View>
+                    <Text style={[s.entryTime, !entry.value && { color: '#cbd5e1' }]}>{entry.value || '—'}</Text>
+                    <Text style={s.entryLabel}>{entry.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Stats */}
+              {(hours || lateMin > 0 || utMin > 0) ? (
+                <View style={s.statsRow}>
+                  {hours ? (
+                    <View style={s.statChip}>
+                      <Ionicons name="time-outline" size={11} color="#1e40af" />
+                      <Text style={s.statChipText}>{hours} hrs</Text>
+                    </View>
+                  ) : null}
+                  {lateMin > 0 ? (
+                    <View style={[s.statChip, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                      <Ionicons name="alert-circle-outline" size={11} color="#b91c1c" />
+                      <Text style={[s.statChipText, { color: '#b91c1c' }]}>Late {lateMin}m</Text>
+                    </View>
+                  ) : null}
+                  {utMin > 0 ? (
+                    <View style={[s.statChip, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                      <Ionicons name="trending-down-outline" size={11} color="#b91c1c" />
+                      <Text style={[s.statChipText, { color: '#b91c1c' }]}>UT {utMin}m</Text>
+                    </View>
+                  ) : null}
+                  {hours && Number(hours) > 8 ? (
+                    <View style={[s.statChip, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                      <Ionicons name="trending-up-outline" size={11} color="#15803d" />
+                      <Text style={[s.statChipText, { color: '#15803d' }]}>OT {(Number(hours) - 8).toFixed(2)}h</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
       </View>
-
-      {error ? <Text style={s.error}>{error}</Text> : null}
-
-      {records.length === 0 && !loading ? (
-        <View style={s.empty}>
-          <Text style={s.emptyIcon}>📅</Text>
-          <Text style={s.emptyText}>No attendance records found.</Text>
-          <Text style={s.emptyHint}>Try adjusting the date range.</Text>
-        </View>
-      ) : null}
-
-      {records.map((record, i) => {
-        const status = getStatus(record);
-        const hours = computeHours(record);
-        const lateMin = record.late_minutes != null ? Number(record.late_minutes) : 0;
-        const utMin = record.undertime_minutes != null ? Number(record.undertime_minutes) : 0;
-
-        return (
-          <View key={`${record.attendance_date}-${i}`} style={s.recordCard}>
-            <View style={s.recordHeader}>
-              <Text style={s.recordDate}>{formatDateLabel(record.attendance_date)}</Text>
-              <View style={[s.statusBadge, { backgroundColor: status.bg }]}>
-                <Text style={[s.statusText, { color: status.color }]}>{status.label}</Text>
-              </View>
-            </View>
-
-            <View style={s.recordGrid}>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Time In</Text>
-                <Text style={s.recordValue}>{formatTime(record.time_in)}</Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Break Out</Text>
-                <Text style={s.recordValue}>{formatTime(record.break_out)}</Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Break In</Text>
-                <Text style={s.recordValue}>{formatTime(record.break_in)}</Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Time Out</Text>
-                <Text style={s.recordValue}>{formatTime(record.time_out)}</Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Total Hours</Text>
-                <Text style={s.recordValue}>{hours}</Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>OT Hours</Text>
-                <Text style={[s.recordValue, { color: hours !== '-' && Number(hours) > 8 ? '#15803d' : '#94a3b8' }]}>
-                  {hours !== '-' ? Math.max(0, Number(hours) - 8).toFixed(2) : '-'}
-                </Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Late (min)</Text>
-                <Text style={[s.recordValue, lateMin > 0 && { color: '#b91c1c' }]}>
-                  {lateMin > 0 ? lateMin : '-'}
-                </Text>
-              </View>
-              <View style={s.recordItem}>
-                <Text style={s.recordLabel}>Undertime (min)</Text>
-                <Text style={[s.recordValue, utMin > 0 && { color: '#b91c1c' }]}>
-                  {utMin > 0 ? utMin : '-'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        );
-      })}
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f0f4ff' },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1e293b' },
-  sub: { fontSize: 13, color: '#64748b', marginBottom: 16 },
-  filterCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, elevation: 2 },
-  filterRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  filterField: { flex: 1 },
-  filterLabel: { fontSize: 11, color: '#94a3b8', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
-  filterInput: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-    color: '#1e293b',
-    backgroundColor: '#f8fafc',
-  },
-  applyBtn: { backgroundColor: '#1e40af', borderRadius: 8, padding: 11, alignItems: 'center' },
-  applyText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  summaryChip: {
-    flex: 1,
-    borderRadius: 10,
-    padding: 10,
-    alignItems: 'center',
-    elevation: 1,
-  },
-  summaryCount: { fontSize: 20, fontWeight: '800' },
-  summaryLabel: { fontSize: 9, color: '#64748b', marginTop: 2, textTransform: 'uppercase' },
-  error: { color: '#b91c1c', marginBottom: 12 },
-  empty: { alignItems: 'center', paddingVertical: 40 },
-  emptyIcon: { fontSize: 40, marginBottom: 8 },
-  emptyText: { fontSize: 14, color: '#475569', fontWeight: '600' },
-  emptyHint: { fontSize: 12, color: '#94a3b8', marginTop: 4 },
-  recordCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, elevation: 2 },
-  recordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  recordDate: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-  statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  recordGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  recordItem: { minWidth: '45%', flex: 1 },
-  recordLabel: { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 },
-  recordValue: { fontSize: 13, fontWeight: '600', color: '#1e293b', marginTop: 2 },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { paddingBottom: 48 },
+  header: { backgroundColor: '#1e3a8a', paddingHorizontal: 20, paddingBottom: 20 },
+  headerTitle: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  headerSub: { fontSize: 13, color: '#93c5fd', marginTop: 2, marginBottom: 16 },
+  summaryRow: { flexDirection: 'row', gap: 6, marginBottom: 16 },
+  summaryPill: { flex: 1, alignItems: 'center', borderRadius: 14, paddingVertical: 10, gap: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  summaryCount: { fontSize: 18, fontWeight: '900' },
+  summaryLabel: { fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.4 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  filterInput: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  filterText: { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
+  filterSep: { color: '#93c5fd', fontSize: 16, fontWeight: '700' },
+  applyBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  body: { padding: 16, gap: 12 },
+  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12 },
+  errorText: { color: '#b91c1c', fontSize: 13, flex: 1 },
+  empty: { alignItems: 'center', paddingVertical: 52, gap: 8 },
+  emptyText: { fontSize: 16, fontWeight: '700', color: '#475569' },
+  emptySub: { fontSize: 13, color: '#94a3b8' },
+  card: { backgroundColor: '#fff', borderRadius: 18, padding: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, gap: 12 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardDate: {},
+  cardDateText: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  statusText: { fontSize: 11, fontWeight: '700' },
+  entryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  entryItem: { alignItems: 'center', gap: 3, flex: 1 },
+  entryIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  entryTime: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
+  entryLabel: { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 },
+  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#bfdbfe' },
+  statChipText: { fontSize: 11, fontWeight: '700', color: '#1e40af' },
 });
