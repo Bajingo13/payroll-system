@@ -36,7 +36,7 @@ export default function SettingsScreen({ navigation, route }) {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const employee = route.params?.employee || {};
-  const [photoUrl, setPhotoUrl] = useState(getAssetUrl(route.params?.profilePhotoUrl, true));
+  const [photoUrl, setPhotoUrl] = useState(getAssetUrl(route.params?.profilePhotoUrl));
   const [uploading, setUploading] = useState(false);
   const [photoSheet, setPhotoSheet] = useState(false);
   const [logoutSheet, setLogoutSheet] = useState(false);

@@ -740,6 +740,17 @@ module.exports = function (app, pool) {
                 // absenceDeduction computed after attendance block once totalAbsentDays is known
             }
 
+            // Fetch employee hire date so absent counting starts no earlier than date_hired
+            const [[empHireRow]] = await conn.query(
+                `SELECT date_hired FROM employee_employment WHERE employee_id = ? LIMIT 1`,
+                [employeeId]
+            );
+            const hireDateStr = empHireRow?.date_hired
+                ? String(empHireRow.date_hired).slice(0, 10)
+                : null;
+            // Effective start for absent counting: whichever is later — period start or hire date
+            const absentCountStartDate = (hireDateStr && hireDateStr > startDate) ? hireDateStr : startDate;
+
             // totalAbsentDays: start with leave-based count; replaced by attendance-based when user account exists
             let totalAbsentDays = totalLeaveDays;
 
@@ -814,7 +825,7 @@ module.exports = function (app, pool) {
                         });
                         addHolidayPremiumForPresentDates(presentDates);
                         const hrisAbsentDates = new Set(explicitAbsentDates);
-                        const iterD = new Date(startDate + 'T12:00:00Z');
+                        const iterD = new Date(absentCountStartDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
                         while (iterD <= iterEnd) {
                             const dow = iterD.getUTCDay();
@@ -878,9 +889,9 @@ module.exports = function (app, pool) {
                         );
                         addHolidayPremiumForPresentDates(presentDates);
 
-                        // Count Mon–Fri days in the period where employee was absent
+                        // Count Mon–Fri days in the period where employee was absent (starting from hire date)
                         let absentCount = 0;
-                        const iterD = new Date(startDate + 'T12:00:00Z');
+                        const iterD = new Date(absentCountStartDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
                         while (iterD <= iterEnd) {
                             const dow = iterD.getUTCDay();

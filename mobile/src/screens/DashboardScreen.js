@@ -111,7 +111,7 @@ export default function DashboardScreen({ navigation }) {
   const todayState = data?.todayTime || {};
   const employee = data?.employee || {};
   const payrollSummary = data?.payrollSummary || null;
-  const profilePhotoUrl = getAssetUrl(data?.profilePhotoUrl, true);
+  const profilePhotoUrl = getAssetUrl(data?.profilePhotoUrl);
 
   const workedSeconds = useMemo(() => {
     const timeIn = parseDateTime(todayState.timeIn);
