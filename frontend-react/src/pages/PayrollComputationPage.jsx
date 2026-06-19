@@ -1569,7 +1569,6 @@ export default function PayrollComputationPage() {
                           <tr><td>Total Deductions</td><td><Ni dis={!isEditing} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /></td><td colSpan={2}></td></tr>
                           <tr><td>Loans</td><td><Ni dis={!isEditing} v={payroll.loans} set={v=>upPayroll('loans',v)} /></td><td colSpan={2}></td></tr>
                           <tr><td>Other Deductions</td><td><Ni dis={!isEditing} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /></td><td>Premium Adj.</td><td><Ni dis={!isEditing} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></td></tr>
-                          <tr className="payroll-entry-total-row deduction-total-row"><td>Total Deductions</td><td colSpan={2}></td><td><strong>&#8369;{fmt(totals.ded)}</strong></td></tr>
                         </tbody>
                       </table>
                       <div className="payroll-ytd-title">Year-to-Date (YTD)</div>

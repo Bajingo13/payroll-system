@@ -162,6 +162,26 @@ module.exports = function (app, pool) {
         return 'MONTHLY';
     }
 
+    function getWorkingDaySet(daysInWeek) {
+        const normalized = Math.max(0, Math.min(7, Math.trunc(Number(daysInWeek) || 5)));
+        const weeklyOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon-Fri, then Sat, then Sun.
+        return new Set(weeklyOrder.slice(0, normalized));
+    }
+
+    function countScheduledWorkdays(startDate, endDate, workingDays, nonWorkingDates = new Set()) {
+        let count = 0;
+        const iterD = new Date(startDate + 'T12:00:00Z');
+        const iterEnd = new Date(endDate + 'T12:00:00Z');
+        while (iterD <= iterEnd) {
+            const dateKey = iterD.toISOString().slice(0, 10);
+            if (workingDays.has(iterD.getUTCDay()) && !nonWorkingDates.has(dateKey)) {
+                count++;
+            }
+            iterD.setUTCDate(iterD.getUTCDate() + 1);
+        }
+        return count;
+    }
+
     function normalizePayrollRate(value) {
         const rate = String(value || '').trim().toUpperCase();
         if (rate.includes('DAILY'))   return 'DAILY';
@@ -673,14 +693,16 @@ module.exports = function (app, pool) {
 
             let totalOtHours = Math.round(otRows.reduce((s, r) => s + Number(r.total_hours || 0), 0) * 100) / 100;
 
-            // Clip leave days to payroll period boundaries
+            const workingDays = getWorkingDaySet(settings?.days_in_week);
+            const nonWorkingHolidayDates = await getNonWorkingHolidayDates(conn, startDate, endDate);
+            const holidayTypeMap = await getClassifiedHolidayDates(conn, startDate, endDate);
+
+            // Clip leave days to payroll period boundaries and count only scheduled workdays.
             let totalLeaveDays = 0;
             for (const leave of leaveRows) {
                 const effectiveStart = leave.start_date > startDate ? leave.start_date : startDate;
                 const effectiveEnd   = leave.end_date   < endDate   ? leave.end_date   : endDate;
-                const ms = new Date(effectiveEnd).getTime() - new Date(effectiveStart).getTime();
-                const days = Math.floor(ms / 86400000) + 1;
-                totalLeaveDays += Math.max(0, days);
+                totalLeaveDays += countScheduledWorkdays(effectiveStart, effectiveEnd, workingDays, nonWorkingHolidayDates);
             }
             totalLeaveDays = Math.round(totalLeaveDays * 100) / 100;
 
@@ -691,9 +713,6 @@ module.exports = function (app, pool) {
             let hourlyRate = 0;
             let exactAbsenceDailyRate = 0;
             let periodSalaryForAbsence = 0;
-            let workingDaysInPeriod = 0;
-            const nonWorkingHolidayDates = await getNonWorkingHolidayDates(conn, startDate, endDate);
-            const holidayTypeMap = await getClassifiedHolidayDates(conn, startDate, endDate);
             let holidayPremium = 0;
             const HOLIDAY_PREMIUM_RATE = { regular: 1.00, special: 0.30 };
             function addHolidayPremiumForPresentDates(presentDateSet) {
@@ -807,7 +826,10 @@ module.exports = function (app, pool) {
                             if (!dateKey) return;
                             const status = String(row.status || '').toLowerCase();
                             if (status.includes('absent') || !row.time_in) {
-                                explicitAbsentDates.add(dateKey);
+                                const rowDate = new Date(dateKey + 'T12:00:00Z');
+                                if (workingDays.has(rowDate.getUTCDay()) && !nonWorkingHolidayDates.has(dateKey)) {
+                                    explicitAbsentDates.add(dateKey);
+                                }
                                 return;
                             }
                             presentDates.add(dateKey);
@@ -817,12 +839,9 @@ module.exports = function (app, pool) {
                         const iterD = new Date(startDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
                         while (iterD <= iterEnd) {
-                            const dow = iterD.getUTCDay();
-                            if (dow !== 0 && dow !== 6) {
-                                const dateKey = iterD.toISOString().slice(0, 10);
-                                if (!nonWorkingHolidayDates.has(dateKey) && !presentDates.has(dateKey)) {
-                                    hrisAbsentDates.add(dateKey);
-                                }
+                            const dateKey = iterD.toISOString().slice(0, 10);
+                            if (workingDays.has(iterD.getUTCDay()) && !nonWorkingHolidayDates.has(dateKey) && !presentDates.has(dateKey)) {
+                                hrisAbsentDates.add(dateKey);
                             }
                             iterD.setUTCDate(iterD.getUTCDate() + 1);
                         }
@@ -878,16 +897,13 @@ module.exports = function (app, pool) {
                         );
                         addHolidayPremiumForPresentDates(presentDates);
 
-                        // Count Mon–Fri days in the period where employee was absent
+                        // Count scheduled workdays in the period where employee was absent.
                         let absentCount = 0;
                         const iterD = new Date(startDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
                         while (iterD <= iterEnd) {
-                            const dow = iterD.getUTCDay();
-                            if (dow !== 0 && dow !== 6) {
-                                const dateStr = iterD.toISOString().slice(0, 10);
-                                if (!nonWorkingHolidayDates.has(dateStr) && !presentDates.has(dateStr)) absentCount++;
-                            }
+                            const dateStr = iterD.toISOString().slice(0, 10);
+                            if (workingDays.has(iterD.getUTCDay()) && !nonWorkingHolidayDates.has(dateStr) && !presentDates.has(dateStr)) absentCount++;
                             iterD.setUTCDate(iterD.getUTCDate() + 1);
                         }
                         totalAbsentDays = absentCount;
