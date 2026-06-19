@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 
 // ── Theme ─────────────────────────────────────────────────────────────────
@@ -38,13 +40,25 @@ function fmtDate(v) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
-function InfoRow({ label, value, highlight }) {
+function InfoRow({ label, value, highlight, editing, onChange, multiline }) {
   return (
-    <View style={ds.infoRow}>
+    <View style={[ds.infoRow, editing && ds.infoRowEdit]}>
       <Text style={ds.infoLabel}>{label}</Text>
-      <Text style={[ds.infoValue, highlight && { color: T.accentLight }]} numberOfLines={2}>
-        {value || '—'}
-      </Text>
+      {editing ? (
+        <TextInput
+          style={[ds.infoInput, highlight && { color: T.accentLight }, multiline && { height: 64 }]}
+          value={value ?? ''}
+          onChangeText={onChange}
+          placeholderTextColor={T.textMuted}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+        />
+      ) : (
+        <Text style={[ds.infoValue, highlight && { color: T.accentLight }]} numberOfLines={3}>
+          {value || '—'}
+        </Text>
+      )}
     </View>
   );
 }
@@ -63,19 +77,55 @@ function SectionCard({ title, icon, children }) {
 
 // ── Detail view ───────────────────────────────────────────────────────────
 const DETAIL_TABS = [
-  { key: 'personal',   label: 'Personal',   icon: 'person' },
-  { key: 'employment', label: 'Employment', icon: 'briefcase' },
-  { key: 'govids',     label: "Gov't IDs",  icon: 'card' },
-  { key: 'payroll',    label: 'Payroll',    icon: 'cash' },
-  { key: 'account',   label: 'Account',    icon: 'shield' },
-  { key: 'evals',      label: 'Evals',      icon: 'trending-up' },
+  { key: 'personal',   label: 'Personal',   icon: 'person',        color: '#8b5cf6', bg: '#2d1f52' },
+  { key: 'employment', label: 'Employment', icon: 'briefcase',     color: '#22d3ee', bg: '#0d2e38' },
+  { key: 'govids',     label: "Gov't IDs",  icon: 'card',          color: '#34d399', bg: '#0d2e1e' },
+  { key: 'payroll',    label: 'Payroll',    icon: 'cash',          color: '#fbbf24', bg: '#3d2e10' },
+  { key: 'account',    label: 'Account',    icon: 'shield',        color: '#f87171', bg: '#3d1515' },
+  { key: 'evals',      label: 'Evals',      icon: 'trending-up',   color: '#fb923c', bg: '#3d2010' },
 ];
 
-function EmployeeDetail({ empCode, onBack }) {
+function initForm(emp) {
+  return {
+    first_name: emp.first_name || '', last_name: emp.last_name || '',
+    middle_name: emp.middle_name || '', nickname: emp.nickname || '',
+    gender: emp.gender || '', civil_status: emp.civil_status || '',
+    birth_date: String(emp.birth_date || '').slice(0, 10),
+    mobile_no: emp.mobile_no || '', tel_no: emp.tel_no || '',
+    email: emp.email || '', fax_no: emp.fax_no || '', website: emp.website || '',
+    street: emp.street || '', city: emp.city || '',
+    country: emp.country || '', zip_code: emp.zip_code || '',
+    company: emp.company || '', branch: emp.branch || '',
+    division: emp.division || '', department: emp.department || '',
+    position: emp.position || '', employee_type: emp.employee_type || '',
+    class: emp.class || '', location: emp.location || '',
+    machine_id: emp.machine_id || '', projects: emp.projects || '',
+    date_hired: String(emp.date_hired || '').slice(0, 10),
+    date_regular: String(emp.date_regular || '').slice(0, 10),
+    date_resigned: String(emp.date_resigned || '').slice(0, 10),
+    date_terminated: String(emp.date_terminated || '').slice(0, 10),
+    end_of_contract: String(emp.end_of_contract || '').slice(0, 10),
+    sss_no: emp.sss_no || '', gsis_no: emp.gsis_no || '',
+    pagibig_no: emp.pagibig_no || '', philhealth_no: emp.philhealth_no || '',
+    tin_no: emp.tin_no || '', bank_name: emp.bank_name || '',
+    bank_branch: emp.bank_branch || '', atm_no: emp.atm_no || '',
+    branch_code: emp.branch_code || '',
+    salary_type: emp.salary_type || '',
+    payrollComputation: { ...(emp.payrollComputation || {}) },
+    taxInsurance: { ...(emp.taxInsurance || {}) },
+  };
+}
+
+function EmployeeDetail({ empCode }) {
+  const { user }   = useAuth();
   const [emp,     setEmp]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [tab,     setTab]     = useState('personal');
+  const [editing, setEditing] = useState(false);
+  const [form,    setForm]    = useState({});
+  const [saving,  setSaving]  = useState(false);
+  const [toast,   setToast]   = useState('');
 
   useEffect(() => {
     async function load() {
@@ -91,17 +141,77 @@ function EmployeeDetail({ empCode, onBack }) {
     load();
   }, [empCode]);
 
+  function startEdit() { setForm(initForm(emp)); setEditing(true); setError(''); }
+  function cancelEdit() {
+    Alert.alert('Discard Changes', 'Unsaved changes will be lost.', [
+      { text: 'Keep Editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => setEditing(false) },
+    ]);
+  }
+
+  function setF(key, value) { setForm((p) => ({ ...p, [key]: value })); }
+  function setPC(key, value) { setForm((p) => ({ ...p, payrollComputation: { ...p.payrollComputation, [key]: value } })); }
+  function setTI(key, value) { setForm((p) => ({ ...p, taxInsurance: { ...p.taxInsurance, [key]: value } })); }
+
+  async function saveChanges() {
+    setSaving(true);
+    setError('');
+    try {
+      const payload = {
+        // All basic + editable fields from form
+        ...form,
+        // Always required — pass unchanged from emp
+        emp_code:     emp.emp_code,
+        status:       emp.status,
+        salary_type:  form.salary_type || emp.salary_type || '',
+        contributions: emp.contributions || [],
+        allowances:   emp.allowances   || [],
+        deductions:   emp.deductions   || [],
+        dependents:   emp.dependents   || [],
+        systemAccount: emp.systemAccount || {},
+        // HR user identity for audit trail
+        actor_role: user.role,
+        user_id:    user.user_id,
+        admin_name: user.full_name,
+      };
+
+      const { data } = await api.put(
+        `/employee/update/${encodeURIComponent(empCode)}`,
+        payload,
+        { timeout: 30000 },
+      );
+      if (!data.success) throw new Error(data.message);
+      setEmp((prev) => ({ ...prev, ...form }));
+      setEditing(false);
+      setToast('Changes saved successfully.');
+      setTimeout(() => setToast(''), 3000);
+    } catch (err) {
+      setError(getApiMessage(err, 'Failed to save changes.'));
+    } finally { setSaving(false); }
+  }
+
   if (loading) return <View style={ds.centered}><ActivityIndicator color={T.accent} size="large" /></View>;
-  if (error)   return <View style={ds.centered}><Text style={ds.errorText}>{error}</Text></View>;
+  if (error && !emp) return <View style={ds.centered}><Text style={ds.errorText}>{error}</Text></View>;
   if (!emp)    return null;
 
-  const sc  = statusCfg(emp.status);
-  const evals = emp.evaluations || [];
+  const sc       = statusCfg(emp.status);
+  const evals    = emp.evaluations || [];
   const evalSummary = emp.evaluationSummary || {};
-  const account     = emp.systemAccount || {};
+  const account  = emp.systemAccount || {};
+  const f        = editing ? form : emp;
+  const pc       = editing ? (form.payrollComputation || {}) : (emp.payrollComputation || {});
+  const ti       = editing ? (form.taxInsurance || {}) : (emp.taxInsurance || {});
 
   return (
     <View style={ds.root}>
+      {/* ── Toast ── */}
+      {toast ? (
+        <View style={ds.toast}>
+          <Ionicons name="checkmark-circle" size={15} color="#34d399" />
+          <Text style={ds.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+
       {/* ── Profile header ── */}
       <View style={ds.profileHeader}>
         <View style={ds.profileAvatar}>
@@ -115,24 +225,69 @@ function EmployeeDetail({ empCode, onBack }) {
             <View style={ds.profilePill}><Text style={ds.profilePillText}>{emp.department || 'No dept'}</Text></View>
           </View>
         </View>
-        <View style={[ds.statusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-          <Text style={[ds.statusText, { color: sc.color }]}>{emp.status || 'Active'}</Text>
+        <View style={ds.headerActions}>
+          {!editing ? (
+            <TouchableOpacity style={ds.editBtn} onPress={startEdit}>
+              <Ionicons name="create-outline" size={16} color={T.accentLight} />
+              <Text style={ds.editBtnText}>Edit</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={ds.saveRow}>
+              <TouchableOpacity style={ds.cancelBtn} onPress={cancelEdit} disabled={saving}>
+                <Text style={ds.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[ds.saveBtn, saving && { opacity: 0.6 }]} onPress={saveChanges} disabled={saving}>
+                {saving ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Ionicons name="checkmark" size={15} color="#fff" />
+                    <Text style={ds.saveBtnText}>Save</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
 
-      {/* ── Tab bar ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={ds.tabScroll} contentContainerStyle={ds.tabBar}>
-        {DETAIL_TABS.map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            style={[ds.tabChip, tab === t.key && ds.tabChipActive]}
-            onPress={() => setTab(t.key)}
-          >
-            <Ionicons name={t.icon + (tab === t.key ? '' : '-outline')} size={13} color={tab === t.key ? '#fff' : T.textSub} />
-            <Text style={[ds.tabText, tab === t.key && { color: '#fff' }]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {error ? (
+        <View style={ds.errorBar}>
+          <Ionicons name="alert-circle" size={13} color="#f87171" />
+          <Text style={ds.errorBarText}>{error}</Text>
+        </View>
+      ) : null}
+      {editing && (
+        <View style={ds.editBanner}>
+          <Ionicons name="create" size={13} color="#fbbf24" />
+          <Text style={ds.editBannerText}>Editing — changes save to the database and reflect on the web</Text>
+        </View>
+      )}
+
+      {/* ── Section grid ── */}
+      <View style={ds.sectionGrid}>
+        {DETAIL_TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <TouchableOpacity
+              key={t.key}
+              style={[ds.sectionGridCard, active && { borderColor: t.color, borderWidth: 1.5 }]}
+              onPress={() => setTab(t.key)}
+              activeOpacity={0.75}
+            >
+              <View style={[ds.sectionGridIcon, { backgroundColor: active ? t.bg : T.surfaceAlt }]}>
+                <Ionicons
+                  name={active ? t.icon : t.icon + '-outline'}
+                  size={16}
+                  color={active ? t.color : T.textMuted}
+                />
+              </View>
+              <Text style={[ds.sectionGridLabel, active && { color: t.color, fontWeight: '700' }]}>
+                {t.label}
+              </Text>
+              {active && <View style={[ds.sectionGridDot, { backgroundColor: t.color }]} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* ── Tab content ── */}
       <ScrollView contentContainerStyle={ds.tabContent}>
@@ -141,26 +296,26 @@ function EmployeeDetail({ empCode, onBack }) {
         {tab === 'personal' && (
           <>
             <SectionCard title="Personal Information" icon="person-outline">
-              <InfoRow label="First Name"    value={emp.first_name} />
-              <InfoRow label="Middle Name"   value={emp.middle_name} />
-              <InfoRow label="Last Name"     value={emp.last_name} />
-              <InfoRow label="Nickname"      value={emp.nickname} />
-              <InfoRow label="Gender"        value={emp.gender} />
-              <InfoRow label="Civil Status"  value={emp.civil_status} />
-              <InfoRow label="Birth Date"    value={fmtDate(emp.birth_date)} />
+              <InfoRow label="First Name"   value={f.first_name}   editing={editing} onChange={(v) => setF('first_name', v)} />
+              <InfoRow label="Middle Name"  value={f.middle_name}  editing={editing} onChange={(v) => setF('middle_name', v)} />
+              <InfoRow label="Last Name"    value={f.last_name}    editing={editing} onChange={(v) => setF('last_name', v)} />
+              <InfoRow label="Nickname"     value={f.nickname}     editing={editing} onChange={(v) => setF('nickname', v)} />
+              <InfoRow label="Gender"       value={f.gender}       editing={editing} onChange={(v) => setF('gender', v)} />
+              <InfoRow label="Civil Status" value={f.civil_status} editing={editing} onChange={(v) => setF('civil_status', v)} />
+              <InfoRow label="Birth Date"   value={editing ? f.birth_date : fmtDate(f.birth_date)} editing={editing} onChange={(v) => setF('birth_date', v)} />
             </SectionCard>
             <SectionCard title="Contact" icon="call-outline">
-              <InfoRow label="Mobile"  value={emp.mobile_no} highlight />
-              <InfoRow label="Tel"     value={emp.tel_no} />
-              <InfoRow label="Email"   value={emp.email} highlight />
-              <InfoRow label="Fax"     value={emp.fax_no} />
-              <InfoRow label="Website" value={emp.website} />
+              <InfoRow label="Mobile"  value={f.mobile_no} highlight editing={editing} onChange={(v) => setF('mobile_no', v)} />
+              <InfoRow label="Tel"     value={f.tel_no}             editing={editing} onChange={(v) => setF('tel_no', v)} />
+              <InfoRow label="Email"   value={f.email}    highlight editing={editing} onChange={(v) => setF('email', v)} />
+              <InfoRow label="Fax"     value={f.fax_no}            editing={editing} onChange={(v) => setF('fax_no', v)} />
+              <InfoRow label="Website" value={f.website}            editing={editing} onChange={(v) => setF('website', v)} />
             </SectionCard>
             <SectionCard title="Address" icon="home-outline">
-              <InfoRow label="Street"  value={emp.street} />
-              <InfoRow label="City"    value={emp.city} />
-              <InfoRow label="Country" value={emp.country} />
-              <InfoRow label="Zip"     value={emp.zip_code} />
+              <InfoRow label="Street"  value={f.street}   editing={editing} onChange={(v) => setF('street', v)} />
+              <InfoRow label="City"    value={f.city}     editing={editing} onChange={(v) => setF('city', v)} />
+              <InfoRow label="Country" value={f.country}  editing={editing} onChange={(v) => setF('country', v)} />
+              <InfoRow label="Zip"     value={f.zip_code} editing={editing} onChange={(v) => setF('zip_code', v)} />
             </SectionCard>
           </>
         )}
@@ -169,26 +324,23 @@ function EmployeeDetail({ empCode, onBack }) {
         {tab === 'employment' && (
           <>
             <SectionCard title="Employment Details" icon="briefcase-outline">
-              <InfoRow label="Company"       value={emp.company} />
-              <InfoRow label="Branch"        value={emp.branch} />
-              <InfoRow label="Division"      value={emp.division} />
-              <InfoRow label="Department"    value={emp.department} highlight />
-              <InfoRow label="Position"      value={emp.position} highlight />
-              <InfoRow label="Employee Type" value={emp.employee_type} />
-              <InfoRow label="Class"         value={emp.class} />
-              <InfoRow label="Location"      value={emp.location} />
-              <InfoRow label="Machine ID"    value={emp.machine_id} />
-              <InfoRow label="Projects"      value={emp.projects} />
+              <InfoRow label="Company"       value={f.company}       editing={editing} onChange={(v) => setF('company', v)} />
+              <InfoRow label="Branch"        value={f.branch}        editing={editing} onChange={(v) => setF('branch', v)} />
+              <InfoRow label="Division"      value={f.division}      editing={editing} onChange={(v) => setF('division', v)} />
+              <InfoRow label="Department"    value={f.department}    highlight editing={editing} onChange={(v) => setF('department', v)} />
+              <InfoRow label="Position"      value={f.position}      highlight editing={editing} onChange={(v) => setF('position', v)} />
+              <InfoRow label="Employee Type" value={f.employee_type} editing={editing} onChange={(v) => setF('employee_type', v)} />
+              <InfoRow label="Class"         value={f.class}         editing={editing} onChange={(v) => setF('class', v)} />
+              <InfoRow label="Location"      value={f.location}      editing={editing} onChange={(v) => setF('location', v)} />
+              <InfoRow label="Machine ID"    value={f.machine_id}    editing={editing} onChange={(v) => setF('machine_id', v)} />
+              <InfoRow label="Projects"      value={f.projects}      editing={editing} onChange={(v) => setF('projects', v)} multiline />
             </SectionCard>
-            <SectionCard title="Key Dates" icon="calendar-outline">
-              <InfoRow label="Date Hired"     value={fmtDate(emp.date_hired)} highlight />
-              <InfoRow label="Date Regular"   value={fmtDate(emp.date_regular)} />
-              <InfoRow label="Training Date"  value={fmtDate(emp.training_date)} />
-              <InfoRow label="Date Resigned"  value={fmtDate(emp.date_resigned)} />
-              <InfoRow label="Date Terminated"value={fmtDate(emp.date_terminated)} />
-              <InfoRow label="End of Contract"value={fmtDate(emp.end_of_contract)} />
-              <InfoRow label="Rehired Date"   value={fmtDate(emp.rehired_date)} />
-              <InfoRow label="Rehired"        value={emp.rehired ? 'Yes' : 'No'} />
+            <SectionCard title="Key Dates (YYYY-MM-DD)" icon="calendar-outline">
+              <InfoRow label="Date Hired"      value={editing ? f.date_hired      : fmtDate(f.date_hired)}      highlight editing={editing} onChange={(v) => setF('date_hired', v)} />
+              <InfoRow label="Date Regular"    value={editing ? f.date_regular    : fmtDate(f.date_regular)}    editing={editing} onChange={(v) => setF('date_regular', v)} />
+              <InfoRow label="Date Resigned"   value={editing ? f.date_resigned   : fmtDate(f.date_resigned)}   editing={editing} onChange={(v) => setF('date_resigned', v)} />
+              <InfoRow label="Date Terminated" value={editing ? f.date_terminated : fmtDate(f.date_terminated)} editing={editing} onChange={(v) => setF('date_terminated', v)} />
+              <InfoRow label="End of Contract" value={editing ? f.end_of_contract : fmtDate(f.end_of_contract)} editing={editing} onChange={(v) => setF('end_of_contract', v)} />
             </SectionCard>
           </>
         )}
@@ -197,17 +349,17 @@ function EmployeeDetail({ empCode, onBack }) {
         {tab === 'govids' && (
           <>
             <SectionCard title="Government IDs" icon="card-outline">
-              <InfoRow label="SSS No."          value={emp.sss_no} highlight />
-              <InfoRow label="GSIS No."          value={emp.gsis_no} highlight />
-              <InfoRow label="Pag-IBIG No."      value={emp.pagibig_no} highlight />
-              <InfoRow label="PhilHealth No."    value={emp.philhealth_no} highlight />
-              <InfoRow label="TIN"               value={emp.tin_no} highlight />
+              <InfoRow label="SSS No."       value={f.sss_no}       highlight editing={editing} onChange={(v) => setF('sss_no', v)} />
+              <InfoRow label="GSIS No."      value={f.gsis_no}      highlight editing={editing} onChange={(v) => setF('gsis_no', v)} />
+              <InfoRow label="Pag-IBIG No."  value={f.pagibig_no}   highlight editing={editing} onChange={(v) => setF('pagibig_no', v)} />
+              <InfoRow label="PhilHealth No."value={f.philhealth_no}highlight editing={editing} onChange={(v) => setF('philhealth_no', v)} />
+              <InfoRow label="TIN"           value={f.tin_no}       highlight editing={editing} onChange={(v) => setF('tin_no', v)} />
             </SectionCard>
             <SectionCard title="Banking" icon="wallet-outline">
-              <InfoRow label="Bank Name"   value={emp.bank_name} />
-              <InfoRow label="Bank Branch" value={emp.bank_branch} />
-              <InfoRow label="ATM No."     value={emp.atm_no} highlight />
-              <InfoRow label="Branch Code" value={emp.branch_code} />
+              <InfoRow label="Bank Name"   value={f.bank_name}   editing={editing} onChange={(v) => setF('bank_name', v)} />
+              <InfoRow label="Bank Branch" value={f.bank_branch} editing={editing} onChange={(v) => setF('bank_branch', v)} />
+              <InfoRow label="ATM No."     value={f.atm_no}      highlight editing={editing} onChange={(v) => setF('atm_no', v)} />
+              <InfoRow label="Branch Code" value={f.branch_code} editing={editing} onChange={(v) => setF('branch_code', v)} />
             </SectionCard>
           </>
         )}
@@ -216,22 +368,21 @@ function EmployeeDetail({ empCode, onBack }) {
         {tab === 'payroll' && (
           <>
             <SectionCard title="Payroll Computation" icon="calculator-outline">
-              <InfoRow label="Payroll Period"    value={emp.payrollComputation?.payroll_period} />
-              <InfoRow label="Payroll Rate"      value={emp.payrollComputation?.payroll_rate} />
-              <InfoRow label="OT Rate"           value={emp.payrollComputation?.ot_rate} />
-              <InfoRow label="Hours / Day"       value={emp.payrollComputation?.hours_in_day} />
-              <InfoRow label="Days / Week"       value={emp.payrollComputation?.days_in_week} />
-              <InfoRow label="Days / Year"       value={emp.payrollComputation?.days_in_year} />
-              <InfoRow label="Weeks / Year"      value={emp.payrollComputation?.week_in_year} />
-              <InfoRow label="Main Computation"  value={emp.payrollComputation?.main_computation} />
-              <InfoRow label="Basis Absences"    value={emp.payrollComputation?.basis_absences} />
-              <InfoRow label="Basis OT"          value={emp.payrollComputation?.basis_overtime} />
-              <InfoRow label="Strict No OT"      value={emp.payrollComputation?.strict_no_overtime ? 'Yes' : 'No'} />
+              <InfoRow label="Payroll Period"   value={pc.payroll_period}   editing={editing} onChange={(v) => setPC('payroll_period', v)} />
+              <InfoRow label="Payroll Rate"     value={pc.payroll_rate}     editing={editing} onChange={(v) => setPC('payroll_rate', v)} />
+              <InfoRow label="OT Rate"          value={pc.ot_rate}          editing={editing} onChange={(v) => setPC('ot_rate', v)} />
+              <InfoRow label="Hours / Day"      value={pc.hours_in_day}     editing={editing} onChange={(v) => setPC('hours_in_day', v)} />
+              <InfoRow label="Days / Week"      value={pc.days_in_week}     editing={editing} onChange={(v) => setPC('days_in_week', v)} />
+              <InfoRow label="Days / Year"      value={pc.days_in_year}     editing={editing} onChange={(v) => setPC('days_in_year', v)} />
+              <InfoRow label="Weeks / Year"     value={pc.week_in_year}     editing={editing} onChange={(v) => setPC('week_in_year', v)} />
+              <InfoRow label="Main Computation" value={pc.main_computation} editing={editing} onChange={(v) => setPC('main_computation', v)} />
+              <InfoRow label="Basis Absences"   value={pc.basis_absences}   editing={editing} onChange={(v) => setPC('basis_absences', v)} />
+              <InfoRow label="Basis OT"         value={pc.basis_overtime}   editing={editing} onChange={(v) => setPC('basis_overtime', v)} />
             </SectionCard>
-            <SectionCard title="Tax &amp; Insurance" icon="shield-outline">
-              <InfoRow label="Tax Status"     value={emp.taxInsurance?.tax_status} />
-              <InfoRow label="Tax Exemption"  value={emp.taxInsurance?.tax_exemption} />
-              <InfoRow label="Insurance"      value={emp.taxInsurance?.insurance} />
+            <SectionCard title="Tax & Insurance" icon="shield-outline">
+              <InfoRow label="Tax Status"    value={ti.tax_status}    editing={editing} onChange={(v) => setTI('tax_status', v)} />
+              <InfoRow label="Tax Exemption" value={ti.tax_exemption} editing={editing} onChange={(v) => setTI('tax_exemption', v)} />
+              <InfoRow label="Insurance"     value={ti.insurance}     editing={editing} onChange={(v) => setTI('insurance', v)} />
             </SectionCard>
             <SectionCard title="Allowances" icon="add-circle-outline">
               {(emp.allowances || []).length === 0
@@ -252,13 +403,19 @@ function EmployeeDetail({ empCode, onBack }) {
           </>
         )}
 
-        {/* SYSTEM ACCOUNT */}
+        {/* SYSTEM ACCOUNT — read-only, managed via separate endpoint */}
         {tab === 'account' && (
           <SectionCard title="System Account" icon="shield-checkmark-outline">
-            <InfoRow label="Username"  value={account.username} highlight />
-            <InfoRow label="Role"      value={account.role} highlight />
-            <InfoRow label="Status"    value={account.account_status} />
-            <InfoRow label="User ID"   value={account.user_id ? String(account.user_id) : null} />
+            <InfoRow label="Username" value={account.username} highlight />
+            <InfoRow label="Role"     value={account.role}     highlight />
+            <InfoRow label="Status"   value={account.account_status} />
+            <InfoRow label="User ID"  value={account.user_id ? String(account.user_id) : null} />
+            {editing && (
+              <View style={ds.readOnlyNote}>
+                <Ionicons name="lock-closed-outline" size={12} color={T.textMuted} />
+                <Text style={ds.readOnlyNoteText}>Account credentials are managed separately on the web portal.</Text>
+              </View>
+            )}
           </SectionCard>
         )}
 
@@ -341,7 +498,8 @@ export default function HREmployeeFileScreen({ navigation }) {
         params: { page: pg, limit: 20, sortBy },
       });
       if (!data.success) throw new Error(data.message);
-      setEmployees(pg === 1 ? (data.employees || []) : (prev) => [...prev, ...(data.employees || [])]);
+      if (pg === 1) { setEmployees(data.employees || []); }
+      else { setEmployees((prev) => [...prev, ...(data.employees || [])]); }
       setTotalPages(data.totalPages || 1);
       setTotal(data.totalEmployees || 0);
       setPage(pg);
@@ -548,11 +706,11 @@ const ds = StyleSheet.create({
   statusBadge: { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1 },
   statusText: { fontSize: 10, fontWeight: '800' },
 
-  tabScroll: { backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.border },
-  tabBar: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  tabChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border },
-  tabChipActive: { backgroundColor: T.accent, borderColor: T.accent },
-  tabText: { fontSize: 12, color: T.textSub, fontWeight: '700' },
+  sectionGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10, paddingVertical: 8, gap: 6, backgroundColor: T.bg },
+  sectionGridCard: { width: '30%', flexGrow: 1, backgroundColor: T.surface, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 6, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: T.border },
+  sectionGridIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  sectionGridLabel: { fontSize: 10, color: T.textMuted, fontWeight: '500', textAlign: 'center' },
+  sectionGridDot: { width: 4, height: 4, borderRadius: 2 },
 
   tabContent: { padding: 14, gap: 12, paddingBottom: 48 },
 
@@ -560,9 +718,31 @@ const ds = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderBottomWidth: 1, borderBottomColor: T.border },
   sectionTitle: { fontSize: 12, color: T.accentLight, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
 
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: T.border },
-  infoLabel: { fontSize: 12, color: T.textSub, flex: 1 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: T.border },
+  infoRowEdit: { alignItems: 'flex-start', paddingVertical: 6 },
+  infoLabel: { fontSize: 12, color: T.textSub, flex: 1, paddingTop: 4 },
   infoValue: { fontSize: 12, fontWeight: '700', color: T.textPrimary, flex: 1.2, textAlign: 'right' },
+  infoInput: { flex: 1.2, fontSize: 13, color: T.textPrimary, fontWeight: '600', backgroundColor: T.surfaceAlt, borderRadius: 8, borderWidth: 1, borderColor: T.accent + '55', paddingHorizontal: 10, paddingVertical: 7, minHeight: 38 },
+
+  headerActions: { alignItems: 'flex-end', gap: 6 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: T.accentBg, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.accent + '55' },
+  editBtnText: { fontSize: 12, color: T.accentLight, fontWeight: '700' },
+  saveRow: { flexDirection: 'row', gap: 6 },
+  cancelBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border },
+  cancelBtnText: { fontSize: 12, color: T.textSub, fontWeight: '700' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16a34a', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  saveBtnText: { fontSize: 12, color: '#fff', fontWeight: '800' },
+
+  editBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#3d2e10', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#78350f' },
+  editBannerText: { fontSize: 11, color: '#fbbf24', flex: 1 },
+  errorBar: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#3d1515', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#7f1d1d' },
+  errorBarText: { fontSize: 11, color: '#f87171', flex: 1 },
+
+  toast: { position: 'absolute', bottom: 24, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#0d2e1e', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#065f46', zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
+
+  readOnlyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 12, backgroundColor: T.surfaceAlt },
+  readOnlyNoteText: { fontSize: 11, color: T.textMuted, flex: 1, lineHeight: 16 },
 
   evalSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   evalSummaryPill: { flex: 1, backgroundColor: T.surface, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: T.border },
