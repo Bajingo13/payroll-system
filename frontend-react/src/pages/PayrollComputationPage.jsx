@@ -747,6 +747,13 @@ export default function PayrollComputationPage() {
     if (!periodReady) { flash('Select Payroll Group, Period, Month, and Year first.','warning'); return; }
     setLoading(true);
     try {
+      setSelectedEmp(null);
+      setHrisData(null);
+      setEmpDataMap({});
+      setPayroll(makeEmptyPayroll());
+      setLeaveRows(makeEmptyLeaveRows());
+      setLoanRows([]);
+      setOtherDedRows([]);
       const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
       const selectedPer = meta.payrollPeriods.find(p => String(p.period_id) === String(filters.payroll_period));
       const selectedMon = meta.payrollMonths.find(m => String(m.month_id) === String(filters.month));
@@ -1203,6 +1210,7 @@ export default function PayrollComputationPage() {
   function goBackToSetup() {
     setStep('setup'); setSelectedEmp(null); setEmployees([]);
     setRunId(null); setIsEditing(false); setPayroll(makeEmptyPayroll()); setShowBackModal(false);
+    setHrisData(null); setEmpDataMap({});
     setLeaveRows(makeEmptyLeaveRows()); setLoanRows([]); setOtherDedRows([]);
     setSelectedLoanRow(null); setSelectedDedRow(null);
   }

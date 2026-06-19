@@ -29,6 +29,11 @@ function formatDuration(totalSeconds) {
     .map((p) => String(p).padStart(2, '0')).join(':');
 }
 
+function getHoursInDay(value) {
+  const hours = Number(value);
+  return Number.isFinite(hours) && hours > 0 ? hours : 8;
+}
+
 function computeWorkedSeconds(todayState, now) {
   const timeIn = parseDateTime(todayState.timeIn);
   if (!timeIn) return 0;
@@ -44,9 +49,9 @@ function computeWorkedSeconds(todayState, now) {
   return Math.max(0, Math.floor((end - timeIn) / 1000) - breakSec);
 }
 
-function ClockRing({ workedSeconds, status }) {
-  const TARGET = 8 * 3600;
-  const ratio = Math.min(1, workedSeconds / TARGET);
+function ClockRing({ workedSeconds, status, targetSeconds }) {
+  const target = Math.max(1, Number(targetSeconds || 0));
+  const ratio = Math.min(1, workedSeconds / target);
   const r = 42;
   const circ = 2 * Math.PI * r;
   const dash = circ * ratio;
@@ -109,6 +114,7 @@ export default function EmployeeDashboardPage() {
 
   const todayState = data?.todayTime || {};
   const employee = data?.employee || {};
+  const payrollSettings = data?.payrollSettings || {};
   const payrollSummary = data?.payrollSummary || null;
   const attendanceSummary = data?.attendanceSummary || null;
   const attendanceLogs = data?.attendanceLogs || [];
@@ -119,6 +125,9 @@ export default function EmployeeDashboardPage() {
     ? '-' : `${growthDelta >= 0 ? '+' : ''}${Number(growthDelta).toFixed(1)}`;
 
   const workedSeconds = computeWorkedSeconds(todayState, now);
+  const hoursInDay = getHoursInDay(payrollSettings.hours_in_day);
+  const targetSeconds = Math.round(hoursInDay * 3600);
+  const targetMinutes = Math.round(hoursInDay * 60);
   const isOnBreak = Boolean(todayState.hasBreakOut && !todayState.hasBreakIn && !todayState.hasTimeOut);
   const isClockedIn = Boolean(todayState.hasTimeIn && !todayState.hasTimeOut && !isOnBreak);
   const clockStatus = todayState.hasTimeOut ? 'Clocked out' : isOnBreak ? 'On break' : isClockedIn ? 'Clocked in' : 'Not started';
@@ -133,7 +142,7 @@ export default function EmployeeDashboardPage() {
   })();
 
   const todayUndertimeMinutes = todayState.hasTimeOut
-    ? Math.max(0, 480 - Math.floor(workedSeconds / 60))
+    ? Math.max(0, targetMinutes - Math.floor(workedSeconds / 60))
     : 0;
 
   const timeButtons = useMemo(() => {
@@ -228,13 +237,13 @@ export default function EmployeeDashboardPage() {
           <span className="mat-record-badge">Mobile Flow</span>
         </button>
 
-        <ClockRing workedSeconds={workedSeconds} status={clockStatus} />
+        <ClockRing workedSeconds={workedSeconds} status={clockStatus} targetSeconds={targetSeconds} />
 
         <div className="summary employee-mini-summary employee-metric-strip">
           <div className="card"><span>Status</span><strong>{clockStatus}</strong></div>
           <div className="card"><span>Worked Time</span><strong>{formatDuration(workedSeconds)}</strong></div>
-          <div className="card"><span>Target</span><strong>08:00:00</strong></div>
-          <div className="card"><span>Overtime</span><strong>{formatDuration(Math.max(0, workedSeconds - 28800))}</strong></div>
+          <div className="card"><span>Target</span><strong>{formatDuration(targetSeconds)}</strong></div>
+          <div className="card"><span>Overtime</span><strong>{formatDuration(Math.max(0, workedSeconds - targetSeconds))}</strong></div>
         </div>
 
         <div className="summary employee-mini-summary employee-metric-strip">
@@ -263,7 +272,7 @@ export default function EmployeeDashboardPage() {
           </div>
           <div className="card">
             <span>Required Hours</span>
-            <strong>8 hrs / day</strong>
+            <strong>{Number(hoursInDay.toFixed(2)).toLocaleString('en-PH')} hrs / day</strong>
           </div>
         </div>
       </section>
