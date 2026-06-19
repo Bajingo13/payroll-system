@@ -8,6 +8,19 @@ import { navigationRef } from './navigationRef';
 import { Notifications, registerPushToken, getTabForType } from '../services/pushNotifications';
 import LoginScreen from '../screens/LoginScreen';
 import DashboardScreen from '../screens/DashboardScreen';
+import HRDashboardScreen from '../screens/HRDashboardScreen';
+import HRAttendanceScreen from '../screens/HRAttendanceScreen';
+import HRLeaveManagementScreen from '../screens/HRLeaveManagementScreen';
+import HROvertimeManagementScreen from '../screens/HROvertimeManagementScreen';
+import HRModulesScreen from '../screens/HRModulesScreen';
+import HREmployeeFileScreen from '../screens/HREmployeeFileScreen';
+import HR201FilesScreen from '../screens/HR201FilesScreen';
+import HROrgSetupScreen from '../screens/HROrgSetupScreen';
+import HRScheduleScreen from '../screens/HRScheduleScreen';
+import HRPerformanceScreen from '../screens/HRPerformanceScreen';
+import HRAuditingScreen from '../screens/HRAuditingScreen';
+import HRCalendarScreen from '../screens/HRCalendarScreen';
+import HRUtilitiesScreen from '../screens/HRUtilitiesScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import LeaveScreen from '../screens/LeaveScreen';
 import OvertimeScreen from '../screens/OvertimeScreen';
@@ -19,45 +32,64 @@ import PersonalInfoScreen from '../screens/PersonalInfoScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const TAB_ICONS = {
+function normalizeRole(role) {
+  const r = String(role || '').toLowerCase().trim();
+  if (r === 'hr' || r === 'human resource' || r === 'human resources') return 'hr';
+  if (r === 'admin' || r === 'administrator') return 'admin';
+  return 'employee';
+}
+
+const EMPLOYEE_TAB_ICONS = {
   Dashboard: 'home',
   Attendance: 'calendar',
   Leave: 'leaf',
   Overtime: 'time',
   Payroll: 'wallet',
 };
-// Note: icons append '-outline' when not focused, use filled when focused
 
-function MainTabs() {
+const HR_TAB_ICONS = {
+  'HR Dashboard': 'grid',
+  Attendance: 'calendar',
+  Leave: 'leaf',
+  Overtime: 'time',
+  Modules: 'apps',
+};
+
+function tabScreenOptions(route, iconMap) {
+  return {
+    headerShown: false,
+    tabBarActiveTintColor: '#1e40af',
+    tabBarInactiveTintColor: '#94a3b8',
+    tabBarStyle: {
+      backgroundColor: '#fff',
+      borderTopColor: '#e2e8f0',
+      borderTopWidth: 1,
+      height: 64,
+      paddingBottom: 8,
+      paddingTop: 6,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 12,
+    },
+    tabBarLabelStyle: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+    tabBarIcon: ({ color, focused }) => {
+      const iconName = iconMap[route.name];
+      return (
+        <View style={focused ? {
+          backgroundColor: '#eff6ff', borderRadius: 10,
+          paddingHorizontal: 12, paddingVertical: 4,
+        } : {}}>
+          <Ionicons name={focused ? iconName : iconName + '-outline'} size={22} color={color} />
+        </View>
+      );
+    },
+  };
+}
+
+function EmployeeTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: '#1e40af',
-        tabBarInactiveTintColor: '#94a3b8',
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopColor: '#e2e8f0',
-          borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 6,
-          shadowColor: '#000',
-          shadowOpacity: 0.08,
-          shadowRadius: 12,
-          elevation: 12,
-        },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '700', marginTop: 2 },
-        tabBarIcon: ({ color, size, focused }) => (
-          <View style={focused ? {
-            backgroundColor: '#eff6ff', borderRadius: 10,
-            paddingHorizontal: 12, paddingVertical: 4,
-          } : {}}>
-            <Ionicons name={focused ? TAB_ICONS[route.name] : TAB_ICONS[route.name] + '-outline'} size={22} color={color} />
-          </View>
-        ),
-      })}
-    >
+    <Tab.Navigator screenOptions={({ route }) => tabScreenOptions(route, EMPLOYEE_TAB_ICONS)}>
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Attendance" component={AttendanceScreen} />
       <Tab.Screen name="Leave" component={LeaveScreen} />
@@ -65,6 +97,60 @@ function MainTabs() {
       <Tab.Screen name="Payroll" component={PayrollScreen} />
     </Tab.Navigator>
   );
+}
+
+function HRTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: '#a78bfa',
+        tabBarInactiveTintColor: '#475569',
+        tabBarStyle: {
+          backgroundColor: '#0f172a',
+          borderTopColor: '#1e293b',
+          borderTopWidth: 1,
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.4,
+          shadowRadius: 12,
+          elevation: 16,
+        },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+        tabBarIcon: ({ color, focused }) => {
+          const iconName = HR_TAB_ICONS[route.name];
+          return (
+            <View style={focused ? {
+              backgroundColor: 'rgba(139,92,246,0.18)',
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+            } : {}}>
+              <Ionicons
+                name={focused ? iconName : iconName + '-outline'}
+                size={22}
+                color={color}
+              />
+            </View>
+          );
+        },
+      })}
+    >
+      <Tab.Screen name="HR Dashboard" component={HRDashboardScreen} />
+      <Tab.Screen name="Attendance" component={HRAttendanceScreen} />
+      <Tab.Screen name="Leave" component={HRLeaveManagementScreen} />
+      <Tab.Screen name="Overtime" component={HROvertimeManagementScreen} />
+      <Tab.Screen name="Modules" component={HRModulesScreen} />
+    </Tab.Navigator>
+  );
+}
+
+// Legacy alias kept so existing code that references MainTabs still works
+function MainTabs({ role }) {
+  const normalized = normalizeRole(role);
+  return (normalized === 'hr' || normalized === 'admin') ? <HRTabs /> : <EmployeeTabs />;
 }
 
 export default function AppNavigator() {
@@ -110,11 +196,14 @@ export default function AppNavigator() {
     );
   }
 
+  const role = normalizeRole(user?.role);
+  const RootTabs = (role === 'hr' || role === 'admin') ? HRTabs : EmployeeTabs;
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         <>
-          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen name="Main" component={RootTabs} />
           <Stack.Screen
             name="Notifications"
             component={NotificationsScreen}
@@ -125,11 +214,15 @@ export default function AppNavigator() {
             component={SettingsScreen}
             options={{ animation: 'slide_from_right' }}
           />
-          <Stack.Screen
-            name="PersonalInfo"
-            component={PersonalInfoScreen}
-            options={{ animation: 'slide_from_right' }}
-          />
+          <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HREmployeeFile" component={HREmployeeFileScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HR201Files"    component={HR201FilesScreen}    options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HROrgSetup"    component={HROrgSetupScreen}    options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRSchedule"    component={HRScheduleScreen}    options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRPerformance" component={HRPerformanceScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRAuditing"    component={HRAuditingScreen}    options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRCalendar"    component={HRCalendarScreen}    options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRUtilities"   component={HRUtilitiesScreen}   options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />

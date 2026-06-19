@@ -6,7 +6,8 @@ const ASSET_BASE_URL = API_BASE_URL.replace('/api', '');
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 20000,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
