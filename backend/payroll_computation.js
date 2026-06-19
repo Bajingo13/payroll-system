@@ -697,10 +697,23 @@ module.exports = function (app, pool) {
             const nonWorkingHolidayDates = await getNonWorkingHolidayDates(conn, startDate, endDate);
             const holidayTypeMap = await getClassifiedHolidayDates(conn, startDate, endDate);
 
-            // Clip leave days to payroll period boundaries and count only scheduled workdays.
+            // Fetch employee hire date so HRIS attendance starts no earlier than date_hired.
+            const [[empHireRow]] = await conn.query(
+                `SELECT date_hired FROM employee_employment WHERE employee_id = ? LIMIT 1`,
+                [employeeId]
+            );
+            const hireDateStr = empHireRow?.date_hired
+                ? String(empHireRow.date_hired).slice(0, 10)
+                : null;
+            const absentCountStartDate = (hireDateStr && hireDateStr > startDate) ? hireDateStr : startDate;
+            const periodRangeStartDate = (hireDateStr && hireDateStr > startDate && hireDateStr <= endDate)
+                ? hireDateStr
+                : startDate;
+
+            // Clip leave days to payroll period/hire-date boundaries and count only scheduled workdays.
             let totalLeaveDays = 0;
             for (const leave of leaveRows) {
-                const effectiveStart = leave.start_date > startDate ? leave.start_date : startDate;
+                const effectiveStart = [leave.start_date, startDate, absentCountStartDate].sort().pop();
                 const effectiveEnd   = leave.end_date   < endDate   ? leave.end_date   : endDate;
                 totalLeaveDays += countScheduledWorkdays(effectiveStart, effectiveEnd, workingDays, nonWorkingHolidayDates);
             }
@@ -759,6 +772,7 @@ module.exports = function (app, pool) {
                 // absenceDeduction computed after attendance block once totalAbsentDays is known
             }
 
+            {
             // Fetch employee hire date so absent counting starts no earlier than date_hired
             const [[empHireRow]] = await conn.query(
                 `SELECT date_hired FROM employee_employment WHERE employee_id = ? LIMIT 1`,
@@ -770,6 +784,7 @@ module.exports = function (app, pool) {
             // Effective start for absent counting: whichever is later — period start or hire date
             const absentCountStartDate = (hireDateStr && hireDateStr > startDate) ? hireDateStr : startDate;
 
+            }
             // totalAbsentDays: start with leave-based count; replaced by attendance-based when user account exists
             let totalAbsentDays = totalLeaveDays;
 
@@ -820,7 +835,7 @@ module.exports = function (app, pool) {
                              FROM hris_attendance
                              WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?
                              ORDER BY attendance_date ASC`,
-                            [employeeId, startDate, endDate]
+                            [employeeId, absentCountStartDate, endDate]
                         );
                     } catch (_) { hrisAttRows = []; } // table may not exist on older deployments
 
@@ -897,7 +912,7 @@ module.exports = function (app, pool) {
                                AND action IN ('Employee Time In','Employee Break Out','Employee Break In','Employee Time Out')
                                AND DATE(log_time) BETWEEN ? AND ?
                              GROUP BY DATE(log_time)`,
-                            [empUserRow.user_id, startDate, endDate]
+                            [empUserRow.user_id, absentCountStartDate, endDate]
                         );
 
                         // Dates the employee was present (has a time_in record)
@@ -973,7 +988,7 @@ module.exports = function (app, pool) {
 
             return res.json({
                 success: true,
-                period_range: `${startDate} to ${endDate}`,
+                period_range: `${periodRangeStartDate} to ${endDate}`,
                 ot: {
                     requests: otRows,
                     total_hours: displayedOtHours,
