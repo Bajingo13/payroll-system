@@ -5,6 +5,7 @@ import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 import Modal from '../components/Modal.jsx';
+import ToastPanel from '../components/ToastPanel.jsx';
 import { AboutUsContent, ContactsContent, HelpContent } from '../components/InfoPopups.jsx';
 import PasswordToggleIcon from '../components/PasswordToggleIcon.jsx';
 
@@ -208,7 +209,7 @@ export default function LoginPage() {
         </section>
       </main>
 
-      <Modal
+      <ToastPanel
         open={Boolean(infoModal)}
         title={infoModal === 'contacts' ? 'Contacts' : infoModal === 'help' ? 'Help' : 'About Us'}
         onClose={() => setInfoModal('')}
@@ -216,7 +217,7 @@ export default function LoginPage() {
         {infoModal === 'contacts' ? <ContactsContent /> : null}
         {infoModal === 'help' ? <HelpContent /> : null}
         {infoModal === 'about' ? <AboutUsContent /> : null}
-      </Modal>
+      </ToastPanel>
 
       <Modal
         open={resetOpen}
@@ -226,7 +227,10 @@ export default function LoginPage() {
           setResetMessage('');
         }}
       >
-        <form className="modal-form" onSubmit={handlePasswordResetRequest}>
+        <form className="modal-form password-reset-form" onSubmit={handlePasswordResetRequest}>
+          <p className="modal-form-intro">
+            Enter your username and we will send reset instructions to the email linked to your account.
+          </p>
           <label>
             Username
             <input

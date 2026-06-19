@@ -16,6 +16,11 @@ export default defineConfig({
             proxyReq.removeHeader('origin');
           });
         }
+      },
+      '/uploads': {
+        target: 'http://localhost:12687',
+        changeOrigin: true,
+        secure: false
       }
     }
   },

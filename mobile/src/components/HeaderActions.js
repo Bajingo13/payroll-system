@@ -3,15 +3,33 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../api/client';
+import { api, getAssetUrl } from '../api/client';
 import { API_BASE_URL } from '../config';
 
 const SOCKET_URL = API_BASE_URL.replace('/api', '');
 
-export default function HeaderActions({ navigation, photoUrl, employee }) {
+export default function HeaderActions({ navigation, photoUrl: photoUrlProp, employee: employeeProp }) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [resolvedPhotoUrl, setResolvedPhotoUrl] = useState(getAssetUrl(photoUrlProp, true));
+  const [resolvedEmployee, setResolvedEmployee] = useState(employeeProp || {});
   const socketRef = useRef(null);
+
+  async function fetchProfileSummary() {
+    if (!user?.user_id) return;
+    try {
+      const { data } = await api.get('/employee_dashboard', { params: { user_id: user.user_id } });
+      setResolvedPhotoUrl(getAssetUrl(data.profilePhotoUrl, true));
+      if (data.employee) setResolvedEmployee(data.employee);
+    } catch (_) {}
+  }
+
+  useEffect(() => {
+    setResolvedPhotoUrl(getAssetUrl(photoUrlProp, true));
+    if (employeeProp) setResolvedEmployee(employeeProp);
+  }, [photoUrlProp, employeeProp]);
+
+  useEffect(() => { fetchProfileSummary(); }, [user?.user_id]);
 
   useEffect(() => {
     if (!user?.user_id) return;
@@ -38,7 +56,10 @@ export default function HeaderActions({ navigation, photoUrl, employee }) {
     });
 
     // ── Refresh on screen focus ───────────────────────────
-    const unsub = navigation?.addListener('focus', fetchCount);
+    const unsub = navigation?.addListener('focus', () => {
+      fetchCount();
+      fetchProfileSummary();
+    });
 
     return () => {
       socket.disconnect();
@@ -46,7 +67,7 @@ export default function HeaderActions({ navigation, photoUrl, employee }) {
     };
   }, [user?.user_id]);
 
-  const initials = String(employee?.first_name || user?.full_name || 'U')[0].toUpperCase();
+  const initials = String(resolvedEmployee?.first_name || user?.full_name || 'U')[0].toUpperCase();
 
   return (
     <View style={s.row}>
@@ -66,10 +87,10 @@ export default function HeaderActions({ navigation, photoUrl, employee }) {
       {/* Avatar → Settings */}
       <TouchableOpacity
         style={s.avatar}
-        onPress={() => navigation.navigate('Settings', { employee: employee || {}, profilePhotoUrl: photoUrl })}
+        onPress={() => navigation.navigate('Settings', { employee: resolvedEmployee, profilePhotoUrl: resolvedPhotoUrl })}
       >
-        {photoUrl
-          ? <Image source={{ uri: photoUrl }} style={s.avatarImg} />
+        {resolvedPhotoUrl
+          ? <Image source={{ uri: resolvedPhotoUrl }} style={s.avatarImg} />
           : <Text style={s.avatarText}>{initials}</Text>}
       </TouchableOpacity>
     </View>

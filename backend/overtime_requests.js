@@ -508,6 +508,52 @@ module.exports = function (app, pool) {
     }
   });
 
+  app.patch('/api/employee/overtime-requests/:requestId/cancel', async (req, res) => {
+    const requestId = Number(req.params.requestId);
+    const userId = Number(req.body.user_id);
+
+    if (!requestId || !userId) {
+      return res.status(400).json({ success: false, message: 'Missing required fields.' });
+    }
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await ensureOvertimeTables(conn);
+
+      const [rows] = await conn.execute(
+        `SELECT r.overtime_request_id, r.status
+         FROM employee_overtime_requests r
+         JOIN employees e ON e.employee_id = r.employee_id
+         WHERE r.overtime_request_id = ? AND e.employee_id = (
+           SELECT employee_id FROM employees WHERE user_id = ? LIMIT 1
+         )
+         LIMIT 1`,
+        [requestId, userId]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ success: false, message: 'Overtime request not found.' });
+      }
+
+      if (rows[0].status !== 'Pending') {
+        return res.status(409).json({ success: false, message: `Overtime request is already ${rows[0].status} and cannot be cancelled.` });
+      }
+
+      await conn.execute(
+        `UPDATE employee_overtime_requests SET status = 'Cancelled', updated_at = NOW() WHERE overtime_request_id = ?`,
+        [requestId]
+      );
+
+      return res.json({ success: true, message: 'Overtime request cancelled successfully.' });
+    } catch (err) {
+      console.error('Overtime cancel error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
   app.get('/api/admin/overtime-requests', async (req, res) => {
     const userId = Number(req.query.user_id);
     const status = String(req.query.status || '').trim();

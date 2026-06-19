@@ -410,34 +410,91 @@ export default function EmployeeAttendancePage() {
         </div>
       </section>
 
-      <Modal open={Boolean(editRecord && editForm)} title="Edit Attendance" onClose={closeEditAttendance}>
-        {editRecord && editForm ? (
-          <form className="employee-form-grid" onSubmit={saveAttendanceEdit}>
-            <label>Employee
-              <input value={`${editRecord.emp_code || 'N/A'} - ${editRecord.employee_name || editRecord.full_name || 'N/A'}`} readOnly />
-            </label>
-            <label>Date
-              <input type="date" value={editForm.attendance_date} onChange={(event) => updateEditForm('attendance_date', event.target.value)} required />
-            </label>
-            <label>Time In
-              <input type="time" value={editForm.time_in} onChange={(event) => updateEditForm('time_in', event.target.value)} />
-            </label>
-            <label>Break Out
-              <input type="time" value={editForm.break_out} onChange={(event) => updateEditForm('break_out', event.target.value)} />
-            </label>
-            <label>Break In
-              <input type="time" value={editForm.break_in} onChange={(event) => updateEditForm('break_in', event.target.value)} />
-            </label>
-            <label>Time Out
-              <input type="time" value={editForm.time_out} onChange={(event) => updateEditForm('time_out', event.target.value)} />
-            </label>
-            <div className="employee-form-wide row-actions">
-              <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving...' : 'Save Attendance'}</button>
-              <button type="button" className="btn secondary" onClick={closeEditAttendance} disabled={saving}>Cancel</button>
+      {/* Custom Edit Attendance Dialog */}
+      {editRecord && editForm && (
+        <div className="modal-backdrop" onMouseDown={closeEditAttendance}>
+          <div
+            onMouseDown={e => e.stopPropagation()}
+            style={{ width: 'min(480px,100%)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 32px 80px rgba(10,20,50,0.5)', background: '#fff' }}
+          >
+            {/* ── Header ── */}
+            <div style={{ background: 'linear-gradient(135deg,#0f2044 0%,#1e40af 100%)', padding: '22px 24px', position: 'relative' }}>
+              <div style={{ position: 'absolute', width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', right: -30, top: -40, pointerEvents: 'none' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }}>👤</div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', lineHeight: 1.2 }}>
+                      {editRecord.employee_name || editRecord.full_name || 'Employee'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#93c5fd', marginTop: 3 }}>
+                      {editRecord.emp_code || 'N/A'} · {editRecord.department || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+                <button onClick={closeEditAttendance} style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, color: '#fff', fontSize: 18, width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+              </div>
+
+              {/* Date field inside header */}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 6 }}>📅 Attendance Date</div>
+                <input
+                  type="date"
+                  value={editForm.attendance_date}
+                  onChange={e => updateEditForm('attendance_date', e.target.value)}
+                  required
+                  style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', borderRadius: 11, padding: '10px 14px', fontSize: 14, fontWeight: 700, color: '#fff', colorScheme: 'dark', outline: 'none' }}
+                />
+              </div>
             </div>
-          </form>
-        ) : null}
-      </Modal>
+
+            {/* ── Body ── */}
+            <form onSubmit={saveAttendanceEdit} style={{ padding: '20px 24px 24px' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Time Entries</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                {[
+                  { key: 'time_in',   label: 'Time In',   dot: '#22c55e', bg: '#f0fdf4', border: '#86efac' },
+                  { key: 'break_out', label: 'Break Out', dot: '#f59e0b', bg: '#fffbeb', border: '#fde68a' },
+                  { key: 'break_in',  label: 'Break In',  dot: '#f59e0b', bg: '#fffbeb', border: '#fde68a' },
+                  { key: 'time_out',  label: 'Time Out',  dot: '#ef4444', bg: '#fef2f2', border: '#fca5a5' },
+                ].map(f => (
+                  <div key={f.key} style={{ background: f.bg, border: `1.5px solid ${f.border}`, borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: f.dot }} />
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.8 }}>{f.label}</span>
+                    </div>
+                    <input
+                      type="time"
+                      value={editForm[f.key]}
+                      onChange={e => updateEditForm(f.key, e.target.value)}
+                      style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 16, fontWeight: 800, color: '#0f172a', outline: 'none', padding: 0, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{ flex: 2, background: saving ? '#94a3b8' : 'linear-gradient(135deg,#1d4ed8,#3b82f6)', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 4px 14px rgba(29,78,216,0.4)', letterSpacing: 0.3 }}
+                >
+                  {saving ? 'Saving…' : '✓  Save Attendance'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEditAttendance}
+                  disabled={saving}
+                  style={{ flex: 1, background: '#f8fafc', color: '#475569', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

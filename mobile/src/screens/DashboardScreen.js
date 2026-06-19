@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { api, getApiMessage } from '../api/client';
+import { api, getApiMessage, getAssetUrl } from '../api/client';
 import { API_BASE_URL } from '../config';
 import { io } from 'socket.io-client';
 import AttendanceFlow from '../components/AttendanceFlow';
@@ -86,6 +86,11 @@ export default function DashboardScreen({ navigation }) {
 
   useEffect(() => { loadDashboard(); }, [user?.user_id]);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => loadDashboard());
+    return unsubscribe;
+  }, [navigation, user?.user_id]);
+
   // Real-time notification count via Socket.io
   useEffect(() => {
     if (!user?.user_id) return;
@@ -106,9 +111,7 @@ export default function DashboardScreen({ navigation }) {
   const todayState = data?.todayTime || {};
   const employee = data?.employee || {};
   const payrollSummary = data?.payrollSummary || null;
-  const profilePhotoUrl = data?.profilePhotoUrl
-    ? `${BASE_URL}${data.profilePhotoUrl}`
-    : null;
+  const profilePhotoUrl = getAssetUrl(data?.profilePhotoUrl, true);
 
   const workedSeconds = useMemo(() => {
     const timeIn = parseDateTime(todayState.timeIn);
@@ -184,7 +187,7 @@ export default function DashboardScreen({ navigation }) {
         });
       }
       const { data: payload } = await api.post('/employee/time-entry', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       });
       if (!payload.success) throw new Error(payload.message);
       if (payload.todayTime) {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, getApiMessage } from '../api/client.js';
+import { api, getApiMessage, getAssetUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 function toDateInput(value) {
@@ -91,6 +91,32 @@ export default function ProfileManagementPage() {
   }, [avatarStorageKey]);
 
   useEffect(() => {
+    if (!user?.user_id) return undefined;
+
+    let cancelled = false;
+
+    async function loadProfilePhoto() {
+      try {
+        const { data } = await api.get('/profile', {
+          params: { user_id: user.user_id }
+        });
+        const nextAvatar = data.profilePhotoUrl ? `${getAssetUrl(data.profilePhotoUrl)}?t=${Date.now()}` : '';
+        if (cancelled || !nextAvatar) return;
+        localStorage.setItem(avatarStorageKey, nextAvatar);
+        setAvatar(nextAvatar);
+      } catch (err) {
+        console.warn('Profile photo load failed:', err);
+      }
+    }
+
+    loadProfilePhoto();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [avatarStorageKey, user?.user_id]);
+
+  useEffect(() => {
     if (!isEmployee || !user?.user_id) return;
 
     async function loadProfile() {
@@ -133,7 +159,7 @@ export default function ProfileManagementPage() {
     }));
   }
 
-  function handleAvatarChange(event) {
+  async function handleAvatarChange(event) {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -143,16 +169,30 @@ export default function ProfileManagementPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      localStorage.setItem(avatarStorageKey, result);
-      setAvatar(result);
-      window.dispatchEvent(new CustomEvent('profile-avatar-updated', { detail: result }));
+    setMessage('Uploading profile picture...');
+    try {
+      const formData = new FormData();
+      formData.append('user_id', String(user.user_id));
+      formData.append('photo', file);
+
+      const { data } = await api.post('/employee/profile-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to update profile picture.');
+      }
+
+      const nextAvatar = `${getAssetUrl(data.url)}?t=${Date.now()}`;
+      localStorage.setItem(avatarStorageKey, nextAvatar);
+      setAvatar(nextAvatar);
+      window.dispatchEvent(new CustomEvent('profile-avatar-updated', { detail: nextAvatar }));
       setMessage('Profile picture updated.');
-    };
-    reader.readAsDataURL(file);
-    event.target.value = '';
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to update profile picture.'));
+    } finally {
+      event.target.value = '';
+    }
   }
 
   async function handleSaveProfile(event) {

@@ -1,89 +1,132 @@
+import { useState } from 'react';
+
+const QUICKSTART = [
+  { step: '01', title: 'Set Up Company Info', desc: 'Go to System Tools → Company Settings to fill in your company profile, upload your logo, and define policies.', icon: '🏢' },
+  { step: '02', title: 'Add Employees', desc: 'Go to HRIS → Employee File and add employees with personal details, employment info, and government IDs.', icon: '👤' },
+  { step: '03', title: 'Assign Schedules', desc: 'Use Schedule Management to create work schedules and assign them to employees before running payroll.', icon: '📅' },
+  { step: '04', title: 'Run Payroll', desc: 'Go to Payroll Computation, select the period and group, then click Generate to compute payroll.', icon: '💰' },
+];
+
+const MODULES = [
+  { icon: '👥', name: 'Employee File', desc: 'Complete profiles, government IDs, salary, and 201 documents.' },
+  { icon: '🕐', name: 'Attendance', desc: 'Daily timekeeping, overtime tracking, and schedule management.' },
+  { icon: '🌿', name: 'Leave Management', desc: 'Approve/reject leaves and track balances per employee.' },
+  { icon: '⏰', name: 'Overtime', desc: 'Review and approve OT requests — auto-applied to payroll.' },
+  { icon: '💳', name: 'Loan Deductions', desc: 'Employee loans with automatic per-period deduction schedules.' },
+  { icon: '📄', name: 'Payroll', desc: 'Computation, payslips, payroll journal, and reconciliation.' },
+  { icon: '🏛️', name: 'Gov. Reports', desc: 'SSS, PhilHealth, Pag-IBIG, and BIR alphalist submissions.' },
+  { icon: '🎄', name: 'Year-End', desc: '13th month pay computation and annualization.' },
+  { icon: '🔍', name: 'Auditing', desc: 'Full action log — who did what and when for compliance.' },
+];
+
+const FAQS = [
+  { q: 'How is the 13th month pay computed?', a: '13th month pay = 1/12 of total basic salary earned during the calendar year. Generate it from Year-End Payroll.' },
+  { q: 'How do I reset an employee\'s password?', a: 'Admins can reset passwords from Employee File → select employee → Account tab, or from User Settings.' },
+  { q: 'Can employees view their own payslips?', a: 'Yes. Employees can log in and go to Payroll Information to view and download their payslip history.' },
+  { q: 'How do I update SSS/PhilHealth/Pag-IBIG rates?', a: 'Go to System Tools → System Configuration → Contribution Tables. Click Load Defaults to restore latest standard rates.' },
+  { q: 'What if I miss approving leave before payroll?', a: 'Unapproved leave won\'t deduct from balance. You can manually process the deduction in the next payroll period.' },
+];
+
+const ISSUES = [
+  { icon: '⚠️', problem: 'Server error on Generate', fix: 'Make sure the server is running and the payroll run exists. Refresh and try again.' },
+  { icon: '📋', problem: 'No rows in reports', fix: 'Check the month/year or confirm employees are included in the payroll run for that period.' },
+  { icon: '💾', problem: 'Export does not download', fix: 'Hard refresh (Ctrl+F5) or use a different browser. Disable pop-up blockers for this site.' },
+  { icon: '🔑', problem: 'Cannot log in', fix: 'Check your credentials. Ask your admin to reset your password under User Settings.' },
+  { icon: '🧾', problem: 'Wrong deductions on payslip', fix: 'Verify BIR tax brackets and contribution tables in System Configuration are correct.' },
+];
+
 export default function HelpPage() {
+  const [openFaq, setOpenFaq] = useState(null);
+
   return (
-    <>
-      <header className="header">
-        <h2>Help</h2>
-        <p>Guides, tips, and troubleshooting for the Payroll + HRIS system.</p>
-      </header>
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 0 48px' }}>
 
-      <section className="table-section">
-        <h3>Getting Started</h3>
-        <ul className="help-list">
-          <li><strong>Set Up Company Info:</strong> Go to <em>System Tools → Company Settings</em> to fill in your company profile, upload your logo, and define corporate policies.</li>
-          <li><strong>Add Employees:</strong> Go to <em>HRIS → Employee File</em> and add each employee with their personal details, employment info, and government IDs (SSS, PhilHealth, Pag-IBIG, TIN).</li>
-          <li><strong>Assign Schedules:</strong> Use <em>Schedule Management</em> to set up work schedules and assign them to employees before running payroll.</li>
-          <li><strong>Configure Deductions:</strong> Review BIR tax brackets and government contribution tables under <em>System Tools → System Configuration</em> to make sure they are up to date.</li>
-        </ul>
-      </section>
+      {/* ── Hero ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0f2044 0%, #1e40af 60%, #3b82f6 100%)',
+        borderRadius: 20, padding: '48px 40px', marginBottom: 28,
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', width: 250, height: 250, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', right: -40, top: -60 }} />
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Help Center</div>
+        <h1 style={{ margin: 0, fontSize: 32, fontWeight: 900, color: '#fff' }}>How can we help?</h1>
+        <p style={{ margin: '10px 0 0', color: '#bfdbfe', fontSize: 15, maxWidth: 520, lineHeight: 1.6 }}>
+          Find guides, module references, troubleshooting tips, and answers to common questions about the HRIS + Payroll system.
+        </p>
+      </div>
 
-      <section className="table-section">
-        <h3>Running Payroll</h3>
-        <ul className="help-list">
-          <li><strong>Review Attendance:</strong> Confirm all attendance records are complete and approved under <em>Employee Attendance</em> before generating payroll.</li>
-          <li><strong>Approve Leave & Overtime:</strong> Make sure all pending leave and overtime requests are approved or rejected before the payroll cut-off date.</li>
-          <li><strong>Payroll Computation:</strong> Go to <em>Payroll Computation</em>, select the payroll period and group, then click <em>Generate</em> to compute payroll for all employees in that run.</li>
-          <li><strong>Review Results:</strong> Check each employee's net pay, deductions, and allowances before finalizing. Use the <em>Payslip</em> report to preview individual payslips.</li>
-          <li><strong>Generate Reports:</strong> Use <em>Payroll Summary Report</em> to export payroll journals, gross pay, net pay, and reconciliation details as PDF or CSV.</li>
-        </ul>
-      </section>
+      {/* ── Quick Start ── */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Getting Started</h2>
+        <p style={{ color: '#64748b', fontSize: 14, marginBottom: 18 }}>Follow these steps to set up the system.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 16 }}>
+          {QUICKSTART.map(q => (
+            <div key={q.step} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', position: 'relative' }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#1e40af', background: '#eff6ff', borderRadius: 8, padding: '2px 8px', display: 'inline-block', marginBottom: 10 }}>STEP {q.step}</div>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>{q.icon}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>{q.title}</div>
+              <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>{q.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      <section className="table-section">
-        <h3>Modules Overview</h3>
-        <ul className="help-list">
-          <li><strong>Employee File:</strong> Manage complete employee profiles including personal info, employment details, government IDs, and salary.</li>
-          <li><strong>201 Files:</strong> Upload and manage employee documents such as contracts, clearances, and certifications.</li>
-          <li><strong>Leave Management:</strong> Review and approve or reject employee leave requests. Track leave balances per employee.</li>
-          <li><strong>Overtime Management:</strong> Review and process overtime requests. Approved overtime is automatically factored into payroll.</li>
-          <li><strong>Loan Deductions:</strong> Add employee loans and set up automatic deduction schedules that apply each payroll period.</li>
-          <li><strong>Year-End Payroll:</strong> Generate 13th month pay computation and year-end tax adjustments (annualization).</li>
-          <li><strong>Government Reports:</strong> Generate SSS, PhilHealth, Pag-IBIG, and BIR alphalist reports for submission to government agencies.</li>
-          <li><strong>Auditing:</strong> Review a full log of all system actions — who did what and when — for compliance and investigation.</li>
-        </ul>
-      </section>
+      {/* ── Modules ── */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Modules Overview</h2>
+        <p style={{ color: '#64748b', fontSize: 14, marginBottom: 18 }}>Everything available in the system.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+          {MODULES.map(m => (
+            <div key={m.name} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>{m.icon}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>{m.name}</div>
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>{m.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      <section className="table-section">
-        <h3>Troubleshooting</h3>
-        <ul className="help-list">
-          <li><strong>Server error on Generate:</strong> Make sure the server is running and the payroll run exists for the selected period. Refresh the page and try again.</li>
-          <li><strong>No rows returned in reports:</strong> Try a different month/year or confirm employees have been included in the payroll run for that period.</li>
-          <li><strong>Export does not download:</strong> Try a hard refresh (Ctrl+F5) or use a different browser. Disable pop-up blockers for this site.</li>
-          <li><strong>Cannot log in:</strong> Check your Employee ID and password. If forgotten, ask your system administrator to reset your password under <em>User Settings</em>.</li>
-          <li><strong>Payslip shows wrong deductions:</strong> Verify the BIR tax brackets and government contribution tables in <em>System Configuration</em> are correct for the current period.</li>
-          <li><strong>Attendance not reflecting:</strong> Confirm that the attendance records have been saved and the date range matches the payroll period.</li>
-          <li><strong>Logo not saving:</strong> Ensure the image file is under 5MB. PNG or JPG formats are recommended.</li>
-        </ul>
-      </section>
+      {/* ── Troubleshooting ── */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Troubleshooting</h2>
+        <p style={{ color: '#64748b', fontSize: 14, marginBottom: 18 }}>Common issues and how to fix them.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {ISSUES.map(i => (
+            <div key={i.problem} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 14, alignItems: 'flex-start', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <span style={{ fontSize: 20 }}>{i.icon}</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{i.problem}</div>
+                <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>{i.fix}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      <section className="table-section">
-        <h3>Frequently Asked Questions</h3>
-        <ul className="help-list">
-          <li>
-            <strong>How is the 13th month pay computed?</strong>
-            <br />
-            13th month pay is computed as 1/12 of the total basic salary earned during the calendar year. Go to <em>Year-End Payroll</em> to generate the computation.
-          </li>
-          <li>
-            <strong>How do I reset an employee's password?</strong>
-            <br />
-            Administrators can reset passwords from <em>Employee File → select employee → Account tab</em> or from <em>User Settings</em>.
-          </li>
-          <li>
-            <strong>Can employees view their own payslips?</strong>
-            <br />
-            Yes. Employees can log in and go to <em>Payroll Information</em> to view their payslip history and download their latest payslip.
-          </li>
-          <li>
-            <strong>How do I update SSS, PhilHealth, or Pag-IBIG contribution rates?</strong>
-            <br />
-            Go to <em>System Tools → System Configuration → Contribution Tables</em> and update the brackets. Click <em>Load Defaults</em> to restore the latest standard rates.
-          </li>
-          <li>
-            <strong>What happens if I miss approving a leave before payroll?</strong>
-            <br />
-            Unapproved leave will not be deducted from the employee's leave balance. You can still process the deduction manually in the next payroll period.
-          </li>
-        </ul>
-      </section>
-    </>
+      {/* ── FAQ ── */}
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Frequently Asked Questions</h2>
+        <p style={{ color: '#64748b', fontSize: 14, marginBottom: 18 }}>Tap a question to see the answer.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {FAQS.map((f, i) => (
+            <div key={i} style={{ background: '#fff', border: `1.5px solid ${openFaq === i ? '#3b82f6' : '#e2e8f0'}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'border-color .2s' }}>
+              <button
+                onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{f.q}</span>
+                <span style={{ fontSize: 18, color: '#3b82f6', marginLeft: 12, flexShrink: 0, transition: 'transform .2s', transform: openFaq === i ? 'rotate(45deg)' : 'rotate(0)' }}>+</span>
+              </button>
+              {openFaq === i && (
+                <div style={{ padding: '0 20px 16px', fontSize: 13, color: '#475569', lineHeight: 1.7, borderTop: '1px solid #f1f5f9' }}>
+                  {f.a}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
   );
 }

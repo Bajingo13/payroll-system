@@ -62,6 +62,7 @@ export default function OvertimeScreen({ navigation }) {
   const [form, setForm] = useState({ overtime_date: '', start_time: '', end_time: '', reason: '' });
   const [successMsg, setSuccessMsg] = useState('');
   const [activePicker, setActivePicker] = useState(null); // 'date' | 'start_time' | 'end_time' | null
+  const [cancelling, setCancelling] = useState(null); // request_id being cancelled
 
   function onPickerChange(event, selectedValue) {
     const field = activePicker;
@@ -123,6 +124,17 @@ export default function OvertimeScreen({ navigation }) {
       await loadOverview(); setTab('history');
     } catch (err) { setError(getApiMessage(err, 'Failed to submit overtime request.')); }
     finally { setSubmitting(false); }
+  }
+
+  async function cancelOvertime(requestId) {
+    setCancelling(requestId);
+    setError('');
+    try {
+      const { data } = await api.patch(`/employee/overtime-requests/${requestId}/cancel`, { user_id: user.user_id });
+      if (!data.success) throw new Error(data.message);
+      await loadOverview();
+    } catch (err) { setError(getApiMessage(err, 'Failed to cancel overtime request.')); }
+    finally { setCancelling(null); }
   }
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -262,6 +274,8 @@ export default function OvertimeScreen({ navigation }) {
             {requests.map((req, i) => {
               const st = getStatusStyle(req.status);
               const hrs = computeHours(req.start_time, req.end_time);
+              const isPending = String(req.status || '').toLowerCase() === 'pending';
+              const isCancelling = cancelling === (req.request_id || req.overtime_request_id);
               return (
                 <View key={req.request_id || i} style={s.historyCard}>
                   <View style={s.historyTop}>
@@ -281,6 +295,17 @@ export default function OvertimeScreen({ navigation }) {
                       <Text style={[s.statusText, { color: st.color }]}>{req.status || 'Pending'}</Text>
                     </View>
                   </View>
+                  {isPending && (
+                    <TouchableOpacity
+                      style={s.cancelBtn}
+                      onPress={() => cancelOvertime(req.request_id || req.overtime_request_id)}
+                      disabled={Boolean(cancelling)}
+                    >
+                      {isCancelling
+                        ? <ActivityIndicator size="small" color="#b91c1c" />
+                        : <Text style={s.cancelBtnText}>Cancel Request</Text>}
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -348,6 +373,8 @@ const s = StyleSheet.create({
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   statusText: { fontSize: 11, fontWeight: '700' },
   pickerBtn: { padding: 6 },
+  cancelBtn: { marginTop: 10, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', alignItems: 'center' },
+  cancelBtnText: { color: '#b91c1c', fontSize: 13, fontWeight: '700' },
   dialogBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 32 },
   dialog: { backgroundColor: '#fff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, elevation: 12 },
   dialogIconWrap: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

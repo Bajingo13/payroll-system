@@ -135,8 +135,8 @@ export default function PayslipModal({ visible, payrollId, onClose }) {
             {/* ── Company Header ── */}
             <View style={s.companyHeader}>
               <Text style={s.companyName}>Astreablue Intelligence Inc.</Text>
-              <Text style={s.companyAddr}>Unit 1011, Philippine AXA Life Centre 1286</Text>
-              <Text style={s.companyAddr}>Senator Gil Puyat (Buendia Ave.), Makati City</Text>
+              <Text style={s.companyAddr}>Unit 2004, Philippine AXA Life Centre 1286</Text>
+              <Text style={s.companyAddr}>Sen. Gil Puyat (Buendia Ave.), Makati City</Text>
               <Text style={s.payslipTitle}>PAYSLIP</Text>
             </View>
 

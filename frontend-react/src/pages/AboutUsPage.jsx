@@ -1,6 +1,22 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 
+const FEATURES = [
+  { icon: '👤', tag: 'HRIS', title: 'Employee Records', desc: 'Complete employee profiles, government IDs, 201 files, and full organizational hierarchy.' },
+  { icon: '🕐', tag: 'Timekeeping', title: 'Time & Attendance', desc: 'Attendance monitoring, leave management, overtime tracking, and work schedule management.' },
+  { icon: '💰', tag: 'Payroll', title: 'Payroll Computation', desc: 'Automated payroll with BIR, SSS, PhilHealth, and Pag-IBIG deductions computed every run.' },
+  { icon: '📊', tag: 'Reports', title: 'Compliance Reports', desc: 'Payslips, payroll journals, government reports, audit logs, and year-end payroll exports.' },
+  { icon: '🔐', tag: 'Security', title: 'Role-Based Access', desc: 'Granular access control for Admin, HR, and Employee roles with encrypted sensitive data.' },
+  { icon: '📱', tag: 'Mobile', title: 'HRIS Mobile App', desc: 'Employees can clock in/out, file leaves and overtime, and view payslips from their phones.' },
+];
+
+const STATS = [
+  { value: '6+', label: 'Core Modules' },
+  { value: '3', label: 'User Roles' },
+  { value: '100%', label: 'Cloud Ready' },
+  { value: 'PH', label: 'Government Compliant' },
+];
+
 export default function AboutUsPage() {
   const [company, setCompany] = useState(null);
 
@@ -10,125 +26,92 @@ export default function AboutUsPage() {
       .catch(() => {});
   }, []);
 
-  const name    = company?.company_name || 'Astreablue Intelligence Inc.';
-  const address = company?.address      || '';
-  const email   = company?.email        || '';
-  const phone   = company?.phone        || '';
-  const website = company?.website      || '';
-  const industry= company?.industry     || 'Information Technology';
-  const regNo   = company?.registration_no || '';
-  const founded = company?.founded_year || '';
-  const logo    = company?.logo_main    || company?.logo_url || '';
+  const name     = company?.company_name || 'Astreablue Intelligence Inc.';
+  const address  = company?.address      || '20th Floor, Unit 2004, Philippine AXA Life Centre, 1286 Sen. Gil Puyat Ave., Makati City';
+  const email    = company?.email        || 'astreablueintelligenceinc@gmail.com';
+  const phone    = company?.phone        || '';
+  const website  = company?.website      || '';
+  const industry = company?.industry     || 'Information Technology';
+  const regNo    = company?.registration_no || '';
+  const founded  = company?.founded_year || '';
+  const logo     = company?.logo_main    || company?.logo_url || '';
 
   return (
-    <>
-      <header className="header">
-        <h2>About Us</h2>
-        <p>Learn more about {name} and the Payroll + HRIS platform.</p>
-      </header>
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 0 48px' }}>
 
-      <section className="table-section">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-          {logo && (
-            <img
-              src={logo}
-              alt={name}
-              style={{ maxHeight: '72px', maxWidth: '220px', objectFit: 'contain' }}
-            />
-          )}
-          <div>
-            <h3 style={{ margin: 0 }}>{name}</h3>
-            {industry && <p className="muted" style={{ margin: '0.2rem 0 0' }}>{industry}</p>}
-          </div>
-        </div>
-
-        <p style={{ lineHeight: 1.7 }}>
-          {name} provides a comprehensive HRIS and Payroll platform designed to streamline
-          employee records, attendance tracking, leave and overtime management, payroll
-          computation, and statutory government reporting — all in one integrated system.
-        </p>
-
-        {(address || email || phone || website || regNo || founded) && (
-          <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.6rem 1.5rem' }}>
-            {address && (
-              <div>
-                <span className="muted" style={{ fontSize: '0.8rem', display: 'block' }}>Address</span>
-                <strong style={{ fontSize: '0.92rem' }}>{address}</strong>
-              </div>
-            )}
-            {email && (
-              <div>
-                <span className="muted" style={{ fontSize: '0.8rem', display: 'block' }}>Email</span>
-                <strong style={{ fontSize: '0.92rem' }}>
-                  <a href={`mailto:${email}`} style={{ color: 'inherit' }}>{email}</a>
-                </strong>
-              </div>
-            )}
-            {phone && (
-              <div>
-                <span className="muted" style={{ fontSize: '0.8rem', display: 'block' }}>Phone</span>
-                <strong style={{ fontSize: '0.92rem' }}>{phone}</strong>
-              </div>
-            )}
-            {website && (
-              <div>
-                <span className="muted" style={{ fontSize: '0.8rem', display: 'block' }}>Website</span>
-                <strong style={{ fontSize: '0.92rem' }}>
-                  <a href={website} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{website}</a>
-                </strong>
-              </div>
-            )}
-            {regNo && (
-              <div>
-                <span className="muted" style={{ fontSize: '0.8rem', display: 'block' }}>Registration No.</span>
-                <strong style={{ fontSize: '0.92rem' }}>{regNo}</strong>
-              </div>
-            )}
-            {founded && (
-              <div>
-                <span className="muted" style={{ fontSize: '0.8rem', display: 'block' }}>Founded</span>
-                <strong style={{ fontSize: '0.92rem' }}>{founded}</strong>
-              </div>
-            )}
-          </div>
+      {/* ── Hero ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0f2044 0%, #1e40af 60%, #3b82f6 100%)',
+        borderRadius: 20, padding: '48px 40px', marginBottom: 28,
+        display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        {/* background circle */}
+        <div style={{ position: 'absolute', width: 300, height: 300, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', right: -60, top: -80 }} />
+        {logo && (
+          <img src={logo} alt={name} style={{ height: 72, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9, position: 'relative', zIndex: 1 }} />
         )}
-      </section>
-
-      <section className="table-section">
-        <h3>Platform Capabilities</h3>
-        <div className="card-grid" style={{ marginTop: '0.75rem' }}>
-          <article className="card">
-            <span>HRIS</span>
-            <strong>Employee Records</strong>
-            <p className="muted">Complete employee profiles, government IDs, 201 files, and organizational setup.</p>
-          </article>
-          <article className="card">
-            <span>Time & Attendance</span>
-            <strong>Timekeeping</strong>
-            <p className="muted">Attendance monitoring, leave management, overtime tracking, and schedule management.</p>
-          </article>
-          <article className="card">
-            <span>Payroll</span>
-            <strong>Computation & Processing</strong>
-            <p className="muted">Automated payroll computation with BIR, SSS, PhilHealth, and Pag-IBIG deductions.</p>
-          </article>
-          <article className="card">
-            <span>Reports</span>
-            <strong>Operational + Compliance</strong>
-            <p className="muted">Payslips, payroll summaries, government reports, audit logs, and year-end payroll.</p>
-          </article>
-          <article className="card">
-            <span>Security</span>
-            <strong>Data Protection</strong>
-            <p className="muted">Role-based access control and encrypted storage for sensitive employee data.</p>
-          </article>
-          <article className="card">
-            <span>Loans & Deductions</span>
-            <strong>Loan Management</strong>
-            <p className="muted">Track and auto-deduct employee loans and other recurring deductions each payroll period.</p>
-          </article>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>{industry}</div>
+          <h1 style={{ margin: 0, fontSize: 32, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>{name}</h1>
+          <p style={{ margin: '10px 0 0', color: '#bfdbfe', fontSize: 15, maxWidth: 560, lineHeight: 1.6 }}>
+            Providing a comprehensive HRIS and Payroll platform to streamline employee records,
+            timekeeping, payroll computation, and government compliance — all in one integrated system.
+          </p>
         </div>
-      </section>
-    </>
+      </div>
+
+      {/* ── Stats ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+        {STATS.map(s => (
+          <div key={s.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 16px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#1e40af' }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 600 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Platform Features ── */}
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Platform Capabilities</h2>
+        <p style={{ color: '#64748b', marginBottom: 18, fontSize: 14 }}>Everything your HR team needs in one place.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {FEATURES.map(f => (
+            <div key={f.title} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 22px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'box-shadow .2s' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 24 }}>{f.icon}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#1e40af', background: '#eff6ff', borderRadius: 20, padding: '3px 10px', letterSpacing: 0.8, textTransform: 'uppercase' }}>{f.tag}</span>
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>{f.title}</div>
+              <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Company Info ── */}
+      {(address || email || phone || website || regNo || founded) && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: '24px 28px' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 16 }}>Company Information</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px 24px' }}>
+            {[
+              { label: '📍 Address', val: address },
+              { label: '📧 Email', val: email, href: `mailto:${email}` },
+              { label: '📞 Phone', val: phone },
+              { label: '🌐 Website', val: website, href: website, ext: true },
+              { label: '🏢 Reg. No.', val: regNo },
+              { label: '📅 Founded', val: founded },
+            ].filter(i => i.val).map(i => (
+              <div key={i.label}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{i.label}</div>
+                {i.href
+                  ? <a href={i.href} target={i.ext ? '_blank' : undefined} rel="noopener noreferrer" style={{ fontSize: 14, fontWeight: 600, color: '#1e40af', textDecoration: 'none' }}>{i.val}</a>
+                  : <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{i.val}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

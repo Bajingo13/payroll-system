@@ -49,6 +49,7 @@ export default function LeaveScreen({ navigation }) {
   const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
   const [successMsg, setSuccessMsg] = useState('');
   const [datePicker, setDatePicker] = useState(null); // 'start_date' | 'end_date' | null
+  const [cancelling, setCancelling] = useState(null); // request_id being cancelled
 
   function openPicker(field) {
     setDatePicker(field);
@@ -96,6 +97,17 @@ export default function LeaveScreen({ navigation }) {
       await loadOverview(); setTab('history');
     } catch (err) { setError(getApiMessage(err, 'Failed to submit leave request.')); }
     finally { setSubmitting(false); }
+  }
+
+  async function cancelLeave(leaveId) {
+    setCancelling(leaveId);
+    setError('');
+    try {
+      const { data } = await api.patch(`/employee/leave-requests/${leaveId}/cancel`, { user_id: user.user_id });
+      if (!data.success) throw new Error(data.message);
+      await loadOverview();
+    } catch (err) { setError(getApiMessage(err, 'Failed to cancel leave request.')); }
+    finally { setCancelling(null); }
   }
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -238,6 +250,8 @@ export default function LeaveScreen({ navigation }) {
             )}
             {leaveRequests.map((req, i) => {
               const st = getStatusStyle(req.status);
+              const isPending = String(req.status || '').toLowerCase() === 'pending';
+              const isCancelling = cancelling === (req.leave_id || req.request_id);
               return (
                 <View key={req.leave_id || i} style={s.historyCard}>
                   <View style={s.historyTop}>
@@ -251,6 +265,17 @@ export default function LeaveScreen({ navigation }) {
                       <Text style={[s.statusText, { color: st.color }]}>{req.status || 'Pending'}</Text>
                     </View>
                   </View>
+                  {isPending && (
+                    <TouchableOpacity
+                      style={s.cancelBtn}
+                      onPress={() => cancelLeave(req.leave_id || req.request_id)}
+                      disabled={Boolean(cancelling)}
+                    >
+                      {isCancelling
+                        ? <ActivityIndicator size="small" color="#b91c1c" />
+                        : <Text style={s.cancelBtnText}>Cancel Request</Text>}
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -326,6 +351,8 @@ const s = StyleSheet.create({
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   statusText: { fontSize: 11, fontWeight: '700' },
   pickerBtn: { padding: 6 },
+  cancelBtn: { marginTop: 10, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', alignItems: 'center' },
+  cancelBtnText: { color: '#b91c1c', fontSize: 13, fontWeight: '700' },
   dialogBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 32 },
   dialog: { backgroundColor: '#fff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, elevation: 12 },
   dialogIconWrap: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

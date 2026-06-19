@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Dimensions,
   Image,
   Modal,
-  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,13 +12,12 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
-import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 import { api } from '../api/client';
 
 // ── Configure your office location here ──────────────────
 const DEFAULT_OFFICE = {
-  latitude: 14.5512,
-  longitude: 121.0188,
+  latitude: 14.561365459812485,
+  longitude: 121.01426138666103,
   radius_m: 250,
   name: 'Philippine AXA Life Centre, Makati',
 };
@@ -61,333 +58,111 @@ function fmtTime(value) {
     : d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
-// ── Map grid drawn with Views ────────────────────────────
-function MapFallbackOverlay({ coords, distance, locationAccuracy, office, pan }) {
+// ── Location visual display (no native map needed) ───────
+function LocationVisual({ coords, distance, locationAccuracy, office }) {
   const width = SW;
-  const height = 260;
-  const officeX = width / 2;
-  const officeY = height / 2;
-  let userX = officeX;
-  let userY = officeY;
+  const cx = width / 2;
+  const cy = 110;
+  const height = 220;
+
+  let userX = cx;
+  let userY = cy;
 
   if (coords) {
-    const avgLat = ((Number(coords.latitude) || office.latitude) + office.latitude) / 2;
+    const avgLat = (coords.latitude + office.latitude) / 2;
     const metersPerDegLng = 111320 * Math.cos((avgLat * Math.PI) / 180);
-    const dx = (Number(coords.longitude) - office.longitude) * metersPerDegLng;
-    const dy = (office.latitude - Number(coords.latitude)) * 110540;
-    const extent = Math.max(office.radius_m, Number(distance || 0), Number(locationAccuracy || 0), 80);
-    const scale = Math.min((width * 0.34) / extent, (height * 0.34) / extent);
-    userX = clamp(officeX + dx * scale, 30, width - 30);
-    userY = clamp(officeY + dy * scale, 30, height - 30);
+    const dx = (coords.longitude - office.longitude) * metersPerDegLng;
+    const dy = (office.latitude - coords.latitude) * 110540;
+    const extent = Math.max(office.radius_m, distance || 0, locationAccuracy || 0, 80);
+    const scale = Math.min((width * 0.30) / extent, (height * 0.30) / extent);
+    userX = clamp(cx + dx * scale, 28, width - 28);
+    userY = clamp(cy + dy * scale, 28, height - 28);
   }
 
-  const userVisible = Boolean(coords);
-  const lineWidth = Math.max(1, Math.abs(userX - officeX));
-  const lineHeight = Math.max(1, Math.abs(userY - officeY));
-  const lineLeft = Math.min(officeX, userX);
-  const lineTop = Math.min(officeY, userY);
+  const withinRadius = distance !== null && distance <= office.radius_m;
+  const hasUser = Boolean(coords);
 
   return (
-    <View pointerEvents="none" style={ms.fallbackLayer}>
-      <Animated.View style={[ms.fallbackContent, { transform: pan.getTranslateTransform() }]}>
-        <View style={[ms.fallbackRoad, ms.fallbackRoadH, { top: height * 0.25 }]} />
-        <View style={[ms.fallbackRoad, ms.fallbackRoadH, { top: height * 0.52 }]} />
-        <View style={[ms.fallbackRoad, ms.fallbackRoadH, { top: height * 0.76 }]} />
-        <View style={[ms.fallbackRoad, ms.fallbackRoadV, { left: width * 0.25 }]} />
-        <View style={[ms.fallbackRoad, ms.fallbackRoadV, { left: width * 0.52 }]} />
-        <View style={[ms.fallbackRoad, ms.fallbackRoadV, { left: width * 0.78 }]} />
+    <View style={lv.wrap}>
+      {/* Grid lines */}
+      {[0.22, 0.44, 0.66, 0.88].map((t) => (
+        <View key={`h${t}`} style={[lv.gridLine, lv.gridH, { top: height * t }]} />
+      ))}
+      {[0.2, 0.4, 0.6, 0.8].map((t) => (
+        <View key={`v${t}`} style={[lv.gridLine, lv.gridV, { left: width * t }]} />
+      ))}
 
-        <View style={[ms.officeRadius, { left: officeX - 70, top: officeY - 70 }]} />
-        {userVisible ? (
-          <View
-            style={[
-              ms.distanceLine,
-              {
-                left: lineLeft,
-                top: lineTop,
-                width: lineWidth,
-                height: lineHeight,
-                borderLeftWidth: userX < officeX ? 0 : 2,
-                borderRightWidth: userX < officeX ? 2 : 0,
-                borderTopWidth: userY < officeY ? 0 : 2,
-                borderBottomWidth: userY < officeY ? 2 : 0,
-              },
-            ]}
-          />
-        ) : null}
+      {/* Office radius rings */}
+      <View style={[lv.ring, lv.ring3, { left: cx - 90, top: cy - 90 }]} />
+      <View style={[lv.ring, lv.ring2, { left: cx - 60, top: cy - 60 }]} />
+      <View style={[lv.ring, lv.ring1, { left: cx - 34, top: cy - 34 }]} />
 
-        <View style={[ms.officePoint, { left: officeX - 9, top: officeY - 9 }]} />
-        <View style={[ms.officeLabel, { left: clamp(officeX - 72, 10, width - 154), top: officeY + 16 }]}>
-          <Text style={ms.officeLabelText} numberOfLines={1}>{office.name}</Text>
-        </View>
+      {/* Dashed line from office to user */}
+      {hasUser && userX !== cx && (
+        <View style={[lv.dashedLine, {
+          left: Math.min(cx, userX),
+          top: Math.min(cy, userY),
+          width: Math.max(2, Math.abs(userX - cx)),
+          height: Math.max(2, Math.abs(userY - cy)),
+          borderRightWidth: userX >= cx ? 2 : 0,
+          borderLeftWidth: userX < cx ? 2 : 0,
+          borderBottomWidth: userY >= cy ? 2 : 0,
+          borderTopWidth: userY < cy ? 2 : 0,
+        }]} />
+      )}
 
-        {userVisible ? (
-          <>
-            <View style={[ms.userAccuracy, { left: userX - 34, top: userY - 34 }]} />
-            <View style={[ms.userPoint, { left: userX - 9, top: userY - 9 }]} />
-            <View style={[ms.userLabel, { left: clamp(userX - 50, 10, width - 110), top: clamp(userY - 42, 10, height - 34) }]}>
-              <Text style={ms.userLabelText}>You</Text>
-            </View>
-          </>
-        ) : null}
-      </Animated.View>
-    </View>
-  );
-}
+      {/* User dot */}
+      {hasUser && (
+        <>
+          <View style={[lv.userRing, { left: userX - 18, top: userY - 18,
+            borderColor: withinRadius ? 'rgba(22,163,74,0.35)' : 'rgba(234,88,12,0.35)',
+          }]} />
+          <View style={[lv.userDot, { left: userX - 9, top: userY - 9,
+            backgroundColor: withinRadius ? '#16a34a' : '#ea580c',
+          }]} />
+          <View style={[lv.label, lv.userLabel, { left: clamp(userX - 18, 8, width - 60), top: userY - 36 }]}>
+            <Text style={lv.labelText}>You</Text>
+          </View>
+        </>
+      )}
 
-function LiveLocationMap({ coords, distance, locationAccuracy, office, onMapTouchStart, onMapTouchEnd }) {
-  const mapRef = useRef(null);
-  const fallbackPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const hasAutoFitRef = useRef(false);
-  const userCoords = coords
-    ? { latitude: coords.latitude, longitude: coords.longitude }
-    : null;
-  const officeCoords = { latitude: office.latitude, longitude: office.longitude };
-  const initialRegion = {
-    latitude: office.latitude,
-    longitude: office.longitude,
-    latitudeDelta: 0.004,
-    longitudeDelta: 0.004,
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4,
-      onPanResponderGrant: () => {
-        onMapTouchStart?.();
-        fallbackPan.stopAnimation((value) => {
-          fallbackPan.setOffset(value);
-          fallbackPan.setValue({ x: 0, y: 0 });
-        });
-      },
-      onPanResponderMove: Animated.event(
-        [null, { dx: fallbackPan.x, dy: fallbackPan.y }],
-        { useNativeDriver: false },
-      ),
-      onPanResponderRelease: () => {
-        fallbackPan.flattenOffset();
-        onMapTouchEnd?.();
-      },
-      onPanResponderTerminate: () => {
-        fallbackPan.flattenOffset();
-        onMapTouchEnd?.();
-      },
-    })
-  ).current;
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    if (!userCoords) {
-      hasAutoFitRef.current = false;
-      mapRef.current.animateToRegion(initialRegion, 350);
-      return;
-    }
-
-    if (hasAutoFitRef.current) return;
-    hasAutoFitRef.current = true;
-    mapRef.current.fitToCoordinates([officeCoords, userCoords], {
-      edgePadding: { top: 70, right: 70, bottom: 70, left: 70 },
-      animated: true,
-    });
-  }, [office.latitude, office.longitude, coords?.latitude, coords?.longitude]);
-
-  function centerOnUser() {
-    fallbackPan.stopAnimation(() => {
-      fallbackPan.setOffset({ x: 0, y: 0 });
-      Animated.spring(fallbackPan, {
-        toValue: { x: 0, y: 0 },
-        useNativeDriver: false,
-        friction: 8,
-        tension: 80,
-      }).start();
-    });
-    if (!userCoords || !mapRef.current) return;
-    mapRef.current.animateToRegion({
-      ...userCoords,
-      latitudeDelta: 0.003,
-      longitudeDelta: 0.003,
-    }, 350);
-  }
-
-  return (
-    <View style={ms.mapWrap}>
-      <MapView
-        ref={mapRef}
-        style={ms.map}
-        initialRegion={initialRegion}
-        mapType="standard"
-        scrollEnabled
-        zoomEnabled
-        zoomTapEnabled
-        pitchEnabled={false}
-        rotateEnabled={false}
-        toolbarEnabled={false}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-      >
-        {/* Office marker + radius circle */}
-        <Marker
-          coordinate={officeCoords}
-          title={office.name}
-          description="Office location"
-          pinColor="#0a66d9"
-        />
-        <Circle
-          center={officeCoords}
-          radius={office.radius_m}
-          strokeColor="rgba(10,102,217,0.75)"
-          fillColor="rgba(10,102,217,0.12)"
-          strokeWidth={2}
-        />
-
-        {/* User location marker + accuracy circle + line to office */}
-        {userCoords ? (
-          <>
-            <Polyline
-              coordinates={[officeCoords, userCoords]}
-              strokeColor="rgba(15,23,42,0.35)"
-              strokeWidth={2}
-              lineDashPattern={[6, 6]}
-            />
-            <Marker
-              coordinate={userCoords}
-              title="Your location"
-              description={distance !== null ? `${Math.round(distance)}m from office` : ''}
-              pinColor="#16a34a"
-            />
-            {locationAccuracy ? (
-              <Circle
-                center={userCoords}
-                radius={Math.max(10, Number(locationAccuracy))}
-                strokeColor="rgba(22,163,74,0.6)"
-                fillColor="rgba(22,163,74,0.12)"
-                strokeWidth={1}
-              />
-            ) : null}
-          </>
-        ) : null}
-      </MapView>
-
-      {/* GPS badge */}
-      <View style={ms.mapBadge}>
-        <Text style={ms.mapBadgeText}>
-          {coords
-            ? `Live GPS${locationAccuracy ? ` +/- ${Math.round(locationAccuracy)}m` : ''}`
-            : 'Waiting for GPS…'}
-        </Text>
+      {/* Office dot */}
+      <View style={[lv.officeDot, { left: cx - 9, top: cy - 9 }]} />
+      <View style={[lv.label, lv.officeLabel, { left: clamp(cx - 36, 8, width - 100), top: cy + 14 }]}>
+        <Text style={lv.labelText} numberOfLines={1}>{office.name}</Text>
       </View>
 
-      {/* Re-center button */}
-      {userCoords ? (
-        <TouchableOpacity style={ms.centerBtn} onPress={centerOnUser}>
-          <Text style={ms.centerBtnText}>⊙</Text>
-        </TouchableOpacity>
-      ) : null}
+      {/* GPS badge */}
+      <View style={lv.badge}>
+        <Text style={lv.badgeText}>
+          {hasUser
+            ? `GPS${locationAccuracy ? ` ±${Math.round(locationAccuracy)}m` : ''}`
+            : 'Locating…'}
+        </Text>
+      </View>
     </View>
   );
 }
 
-const ms = StyleSheet.create({
-  mapWrap: { height: 260, overflow: 'hidden', backgroundColor: '#e8eef5' },
-  map: { flex: 1 },
-  fallbackLayer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(232,238,245,0.76)',
-  },
-  fallbackContent: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gestureLayer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-  },
-  fallbackRoad: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255,255,255,0.82)',
-  },
-  fallbackRoadH: { left: 0, right: 0, height: 8 },
-  fallbackRoadV: { top: 0, bottom: 0, width: 8 },
-  officeRadius: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 2,
-    borderColor: 'rgba(10,102,217,0.5)',
-    backgroundColor: 'rgba(10,102,217,0.12)',
-  },
-  distanceLine: {
-    position: 'absolute',
-    borderStyle: 'dashed',
-    borderColor: 'rgba(15,23,42,0.42)',
-  },
-  officePoint: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#0a66d9',
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  userAccuracy: {
-    position: 'absolute',
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 1,
-    borderColor: 'rgba(22,163,74,0.55)',
-    backgroundColor: 'rgba(22,163,74,0.12)',
-  },
-  userPoint: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#16a34a',
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  officeLabel: {
-    position: 'absolute',
-    maxWidth: 144,
-    backgroundColor: 'rgba(10,102,217,0.9)',
-    borderRadius: 7,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  officeLabelText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  userLabel: {
-    position: 'absolute',
-    backgroundColor: 'rgba(22,163,74,0.9)',
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  userLabelText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  mapBadge: {
-    position: 'absolute',
-    left: 12,
-    top: 12,
-    backgroundColor: 'rgba(15,23,42,0.72)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  mapBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  centerBtn: {
-    position: 'absolute',
-    right: 12,
-    bottom: 40,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    elevation: 2,
-  },
-  centerBtnText: { color: '#0f172a', fontSize: 12, fontWeight: '800' },
+const lv = StyleSheet.create({
+  wrap: { height: 220, backgroundColor: '#e8eef5', overflow: 'hidden' },
+  gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.7)' },
+  gridH: { left: 0, right: 0, height: 1 },
+  gridV: { top: 0, bottom: 0, width: 1 },
+  ring: { position: 'absolute', borderRadius: 999, borderWidth: 1.5 },
+  ring1: { width: 68,  height: 68,  borderColor: 'rgba(10,102,217,0.55)', backgroundColor: 'rgba(10,102,217,0.10)' },
+  ring2: { width: 120, height: 120, borderColor: 'rgba(10,102,217,0.25)', backgroundColor: 'transparent' },
+  ring3: { width: 180, height: 180, borderColor: 'rgba(10,102,217,0.12)', backgroundColor: 'transparent' },
+  dashedLine: { position: 'absolute', borderStyle: 'dashed', borderColor: 'rgba(15,23,42,0.30)' },
+  officeDot: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#0a66d9', borderWidth: 3, borderColor: '#fff', elevation: 3 },
+  userRing: { position: 'absolute', width: 36, height: 36, borderRadius: 18, borderWidth: 1.5 },
+  userDot: { position: 'absolute', width: 18, height: 18, borderRadius: 9, borderWidth: 3, borderColor: '#fff', elevation: 3 },
+  label: { position: 'absolute', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  officeLabel: { backgroundColor: 'rgba(10,102,217,0.88)', maxWidth: 130 },
+  userLabel: { backgroundColor: 'rgba(15,23,42,0.75)' },
+  labelText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  badge: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(15,23,42,0.65)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 });
 
 // ── Selfie capture for attendance ────────────────────────
@@ -610,7 +385,7 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
   const [coords, setCoords] = useState(null);
   const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [office, setOffice] = useState(DEFAULT_OFFICE);
-  const [mapInteracting, setMapInteracting] = useState(false);
+
   const bestLocationRef = useRef(null);
 
   // Selfie
@@ -958,17 +733,13 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
           <ScrollView
             style={c.scroll}
             contentContainerStyle={{ paddingBottom: 40 }}
-            scrollEnabled={!mapInteracting}
-            nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
           >
-            <LiveLocationMap
+            <LocationVisual
               coords={coords}
               distance={distance}
               locationAccuracy={locationAccuracy}
               office={office}
-              onMapTouchStart={() => setMapInteracting(true)}
-              onMapTouchEnd={() => setMapInteracting(false)}
             />
 
             <View style={c.locCard}>

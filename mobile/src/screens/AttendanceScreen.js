@@ -5,10 +5,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -63,6 +63,29 @@ export default function AttendanceScreen({ navigation }) {
   const [to, setTo] = useState(todayStr);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [activePicker, setActivePicker] = useState(null); // 'from' | 'to' | null
+
+  function onDateChange(event, selectedDate) {
+    const field = activePicker;
+    setActivePicker(null);
+    if (event.type === 'set' && selectedDate) {
+      const y = selectedDate.getFullYear();
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const d = String(selectedDate.getDate()).padStart(2, '0');
+      const str = `${y}-${m}-${d}`;
+      if (field === 'from') setFrom(str);
+      else setTo(str);
+    }
+  }
+
+  function getPickerDate(field) {
+    const val = field === 'from' ? from : to;
+    if (val) {
+      const d = new Date(`${val}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  }
 
   async function load(f, t) {
     setLoading(true);
@@ -119,31 +142,27 @@ export default function AttendanceScreen({ navigation }) {
 
         {/* Date filter */}
         <View style={s.filterRow}>
-          <View style={s.filterInput}>
+          <TouchableOpacity style={s.filterInput} onPress={() => setActivePicker('from')}>
             <Ionicons name="calendar-outline" size={14} color="#93c5fd" />
-            <TextInput
-              style={s.filterText}
-              value={from}
-              onChangeText={setFrom}
-              placeholder="From"
-              placeholderTextColor="rgba(147,197,253,0.6)"
-            />
-          </View>
+            <Text style={s.filterText}>{from || 'From'}</Text>
+          </TouchableOpacity>
           <Text style={s.filterSep}>→</Text>
-          <View style={s.filterInput}>
+          <TouchableOpacity style={s.filterInput} onPress={() => setActivePicker('to')}>
             <Ionicons name="calendar-outline" size={14} color="#93c5fd" />
-            <TextInput
-              style={s.filterText}
-              value={to}
-              onChangeText={setTo}
-              placeholder="To"
-              placeholderTextColor="rgba(147,197,253,0.6)"
-            />
-          </View>
+            <Text style={s.filterText}>{to || 'To'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={s.applyBtn} onPress={() => load(from, to)}>
             <Ionicons name="search-outline" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
+        {activePicker && (
+          <DateTimePicker
+            value={getPickerDate(activePicker)}
+            mode="date"
+            display="default"
+            onChange={onDateChange}
+          />
+        )}
       </View>
 
       {/* ── Records ── */}
@@ -253,7 +272,7 @@ const s = StyleSheet.create({
   summaryLabel: { fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.4 },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   filterInput: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  filterText: { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
+  filterText: { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600', marginLeft: 6 },
   filterSep: { color: '#93c5fd', fontSize: 16, fontWeight: '700' },
   applyBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   body: { padding: 16, gap: 12 },

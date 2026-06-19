@@ -154,7 +154,7 @@ module.exports = function (app, pool) {
           ep.loans, ep.other_deductions, ep.deductions, ep.adj_comp, ep.adj_non_comp,
           ep.gross_pay, ep.total_deductions, ep.net_pay,
           e.first_name, e.last_name, e.middle_name, e.emp_code,
-          ee.position, ee.department, ee.company,
+          ee.position, ee.department, ee.company, ee.date_hired,
           pr.payroll_range, pr.status AS run_status
         FROM employee_payroll ep
         LEFT JOIN employees e ON e.employee_id = ep.employee_id

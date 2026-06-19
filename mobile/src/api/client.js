@@ -2,6 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 
+const ASSET_BASE_URL = API_BASE_URL.replace('/api', '');
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
@@ -32,4 +34,12 @@ api.interceptors.response.use(
 
 export function getApiMessage(error, fallback = 'Request failed.') {
   return error?.response?.data?.message || error?.message || fallback;
+}
+
+export function getAssetUrl(path, cacheBust = false) {
+  if (!path) return null;
+  const text = String(path);
+  const baseUrl = text.startsWith('http') ? text : `${ASSET_BASE_URL}${text.startsWith('/') ? text : `/${text}`}`;
+  if (!cacheBust) return baseUrl;
+  return `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
 }

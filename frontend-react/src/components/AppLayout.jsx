@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext.jsx';
+import { api, getAssetUrl } from '../api/client.js';
 import { canAccessFeature, normalizeRole } from '../access/roleAccess.js';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 import NotificationBell from './NotificationBell.jsx';
@@ -30,6 +31,32 @@ export default function AppLayout() {
   useEffect(() => {
     setAvatar(localStorage.getItem(avatarStorageKey) || '');
   }, [avatarStorageKey]);
+
+  useEffect(() => {
+    if (!user?.user_id) return undefined;
+
+    let cancelled = false;
+
+    async function loadProfilePhoto() {
+      try {
+        const { data } = await api.get('/profile', {
+          params: { user_id: user.user_id }
+        });
+        const nextAvatar = data.profilePhotoUrl ? `${getAssetUrl(data.profilePhotoUrl)}?t=${Date.now()}` : '';
+        if (cancelled || !nextAvatar) return;
+        localStorage.setItem(avatarStorageKey, nextAvatar);
+        setAvatar(nextAvatar);
+      } catch (err) {
+        console.warn('Profile photo load failed:', err);
+      }
+    }
+
+    loadProfilePhoto();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [avatarStorageKey, user?.user_id]);
 
   useEffect(() => {
     function updateAvatar(event) {
@@ -104,7 +131,7 @@ export default function AppLayout() {
     navigate('/login', { replace: true });
   }
 
-  function handleAvatarChange(event) {
+  async function handleAvatarChange(event) {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -113,14 +140,28 @@ export default function AppLayout() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      localStorage.setItem(avatarStorageKey, result);
-      setAvatar(result);
-    };
-    reader.readAsDataURL(file);
-    event.target.value = '';
+    try {
+      const formData = new FormData();
+      formData.append('user_id', String(user.user_id));
+      formData.append('photo', file);
+
+      const { data } = await api.post('/employee/profile-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (!data.success) {
+        throw new Error(data.message || 'Unable to update profile picture.');
+      }
+
+      const nextAvatar = `${getAssetUrl(data.url)}?t=${Date.now()}`;
+      localStorage.setItem(avatarStorageKey, nextAvatar);
+      setAvatar(nextAvatar);
+      window.dispatchEvent(new CustomEvent('profile-avatar-updated', { detail: nextAvatar }));
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Unable to update profile picture.');
+    } finally {
+      event.target.value = '';
+    }
   }
 
   const isEmployee = normalizeRole(user?.role) === 'employee';

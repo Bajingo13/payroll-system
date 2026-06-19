@@ -174,7 +174,7 @@ export default function PayrollScreen({ navigation }) {
                     <Text style={[s.historyItemValue, { color: '#15803d', fontSize: 16, fontWeight: '800' }]}>{money(row.net_pay)}</Text>
                   </View>
                 </View>
-                {row.payroll_id && Number(row.gross_pay) > 0 && (
+                {!!row.payroll_id && (
                   <TouchableOpacity style={s.payslipBtn} onPress={() => setPayslipId(row.payroll_id)}>
                     <Ionicons name="document-text-outline" size={14} color="#1e40af" />
                     <Text style={s.payslipBtnText}>View Payslip</Text>

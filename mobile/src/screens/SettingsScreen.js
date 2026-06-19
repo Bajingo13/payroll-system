@@ -4,18 +4,21 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { api, getApiMessage } from '../api/client';
+import { api, getApiMessage, getAssetUrl } from '../api/client';
 import { API_BASE_URL } from '../config';
 
 const BASE_URL = API_BASE_URL.replace('/api', '');
@@ -33,15 +36,53 @@ export default function SettingsScreen({ navigation, route }) {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const employee = route.params?.employee || {};
-  const [photoUrl, setPhotoUrl] = useState(
-    route.params?.profilePhotoUrl ? `${BASE_URL}${route.params.profilePhotoUrl}` : null
-  );
+  const [photoUrl, setPhotoUrl] = useState(getAssetUrl(route.params?.profilePhotoUrl, true));
   const [uploading, setUploading] = useState(false);
   const [photoSheet, setPhotoSheet] = useState(false);
   const [logoutSheet, setLogoutSheet] = useState(false);
+  const [pwModal, setPwModal] = useState(false);
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const [pwShow, setPwShow] = useState({ current: false, next: false, confirm: false });
 
   function confirmLogout() {
     setLogoutSheet(true);
+  }
+
+  function openPasswordModal() {
+    setPwForm({ current: '', next: '', confirm: '' });
+    setPwError('');
+    setPwShow({ current: false, next: false, confirm: false });
+    setPwModal(true);
+  }
+
+  async function savePassword() {
+    if (!pwForm.current || !pwForm.next || !pwForm.confirm) {
+      setPwError('All fields are required.'); return;
+    }
+    if (pwForm.next !== pwForm.confirm) {
+      setPwError('New password and confirmation do not match.'); return;
+    }
+    if (pwForm.next.length < 8) {
+      setPwError('New password must be at least 8 characters.'); return;
+    }
+    setPwSaving(true); setPwError('');
+    try {
+      const { data } = await api.put('/user/password', {
+        user_id: user.user_id,
+        currentPassword: pwForm.current,
+        newPassword: pwForm.next,
+        confirmPassword: pwForm.confirm,
+      });
+      if (!data.success) throw new Error(data.message);
+      setPwModal(false);
+      Alert.alert('Password Changed', 'Your password has been updated successfully.');
+    } catch (err) {
+      setPwError(getApiMessage(err, 'Failed to change password.'));
+    } finally {
+      setPwSaving(false);
+    }
   }
 
   async function pickAndUpload() {
@@ -71,10 +112,10 @@ export default function SettingsScreen({ navigation, route }) {
         name: `profile_${user.user_id}.jpg`,
       });
       const { data } = await api.post('/employee/profile-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       });
       if (data.success) {
-        setPhotoUrl(`${BASE_URL}${data.url}?t=${Date.now()}`);
+        setPhotoUrl(getAssetUrl(data.url, true));
       }
     } catch (err) {
       Alert.alert('Upload failed', getApiMessage(err, 'Could not upload photo.'));
@@ -109,10 +150,10 @@ export default function SettingsScreen({ navigation, route }) {
         name: `profile_${user.user_id}.jpg`,
       });
       const { data } = await api.post('/employee/profile-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       });
       if (data.success) {
-        setPhotoUrl(`${BASE_URL}${data.url}?t=${Date.now()}`);
+        setPhotoUrl(getAssetUrl(data.url, true));
       }
     } catch (err) {
       Alert.alert('Upload failed', getApiMessage(err, 'Could not upload photo.'));
@@ -183,6 +224,13 @@ export default function SettingsScreen({ navigation, route }) {
             <View style={s.navRowLeft}>
               <Ionicons name="person-outline" size={20} color="#1e40af" />
               <Text style={s.navRowText}>Personal Information</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.navRow} onPress={openPasswordModal}>
+            <View style={s.navRowLeft}>
+              <Ionicons name="lock-closed-outline" size={20} color="#1e40af" />
+              <Text style={s.navRowText}>Change Password</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
           </TouchableOpacity>
@@ -270,6 +318,51 @@ export default function SettingsScreen({ navigation, route }) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Change Password modal */}
+      <Modal visible={pwModal} transparent animationType="fade" onRequestClose={() => setPwModal(false)}>
+        <KeyboardAvoidingView style={s.dialogBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, width: '100%' }} onPress={() => setPwModal(false)}>
+            <Pressable style={s.dialog} onPress={() => {}}>
+              <View style={[s.dialogIconWrap, { backgroundColor: '#eff6ff' }]}>
+                <Ionicons name="lock-closed-outline" size={28} color="#1e40af" />
+              </View>
+              <Text style={s.dialogTitle}>Change Password</Text>
+
+              {['current', 'next', 'confirm'].map((field) => {
+                const labels = { current: 'Current Password', next: 'New Password', confirm: 'Confirm New Password' };
+                return (
+                  <View key={field} style={s.pwInputWrap}>
+                    <TextInput
+                      style={s.pwInput}
+                      placeholder={labels[field]}
+                      placeholderTextColor="#94a3b8"
+                      secureTextEntry={!pwShow[field]}
+                      value={pwForm[field]}
+                      onChangeText={(v) => setPwForm((f) => ({ ...f, [field]: v }))}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity onPress={() => setPwShow((p) => ({ ...p, [field]: !p[field] }))}>
+                      <Ionicons name={pwShow[field] ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+
+              {pwError ? <Text style={s.pwError}>{pwError}</Text> : null}
+
+              <View style={s.dialogActions}>
+                <TouchableOpacity style={s.dialogCancel} onPress={() => setPwModal(false)}>
+                  <Text style={s.dialogCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.dialogConfirm, { backgroundColor: '#1e40af' }]} onPress={savePassword} disabled={pwSaving}>
+                  {pwSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.dialogConfirmText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -352,6 +445,15 @@ const s = StyleSheet.create({
     backgroundColor: '#b91c1c', alignItems: 'center',
   },
   dialogConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // Password modal
+  pwInputWrap: {
+    flexDirection: 'row', alignItems: 'center', width: '100%',
+    borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12,
+    paddingHorizontal: 12, marginBottom: 10, backgroundColor: '#f8fafc',
+  },
+  pwInput: { flex: 1, fontSize: 14, color: '#0f172a', paddingVertical: 12, fontWeight: '500' },
+  pwError: { color: '#b91c1c', fontSize: 12, textAlign: 'center', marginBottom: 8, width: '100%' },
 
   // Bottom sheet
   sheetBackdrop: {

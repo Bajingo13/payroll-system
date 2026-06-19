@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 
+const DEPARTMENTS = [
+  { icon: '💼', title: 'Payroll Concerns', team: 'HR / Payroll Team', desc: 'Payslip disputes, salary adjustments, loan deductions, and government contribution queries.' },
+  { icon: '📅', title: 'Leave & Attendance', team: 'HR Department', desc: 'Leave balance inquiries, attendance corrections, schedule adjustments, and overtime concerns.' },
+  { icon: '🔧', title: 'System Support', team: 'System Administrator', desc: 'Login issues, access requests, system errors, account management, and configuration concerns.' },
+];
+
 export default function ContactsPage() {
   const [company, setCompany] = useState(null);
 
@@ -11,81 +17,77 @@ export default function ContactsPage() {
   }, []);
 
   const name    = company?.company_name || 'Astreablue Intelligence Inc.';
-  const address = company?.address      || 'Batangas City, Batangas, Philippines';
+  const address = company?.address      || '20th Floor, Unit 2004, Philippine AXA Life Centre, 1286 Sen. Gil Puyat Ave., Makati City';
   const email   = company?.email        || 'astreablueintelligenceinc@gmail.com';
   const phone   = company?.phone        || '';
   const website = company?.website      || '';
 
   return (
-    <>
-      <header className="header">
-        <h2>Contacts</h2>
-        <p>Reach out to {name} for support, inquiries, and service requests.</p>
-      </header>
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 0 48px' }}>
 
-      <section className="table-section">
-        <h3>Get in Touch</h3>
-        <div className="card-grid">
-          {email && (
-            <article className="card">
-              <span>Email</span>
-              <strong>
-                <a href={`mailto:${email}`} style={{ color: 'inherit', textDecoration: 'none' }}>{email}</a>
-              </strong>
-              <p className="muted">For payroll inquiries, HR concerns, system support, and account issues.</p>
-            </article>
-          )}
-          {phone && (
-            <article className="card">
-              <span>Phone</span>
-              <strong>{phone}</strong>
-              <p className="muted">Weekdays 8:00 AM – 5:00 PM (Asia/Manila).</p>
-            </article>
-          )}
-          {address && (
-            <article className="card">
-              <span>Address</span>
-              <strong>{address}</strong>
-              <p className="muted">Business hours by appointment only.</p>
-            </article>
-          )}
-          {website && (
-            <article className="card">
-              <span>Website</span>
-              <strong>
-                <a href={website} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>{website}</a>
-              </strong>
-              <p className="muted">Visit our website for more information and resources.</p>
-            </article>
-          )}
-        </div>
-      </section>
-
-      <section className="table-section">
-        <h3>HR Department</h3>
-        <div className="card-grid">
-          <article className="card">
-            <span>Payroll Concerns</span>
-            <strong>HR / Payroll Team</strong>
-            <p className="muted">For payslip disputes, salary adjustments, loan deductions, and government contribution queries.</p>
-          </article>
-          <article className="card">
-            <span>Leave & Attendance</span>
-            <strong>HR Department</strong>
-            <p className="muted">For leave balance inquiries, attendance corrections, and overtime approval concerns.</p>
-          </article>
-          <article className="card">
-            <span>System Support</span>
-            <strong>System Administrator</strong>
-            <p className="muted">For login issues, access requests, system errors, and configuration concerns.</p>
-          </article>
-        </div>
-
-        <p className="muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
-          Office hours: Monday to Friday, 8:00 AM – 5:00 PM (Philippine Standard Time).
-          All concerns submitted outside business hours will be addressed on the next working day.
+      {/* ── Hero ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0f2044 0%, #1e40af 60%, #3b82f6 100%)',
+        borderRadius: 20, padding: '48px 40px', marginBottom: 28,
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', width: 250, height: 250, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', right: -50, bottom: -60 }} />
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Contact Us</div>
+        <h1 style={{ margin: 0, fontSize: 32, fontWeight: 900, color: '#fff' }}>Get in Touch</h1>
+        <p style={{ margin: '10px 0 24px', color: '#bfdbfe', fontSize: 15, maxWidth: 500, lineHeight: 1.6 }}>
+          Reach out to our team for support, payroll inquiries, HR concerns, or system assistance.
         </p>
-      </section>
-    </>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {email && (
+            <a href={`mailto:${email}`} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: '#fff', color: '#1e40af', borderRadius: 12,
+              padding: '10px 20px', fontWeight: 700, fontSize: 14, textDecoration: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              📧 Send Email
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* ── Contact Cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, marginBottom: 28 }}>
+        {[
+          { icon: '📧', label: 'Email', value: email, href: `mailto:${email}`, desc: 'For all system-related inquiries and support requests.' },
+          { icon: '📍', label: 'Office Address', value: address, desc: 'Visit us during business hours by appointment.' },
+          phone && { icon: '📞', label: 'Phone', value: phone, desc: 'Weekdays 8:00 AM – 5:00 PM (PST).' },
+          website && { icon: '🌐', label: 'Website', value: website, href: website, ext: true, desc: 'Visit our website for resources and updates.' },
+        ].filter(Boolean).filter(c => c.value).map(c => (
+          <div key={c.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '22px 22px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>{c.icon}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>{c.label}</div>
+            {c.href
+              ? <a href={c.href} target={c.ext ? '_blank' : undefined} rel="noopener noreferrer" style={{ fontSize: 14, fontWeight: 700, color: '#1e40af', textDecoration: 'none', display: 'block', marginBottom: 6, wordBreak: 'break-all' }}>{c.value}</a>
+              : <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 6, lineHeight: 1.5 }}>{c.value}</div>}
+            <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>{c.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Department contacts ── */}
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Who to Contact</h2>
+        <p style={{ color: '#64748b', fontSize: 14, marginBottom: 18 }}>Route your concern to the right team.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {DEPARTMENTS.map(d => (
+            <div key={d.title} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 22px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+              <div style={{ fontSize: 28, marginBottom: 10 }}>{d.icon}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#1e40af', background: '#eff6ff', borderRadius: 20, padding: '3px 10px', letterSpacing: 0.8, display: 'inline-block', marginBottom: 8, textTransform: 'uppercase' }}>{d.title}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>{d.team}</div>
+              <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>{d.desc}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 20, padding: '14px 18px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 12, fontSize: 13, color: '#0369a1' }}>
+          🕐 <strong>Office hours:</strong> Monday to Friday, 8:00 AM – 5:00 PM (Philippine Standard Time). Concerns submitted outside business hours will be addressed the next working day.
+        </div>
+      </div>
+    </div>
   );
 }

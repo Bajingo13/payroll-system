@@ -1,3 +1,5 @@
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Configure your office GPS coordinates here
@@ -33,36 +35,43 @@ function fmtTime(value) {
   return Number.isNaN(d.getTime()) ? '--:--' : d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-function MapPlaceholder() {
-  return (
-    <svg className="mat-map-svg" viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
-      <rect width="320" height="200" fill="#e8eef5" />
-      <line x1="0" y1="100" x2="320" y2="100" stroke="#fff" strokeWidth="10" />
-      <line x1="160" y1="0" x2="160" y2="200" stroke="#fff" strokeWidth="10" />
-      <line x1="0" y1="56" x2="320" y2="56" stroke="#fff" strokeWidth="5" />
-      <line x1="0" y1="155" x2="320" y2="155" stroke="#fff" strokeWidth="5" />
-      <line x1="80" y1="0" x2="80" y2="200" stroke="#fff" strokeWidth="5" />
-      <line x1="240" y1="0" x2="240" y2="200" stroke="#fff" strokeWidth="5" />
-      <rect x="8"   y="8"   width="64" height="40" fill="#d4dfe8" rx="4" />
-      <rect x="92"  y="8"   width="60" height="40" fill="#d4dfe8" rx="4" />
-      <rect x="168" y="8"   width="64" height="40" fill="#d4dfe8" rx="4" />
-      <rect x="248" y="8"   width="64" height="40" fill="#d4dfe8" rx="4" />
-      <rect x="8"   y="64"  width="64" height="28" fill="#d4dfe8" rx="4" />
-      <rect x="92"  y="64"  width="60" height="28" fill="#cce3cc" rx="4" />
-      <rect x="168" y="64"  width="64" height="28" fill="#d4dfe8" rx="4" />
-      <rect x="248" y="64"  width="64" height="28" fill="#d4dfe8" rx="4" />
-      <rect x="8"   y="108" width="64" height="38" fill="#d4dfe8" rx="4" />
-      <rect x="92"  y="108" width="60" height="38" fill="#d4dfe8" rx="4" />
-      <rect x="168" y="108" width="64" height="38" fill="#d4dfe8" rx="4" />
-      <rect x="248" y="108" width="64" height="38" fill="#d4dfe8" rx="4" />
-      <rect x="8"   y="162" width="64" height="30" fill="#d4dfe8" rx="4" />
-      <rect x="92"  y="162" width="60" height="30" fill="#d4dfe8" rx="4" />
-      <rect x="168" y="162" width="64" height="30" fill="#d4dfe8" rx="4" />
-      <rect x="248" y="162" width="64" height="30" fill="#d4dfe8" rx="4" />
-      <ellipse cx="160" cy="100" rx="36" ry="36" fill="rgba(10,102,217,0.12)" />
-      <ellipse cx="160" cy="100" rx="18" ry="18" fill="rgba(10,102,217,0.20)" />
-    </svg>
-  );
+const officeIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#0a66d9;border:3px solid #fff;box-shadow:0 0 0 2px #0a66d9;"></div>',
+  iconAnchor: [7, 7],
+});
+
+const userIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 0 2px #22c55e;"></div>',
+  iconAnchor: [7, 7],
+});
+
+function LeafletMap({ userLocation, officeLat, officeLng }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+
+    const map = L.map(containerRef.current, { zoomControl: false, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.marker([officeLat, officeLng], { icon: officeIcon }).addTo(map).bindPopup('Office');
+
+    if (userLocation) {
+      L.marker([userLocation.lat, userLocation.lng], { icon: userIcon }).addTo(map).bindPopup('You');
+      map.fitBounds([[officeLat, officeLng], [userLocation.lat, userLocation.lng]], { padding: [30, 30], maxZoom: 17 });
+    } else {
+      map.setView([officeLat, officeLng], 16);
+    }
+
+    mapRef.current = map;
+    setTimeout(() => map.invalidateSize(), 100);
+    return () => { map.remove(); mapRef.current = null; };
+  }, [userLocation, officeLat, officeLng]);
+
+  return <div ref={containerRef} className="mat-map-svg" />;
 }
 
 export default function MobileAttendanceFlow({ open, onClose, employee, todayState, onSubmit, busy }) {
@@ -74,6 +83,7 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [distance, setDistance] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
 
   // Face state
   const videoRef = useRef(null);
@@ -97,6 +107,7 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
       setPendingAction(null);
       setLocationError('');
       setDistance(null);
+      setUserLocation(null);
       setCapturedPhoto(null);
       setMatchAccuracy(null);
       setCameraError('');
@@ -138,6 +149,7 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
       (pos) => {
         const dist = haversine(pos.coords.latitude, pos.coords.longitude, OFFICE_LAT, OFFICE_LNG);
         setDistance(dist);
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocating(false);
       },
       (err) => {
@@ -330,13 +342,7 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
         {step === 'location' && (
           <div className="mat-content mat-content--loc">
             <div className="mat-map-wrap">
-              <MapPlaceholder />
-              <div className="mat-map-pin-wrap">
-                <div className="mat-pin-bubble">{OFFICE_NAME}</div>
-                <svg className="mat-pin-icon" viewBox="0 0 24 24" fill="#0a66d9">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                </svg>
-              </div>
+              <LeafletMap userLocation={userLocation} officeLat={OFFICE_LAT} officeLng={OFFICE_LNG} />
             </div>
 
             <div className="mat-loc-card">

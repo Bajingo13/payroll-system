@@ -724,6 +724,53 @@ module.exports = function (app, pool) {
     }
   });
 
+  app.patch('/api/employee/leave-requests/:requestId/cancel', async (req, res) => {
+    const requestId = Number(req.params.requestId);
+    const userId = Number(req.body.user_id);
+
+    if (!requestId || !userId) {
+      return res.status(400).json({ success: false, message: 'Missing required fields.' });
+    }
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await ensureLeaveTables(conn);
+
+      const [rows] = await conn.execute(
+        `SELECT r.request_id, r.status, r.employee_id
+         FROM employee_leave_requests r
+         JOIN employees e ON e.employee_id = r.employee_id
+         JOIN users u ON u.user_id = ?
+         WHERE r.request_id = ? AND e.employee_id = (
+           SELECT employee_id FROM employees WHERE user_id = ? LIMIT 1
+         )
+         LIMIT 1`,
+        [userId, requestId, userId]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ success: false, message: 'Leave request not found.' });
+      }
+
+      if (rows[0].status !== 'Pending') {
+        return res.status(409).json({ success: false, message: `Leave request is already ${rows[0].status} and cannot be cancelled.` });
+      }
+
+      await conn.execute(
+        `UPDATE employee_leave_requests SET status = 'Cancelled', updated_at = NOW() WHERE request_id = ?`,
+        [requestId]
+      );
+
+      return res.json({ success: true, message: 'Leave request cancelled successfully.' });
+    } catch (err) {
+      console.error('Leave cancel error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
   app.get('/api/admin/leave-requests', async (req, res) => {
     const userId = Number(req.query.user_id);
     const status = String(req.query.status || '').trim();
