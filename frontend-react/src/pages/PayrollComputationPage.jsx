@@ -60,6 +60,51 @@ const PREM_ROWS = [
 
 function toNum(v) { const n = Number(v||0); return isFinite(n)?n:0; }
 function fmt(v)   { return toNum(v).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function getCalendarMonthEndDay(monthValue, yearValue) {
+  const month = parseInt(monthValue, 10);
+  const year = parseInt(yearValue, 10);
+
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return 30;
+  }
+
+  return new Date(year, month, 0).getDate();
+}
+
+function getCalendarMonthNumber(monthRow) {
+  const names = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const byName = names.indexOf(String(monthRow?.month_name || '').trim().toLowerCase()) + 1;
+  if (byName) return byName;
+  const byId = parseInt(monthRow?.month_id, 10);
+  if (Number.isInteger(byId) && byId >= 1 && byId <= 12) return byId;
+  return 0;
+}
+
+function getPayrollPeriodBounds(periodRow, monthRow, yearValue) {
+  const month = getCalendarMonthNumber(monthRow);
+  const year = parseInt(yearValue, 10);
+  if (!periodRow || !month || !Number.isInteger(year)) return { start: '', end: '' };
+
+  const mm = String(month).padStart(2, '0');
+  const lastDay = new Date(year, month, 0).getDate();
+  const periodName = String(periodRow.period_name || '').toLowerCase();
+
+  if (periodName.includes('week')) {
+    if (periodName.includes('1st')) return { start: `${year}-${mm}-01`, end: `${year}-${mm}-07` };
+    if (periodName.includes('2nd')) return { start: `${year}-${mm}-08`, end: `${year}-${mm}-14` };
+    if (periodName.includes('3rd')) return { start: `${year}-${mm}-15`, end: `${year}-${mm}-21` };
+    return { start: `${year}-${mm}-22`, end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
+  }
+
+  if (periodName.includes('first') || periodName.includes('1st')) {
+    return { start: `${year}-${mm}-01`, end: `${year}-${mm}-15` };
+  }
+  if (periodName.includes('second') || periodName.includes('2nd')) {
+    return { start: `${year}-${mm}-16`, end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
+  }
+
+  return { start: `${year}-${mm}-01`, end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
+}
 function parseTimeToMinutes(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   const text = String(value ?? '').trim();
@@ -339,10 +384,12 @@ export default function PayrollComputationPage() {
   const selectedMonth  = meta.payrollMonths.find(m => String(m.month_id)   === String(filters.month));
   const selectedYear   = meta.payrollYears.find(y  => String(y.year_id) === String(filters.year) || y.year_value === String(filters.year));
   const yearLabel      = selectedYear?.year_value || (/^\d{4}$/.test(String(filters.year)) ? String(filters.year) : '');
+  const payrollPeriodBounds = getPayrollPeriodBounds(selectedPeriod, selectedMonth, yearLabel);
   const payrollRange   = (() => {
     if (!selectedPeriod || !selectedMonth) return '';
     const periodName = selectedPeriod.period_name?.toLowerCase() || '';
     const monthName = selectedMonth.month_name || '';
+    const lastDay = getCalendarMonthEndDay(selectedMonth.month_id, yearLabel);
     
     // For weekly periods
     if (periodName.includes('week')) {
@@ -354,12 +401,12 @@ export default function PayrollComputationPage() {
       return `${monthName} 1-15, ${yearLabel}`;
     }
     if (periodName.includes('second') || periodName.includes('2nd half')) {
-      return `${monthName} 16-31, ${yearLabel}`;
+      return `${monthName} 16-${lastDay}, ${yearLabel}`;
     }
     
     // For monthly periods
     if (periodName.includes('monthly')) {
-      return `${monthName} 1-30, ${yearLabel}`;
+      return `${monthName} 1-${lastDay}, ${yearLabel}`;
     }
     
     // Default format
@@ -651,37 +698,33 @@ export default function PayrollComputationPage() {
 
   async function openEmpModal() {
     try {
-      const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
-      const [{ data }, { data: runEmpData }] = await Promise.all([
-        api.get('/employees_for_payroll', {
-          params: {
-            option:'active',
-            company:filters.company||'', location:filters.location||'',
-            branch:filters.branch||'', division:filters.division||'',
-            department:filters.department||'', class:filters.class||'',
-            position:filters.position||'', empType:filters.empType||'',
-            salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || ''
-          }
-        }),
-        runId
-          ? api.get(`/payroll_runs/${runId}/employees`)
-          : Promise.resolve({ data: { employees: [] } })
-      ]);
-      const existingRunEmpIds = new Set((runEmpData.employees || []).map(emp => String(emp.employee_id)));
-      setAvailableEmps((data.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id))));
-      setSelectedForModal(new Set());
-      setModalSelectMode('');
-      setModalSearch('');
-      setShowEmpModal(true);
+      const { missing } = await getPayrollRunEmployeeState(runId);
+      if (!missing.length) {
+        flash('There are no employees to be selected for this payroll run.','warning');
+        return;
+      }
+      openEmployeeSelection(runId, missing);
     } catch(err) {
       flash(getApiMessage(err,'Failed to load employees.'),'warning');
     }
   }
 
-  async function getEmployeesMissingFromRun(rid) {
+  function openEmployeeSelection(rid, employeesToAdd) {
+    setAvailableEmps(employeesToAdd);
+    setSelectedForModal(new Set());
+    setModalSelectMode('');
+    setModalSearch('');
+    setPendingAddRunId(rid);
+    setShowIncompleteModal(false);
+    setShowEmpModal(true);
+  }
+
+  async function getPayrollRunEmployeeState(rid) {
     const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
     const [{ data:empCheck }, { data:empData }] = await Promise.all([
-      api.get(`/payroll_runs/${rid}/employees`),
+      rid
+        ? api.get(`/payroll_runs/${rid}/employees`)
+        : Promise.resolve({ data: { employees: [] } }),
       api.get('/employees_for_payroll', {
         params: {
           option:'active',
@@ -689,12 +732,15 @@ export default function PayrollComputationPage() {
           branch:filters.branch||'', division:filters.division||'',
           department:filters.department||'', class:filters.class||'',
           position:filters.position||'', empType:filters.empType||'',
-          salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || ''
+          salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || '',
+          period_start: payrollPeriodBounds.start || '',
+          period_end: payrollPeriodBounds.end || ''
         }
       })
     ]);
     const existingRunEmpIds = new Set((empCheck.employees || []).map(emp => String(emp.employee_id)));
-    return (empData.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id)));
+    const missing = (empData.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id)));
+    return { existing: empCheck.employees || [], missing };
   }
 
   async function proceedToComputation() {
@@ -713,9 +759,20 @@ export default function PayrollComputationPage() {
       if (!runData.success) throw new Error(runData.message||'Failed to create payroll run.');
       const rid = runData.run_id;
       setRunId(rid);
-      const employeesToAdd = await getEmployeesMissingFromRun(rid);
-      if (employeesToAdd.length) {
-        setPendingAddEmps(employeesToAdd);
+      const { existing, missing } = await getPayrollRunEmployeeState(rid);
+      if (!existing.length) {
+        if (missing.length) {
+          setPendingAddEmps([]);
+          setIncompleteAction('proceed');
+          openEmployeeSelection(rid, missing);
+        } else {
+          setPendingAddEmps([]);
+          setPendingAddRunId(null);
+          setIncompleteAction('proceed');
+          flash('There are no employees to be selected for this payroll run.','warning');
+        }
+      } else if (missing.length) {
+        setPendingAddEmps(missing);
         setPendingAddRunId(rid);
         setIncompleteAction('proceed');
         setShowIncompleteModal(true);
@@ -734,12 +791,7 @@ export default function PayrollComputationPage() {
   }
 
   function chooseAddMissingEmployees() {
-    setAvailableEmps(pendingAddEmps);
-    setSelectedForModal(new Set());
-    setModalSelectMode('');
-    setModalSearch('');
-    setShowIncompleteModal(false);
-    setShowEmpModal(true);
+    openEmployeeSelection(pendingAddRunId || runId, pendingAddEmps);
   }
 
   async function continueWithoutAdding() {
@@ -769,9 +821,9 @@ export default function PayrollComputationPage() {
     if (!runId) { flash('No payroll run loaded.','warning'); return; }
     setLoading(true);
     try {
-      const employeesToAdd = await getEmployeesMissingFromRun(runId);
-      if (employeesToAdd.length) {
-        setPendingAddEmps(employeesToAdd);
+      const { missing } = await getPayrollRunEmployeeState(runId);
+      if (missing.length) {
+        setPendingAddEmps(missing);
         setPendingAddRunId(runId);
         setIncompleteAction('save');
         setShowIncompleteModal(true);
@@ -790,14 +842,16 @@ export default function PayrollComputationPage() {
 
   async function confirmAddEmployees() {
     if (selectedForModal.size === 0) { flash('Select at least one employee.','warning'); return; }
+    const targetRunId = pendingAddRunId || runId;
+    if (!targetRunId) { flash('No payroll run loaded.','warning'); return; }
     setLoading(true);
     try {
-      await api.post(`/payroll_runs/${runId}/employees`, { employees:Array.from(selectedForModal) });
+      await api.post(`/payroll_runs/${targetRunId}/employees`, { employees:Array.from(selectedForModal) });
       setShowEmpModal(false);
       setPendingAddEmps([]);
       setPendingAddRunId(null);
       setIncompleteAction('proceed');
-      await loadRunEmployees(runId);
+      await loadRunEmployees(targetRunId);
       setStep('computation');
     } catch(err) {
       flash(getApiMessage(err,'Failed to add employees.'),'warning');

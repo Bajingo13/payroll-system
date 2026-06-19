@@ -759,6 +759,17 @@ module.exports = function (app, pool) {
                 // absenceDeduction computed after attendance block once totalAbsentDays is known
             }
 
+            // Fetch employee hire date so absent counting starts no earlier than date_hired
+            const [[empHireRow]] = await conn.query(
+                `SELECT date_hired FROM employee_employment WHERE employee_id = ? LIMIT 1`,
+                [employeeId]
+            );
+            const hireDateStr = empHireRow?.date_hired
+                ? String(empHireRow.date_hired).slice(0, 10)
+                : null;
+            // Effective start for absent counting: whichever is later — period start or hire date
+            const absentCountStartDate = (hireDateStr && hireDateStr > startDate) ? hireDateStr : startDate;
+
             // totalAbsentDays: start with leave-based count; replaced by attendance-based when user account exists
             let totalAbsentDays = totalLeaveDays;
 
@@ -827,7 +838,7 @@ module.exports = function (app, pool) {
                             const status = String(row.status || '').toLowerCase();
                             if (status.includes('absent') || !row.time_in) {
                                 const rowDate = new Date(dateKey + 'T12:00:00Z');
-                                if (workingDays.has(rowDate.getUTCDay()) && !nonWorkingHolidayDates.has(dateKey)) {
+                                if (dateKey >= absentCountStartDate && workingDays.has(rowDate.getUTCDay()) && !nonWorkingHolidayDates.has(dateKey)) {
                                     explicitAbsentDates.add(dateKey);
                                 }
                                 return;
@@ -836,7 +847,7 @@ module.exports = function (app, pool) {
                         });
                         addHolidayPremiumForPresentDates(presentDates);
                         const hrisAbsentDates = new Set(explicitAbsentDates);
-                        const iterD = new Date(startDate + 'T12:00:00Z');
+                        const iterD = new Date(absentCountStartDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
                         while (iterD <= iterEnd) {
                             const dateKey = iterD.toISOString().slice(0, 10);
@@ -897,9 +908,9 @@ module.exports = function (app, pool) {
                         );
                         addHolidayPremiumForPresentDates(presentDates);
 
-                        // Count scheduled workdays in the period where employee was absent.
+                        // Count scheduled workdays in the period where employee was absent. (starting from hire date)
                         let absentCount = 0;
-                        const iterD = new Date(startDate + 'T12:00:00Z');
+                        const iterD = new Date(absentCountStartDate + 'T12:00:00Z');
                         const iterEnd = new Date(endDate + 'T12:00:00Z');
                         while (iterD <= iterEnd) {
                             const dateStr = iterD.toISOString().slice(0, 10);
@@ -1503,7 +1514,9 @@ module.exports = function (app, pool) {
             option, // all / active / hold
             run_id,
             search,
-            searchBy
+            searchBy,
+            period_start,
+            period_end
         } = req.query;
 
         let orderColumn = "e.emp_code"; // default sorting
@@ -1517,6 +1530,7 @@ module.exports = function (app, pool) {
                 ee.company,
                 ee.department,
                 ee.position,
+                ee.date_hired,
                 e.status,
                 COALESCE(ep.gross_pay, 0) AS gross_pay,
                 COALESCE(ep.net_pay, 0) AS net_pay
@@ -1562,6 +1576,7 @@ module.exports = function (app, pool) {
         if (empType) { query += " AND ee.employee_type = ?"; params.push(empType); }
         if (salaryType) { query += " AND ea.salary_type = ?"; params.push(salaryType); }
         if (employee) { query += " AND e.employee_id = ?"; params.push(employee); }
+        if (period_end) { query += " AND (ee.date_hired IS NULL OR ee.date_hired <= ?)"; params.push(period_end); }
 
         if (option === "active") {
             query += " AND (e.status = 'Active' AND (ep.payroll_status != 'Hold' OR ep.payroll_status IS NULL))";

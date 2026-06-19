@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
@@ -59,6 +61,7 @@ export default function PersonalInfoScreen({ navigation }) {
   const [error, setError] = useState('');
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(null);
+  const [savedModal, setSavedModal] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -107,7 +110,7 @@ export default function PersonalInfoScreen({ navigation }) {
         employment: { ...prev.employment, ...form.employment },
       }));
       setEditing(false);
-      Alert.alert('Saved', 'Your information has been updated.');
+      setSavedModal(true);
     } catch (err) {
       setError(getApiMessage(err, 'Failed to save.'));
     } finally {
@@ -275,6 +278,21 @@ export default function PersonalInfoScreen({ navigation }) {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+      {/* Success Modal */}
+      <Modal visible={savedModal} transparent animationType="fade" onRequestClose={() => setSavedModal(false)}>
+        <Pressable style={s.modalBackdrop} onPress={() => setSavedModal(false)}>
+          <Pressable style={s.modalCard} onPress={() => {}}>
+            <View style={s.modalIconWrap}>
+              <Ionicons name="checkmark-circle" size={36} color="#15803d" />
+            </View>
+            <Text style={s.modalTitle}>Saved!</Text>
+            <Text style={s.modalMsg}>Your information has been updated successfully.</Text>
+            <TouchableOpacity style={s.modalOkBtn} onPress={() => setSavedModal(false)}>
+              <Text style={s.modalOkText}>OK</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -327,4 +345,27 @@ const s = StyleSheet.create({
   retryBtn: { backgroundColor: '#1e40af', borderRadius: 10, paddingHorizontal: 24, paddingVertical: 10 },
   retryText: { color: '#fff', fontWeight: '700' },
   inlineError: { color: '#b91c1c', fontSize: 13, textAlign: 'center', marginBottom: 4 },
+
+  // Success modal
+  modalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center', padding: 32,
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderRadius: 24, padding: 28,
+    width: '100%', alignItems: 'center',
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, elevation: 12,
+  },
+  modalIconWrap: {
+    width: 72, height: 72, borderRadius: 22,
+    backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+  },
+  modalTitle: { fontSize: 22, fontWeight: '900', color: '#0f172a', marginBottom: 8 },
+  modalMsg: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 21, marginBottom: 24 },
+  modalOkBtn: {
+    backgroundColor: '#1e40af', borderRadius: 14,
+    paddingVertical: 13, paddingHorizontal: 48, alignItems: 'center',
+    shadowColor: '#1e40af', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  modalOkText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

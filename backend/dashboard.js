@@ -1425,7 +1425,8 @@ module.exports = function (app, pool) {
               u.full_name,
               COALESCE(e_code.emp_code, e_name.emp_code, 'N/A') AS emp_code,
               COALESCE(CONCAT(e_code.first_name, ' ', e_code.last_name), CONCAT(e_name.first_name, ' ', e_name.last_name), u.full_name) AS employee_name,
-              COALESCE(ee.department, 'N/A') AS department
+              COALESCE(ee.department, 'N/A') AS department,
+              ee.date_hired
            FROM users u
            LEFT JOIN employees e_code
              ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
@@ -1539,6 +1540,7 @@ module.exports = function (app, pool) {
          LEFT JOIN log_summary ls
            ON ls.user_id = eu.user_id
           AND ls.attendance_date = sd.attendance_date
+         WHERE eu.date_hired IS NULL OR sd.attendance_date >= eu.date_hired
          ORDER BY sd.attendance_date DESC, eu.employee_name ASC`,
         [fromDate, toDate, filterUserId, filterUserId, fromDate, toDate]
       );

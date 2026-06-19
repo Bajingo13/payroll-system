@@ -11,7 +11,7 @@ const SOCKET_URL = API_BASE_URL.replace('/api', '');
 export default function HeaderActions({ navigation, photoUrl: photoUrlProp, employee: employeeProp }) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
-  const [resolvedPhotoUrl, setResolvedPhotoUrl] = useState(getAssetUrl(photoUrlProp, true));
+  const [resolvedPhotoUrl, setResolvedPhotoUrl] = useState(getAssetUrl(photoUrlProp));
   const [resolvedEmployee, setResolvedEmployee] = useState(employeeProp || {});
   const socketRef = useRef(null);
 
@@ -19,13 +19,13 @@ export default function HeaderActions({ navigation, photoUrl: photoUrlProp, empl
     if (!user?.user_id) return;
     try {
       const { data } = await api.get('/employee_dashboard', { params: { user_id: user.user_id } });
-      setResolvedPhotoUrl(getAssetUrl(data.profilePhotoUrl, true));
+      setResolvedPhotoUrl(getAssetUrl(data.profilePhotoUrl));
       if (data.employee) setResolvedEmployee(data.employee);
     } catch (_) {}
   }
 
   useEffect(() => {
-    setResolvedPhotoUrl(getAssetUrl(photoUrlProp, true));
+    setResolvedPhotoUrl(getAssetUrl(photoUrlProp));
     if (employeeProp) setResolvedEmployee(employeeProp);
   }, [photoUrlProp, employeeProp]);
 
