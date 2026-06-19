@@ -1335,7 +1335,7 @@ export default function EmployeeManagementPage() {
             <hr className="divider" />
             <h4>Basis of Computation for Absences, Late and Undertime</h4>
             {renderFormRow('Days in a Year:', <input type="number" value={comp.days_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year', event.target.value)} />)}
-            {renderFormRow('Days in a Week:', <input type="number" value={comp.days_in_week || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_week', event.target.value)} />)}
+            {renderFormRow('Days in a Week:', <input type="number" min="1" max="7" value={comp.days_in_week || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_week', event.target.value)} />)}
             {renderFormRow('Hours in a Day:', <input type="number" value={comp.hours_in_day || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'hours_in_day', event.target.value)} />)}
             {renderFormRow('Week in a Year:', <input type="number" value={comp.week_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'week_in_year', event.target.value)} />)}
           </div>

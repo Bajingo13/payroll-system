@@ -10,6 +10,13 @@ module.exports = function (app, pool) {
         return value === 'admin' || value === 'system administrator' || value.includes('admin') || value === 'hr' || value.includes('human resource');
     }
 
+    function normalizeDaysInWeek(value) {
+        if (value === null || value === undefined || value === '') return null;
+        const days = Math.trunc(Number(value));
+        if (!Number.isFinite(days) || days <= 0) return null;
+        return Math.min(days, 7);
+    }
+
     async function ensureUserAccountColumns(conn) {
         const [columns] = await conn.execute(
             `SELECT COLUMN_NAME
@@ -746,12 +753,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
 
                 const ot_rate = comp.ot_rate || null;
 
-                const days_in_week =
-                    payroll_period === "Weekly"
-                    ? comp.days_in_week && Number(comp.days_in_week) > 0
-                        ? comp.days_in_week
-                        : 5
-                    : null;
+                const days_in_week = normalizeDaysInWeek(comp.days_in_week);
 
                 await conn.query(
                 `INSERT INTO employee_payroll_settings 
@@ -1866,7 +1868,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
                             payrollRates.includes(comp.payroll_rate) ? comp.payroll_rate : "Daily Rate",
                         comp.main_computation || null,
                         comp.days_in_year || null,
-                        comp.days_in_week || null,
+                        normalizeDaysInWeek(comp.days_in_week),
                         comp.hours_in_day || null,
                         comp.week_in_year || null,
                         comp.strict_no_overtime ? 1 : 0,
@@ -1891,7 +1893,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
                             payrollRates.includes(comp.payroll_rate) ? comp.payroll_rate : "Daily Rate",
                         comp.main_computation || null,
                         comp.days_in_year || null,
-                        comp.days_in_week || null,
+                        normalizeDaysInWeek(comp.days_in_week),
                         comp.hours_in_day || null,
                         comp.week_in_year || null,
                         comp.strict_no_overtime ? 1 : 0,

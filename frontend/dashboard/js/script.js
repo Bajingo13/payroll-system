@@ -3894,6 +3894,34 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
   const payrollRange = document.getElementById("payrollRange");
   const payrollRangeHeader = document.getElementById("payrollRangeHeader");
 
+  function getCalendarMonthEndDay(monthValue, yearValue, monthName = "") {
+    const calendarMonthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const parsedMonth = parseInt(monthValue, 10);
+    const monthIndex = Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+      ? parsedMonth
+      : calendarMonthNames.findIndex(name => name.toLowerCase() === String(monthName).toLowerCase()) + 1;
+    const parsedYear = parseInt(yearValue, 10);
+
+    if (!monthIndex || !Number.isInteger(parsedYear)) return 30;
+    return new Date(parsedYear, monthIndex, 0).getDate();
+  }
+
+  function formatPayrollRangeByPeriod(monthName, monthValue, yearValue, periodName, groupName) {
+    const lastDay = getCalendarMonthEndDay(monthValue, yearValue, monthName);
+
+    if (groupName.includes("weekly")) return `${monthName} (${periodName}) ${yearValue}`;
+    if (groupName.includes("semi-monthly")) {
+      if (periodName.includes("First")) return `${monthName} 1–15, ${yearValue}`;
+      if (periodName.includes("Second")) return `${monthName} 16–${lastDay}, ${yearValue}`;
+      return "";
+    }
+    if (groupName.includes("monthly")) return `${monthName} 1–${lastDay}, ${yearValue}`;
+    return "";
+  }
+
   // Fetch payroll setup data (groups, months, years, periods)
   async function loadPayrollData() {
     try {
@@ -4007,6 +4035,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
   function generatePayrollRange() {
     const group = payrollGroup.value;
     const period = periodOption.options[periodOption.selectedIndex]?.text || "";
+    const monthValue = monthSelect.value;
     const month = monthSelect.options[monthSelect.selectedIndex]?.text || "";
     const year = yearSelect.value;
     let range = "";
@@ -4016,11 +4045,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
       return;
     }
 
-    if (group === "weekly") range = `${month} (${period}) ${year}`;
-    else if (group === "semi-monthly") {
-      if (period.includes("First")) range = `${month} 1–15, ${year}`;
-      else if (period.includes("Second")) range = `${month} 16–30, ${year}`;
-    } else if (group === "monthly") range = `${month} 1–30, ${year}`;
+    range = formatPayrollRangeByPeriod(month, monthValue, year, period, group);
 
     payrollRange.value = range;
     if (payrollRangeHeader) payrollRangeHeader.textContent = range;
@@ -7114,6 +7139,34 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
 
 // ========== PAYROLL JOURNAL PAGE ==========
 if (window.location.pathname === '/dashboard/payroll_journal.html') {
+  function getCalendarMonthEndDay(monthValue, yearValue, monthName = "") {
+    const calendarMonthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const parsedMonth = parseInt(monthValue, 10);
+    const monthIndex = Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+      ? parsedMonth
+      : calendarMonthNames.findIndex(name => name.toLowerCase() === String(monthName).toLowerCase()) + 1;
+    const parsedYear = parseInt(yearValue, 10);
+
+    if (!monthIndex || !Number.isInteger(parsedYear)) return 30;
+    return new Date(parsedYear, monthIndex, 0).getDate();
+  }
+
+  function formatPayrollRangeByPeriod(monthName, monthValue, yearValue, periodName, groupName) {
+    const lastDay = getCalendarMonthEndDay(monthValue, yearValue, monthName);
+
+    if (groupName.includes("weekly")) return `${monthName} (${periodName}) ${yearValue}`;
+    if (groupName.includes("semi-monthly")) {
+      if (periodName.includes("First")) return `${monthName} 1–15, ${yearValue}`;
+      if (periodName.includes("Second")) return `${monthName} 16–${lastDay}, ${yearValue}`;
+      return "";
+    }
+    if (groupName.includes("monthly")) return `${monthName} 1–${lastDay}, ${yearValue}`;
+    return "";
+  }
+
   // ===============================
   // Section Controller
   // ===============================
@@ -7405,16 +7458,13 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
   function generatePayrollRange(groupEl, periodEl, monthEl, yearEl, rangeEl) {
     const groupName = groupEl.value.toLowerCase();
     const period = periodEl.selectedOptions[0]?.text || "";
+    const monthValue = monthEl.value;
     const month = monthEl.selectedOptions[0]?.text || "";
     const year = yearEl.value;
 
     if (!groupName || !month || !year) { rangeEl.value = ""; return; }
 
-    let range = "";
-    if (groupName.includes("weekly")) range = `${month} (${period}) ${year}`;
-    else if (groupName.includes("semi-monthly")) {
-      range = period.includes("First") ? `${month} 1–15, ${year}` : period.includes("Second") ? `${month} 16–30, ${year}` : "";
-    } else if (groupName.includes("monthly")) range = `${month} 1–30, ${year}`;
+    const range = formatPayrollRangeByPeriod(month, monthValue, year, period, groupName);
 
     rangeEl.value = range;
   }
@@ -7423,9 +7473,11 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
   function generateRangeRange() {
     const groupName = rangeGroup.value.toLowerCase();
     const fromPeriod = rangeFromPeriod.selectedOptions[0]?.text || "";
+    const fromMonthValue = rangeFromMonth.value;
     const fromMonth = rangeFromMonth.selectedOptions[0]?.text || "";
     const fromYear = rangeFromYear.value;
     const toPeriod = rangeToPeriod.selectedOptions[0]?.text || "";
+    const toMonthValue = rangeToMonth.value;
     const toMonth = rangeToMonth.selectedOptions[0]?.text || "";
     const toYear = rangeToYear.value;
 
@@ -7434,20 +7486,13 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
       return;
     }
 
-    let fromRange = "";
-    let toRange = "";
-
     if (groupName.includes("weekly")) {
-      fromRange = `${fromMonth} (${fromPeriod}) ${fromYear}`;
-      toRange   = `${toMonth} (${toPeriod}) ${toYear}`;
-    } else if (groupName.includes("semi-monthly")) {
-      fromRange = fromPeriod.includes("First") ? `${fromMonth} 1–15, ${fromYear}` : fromPeriod.includes("Second") ? `${fromMonth} 16–30, ${fromYear}` : "";
-      toRange   = toPeriod.includes("First") ? `${toMonth} 1–15, ${toYear}` : toPeriod.includes("Second") ? `${toMonth} 16–30, ${toYear}` : "";
-    } else if (groupName.includes("monthly")) {
-      fromRange = `${fromMonth} 1–30, ${fromYear}`;
-      toRange   = `${toMonth} 1–30, ${toYear}`;
+      rangeRange.value = `${fromMonth} (${fromPeriod}) ${fromYear} - ${toMonth} (${toPeriod}) ${toYear}`;
+      return;
     }
 
+    const fromRange = formatPayrollRangeByPeriod(fromMonth, fromMonthValue, fromYear, fromPeriod, groupName);
+    const toRange = formatPayrollRangeByPeriod(toMonth, toMonthValue, toYear, toPeriod, groupName);
     rangeRange.value = `${fromRange} - ${toRange}`;
   }
   
@@ -7723,9 +7768,8 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
   // ===============================
   let payrollJournalData = [];
 
-  function getDayRange(payrollGroup, period) {
-    const daysInMonth = 30; // fixed 30 days for all months
-
+  function getDayRange(payrollGroup, period, month, year) {
+    const daysInMonth = getCalendarMonthEndDay(month, year);
     payrollGroup = payrollGroup.toLowerCase();
     period = period.toLowerCase();
 
@@ -7776,7 +7820,7 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
       const year = document.getElementById("summaryYearPeriod").value;
 
       if (payrollGroup && period && month && year) {
-        const [dayStart, dayEnd] = getDayRange(payrollGroup, period);
+        const [dayStart, dayEnd] = getDayRange(payrollGroup, period, month, year);
         const payrollRange = formatPeriodDate(month, dayStart, dayEnd, year);
         document.getElementById("summaryPayrollRangePeriod").value = payrollRange;
         coveredText = `[ ${payrollRange} ]`;
@@ -7793,8 +7837,8 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
       const toYear = document.getElementById("summaryYearTo").value;
 
       if (payrollGroup && fromPeriod && fromMonth && fromYear && toPeriod && toMonth && toYear) {
-        const [fromDayStart, fromDayEnd] = getDayRange(payrollGroup, fromPeriod);
-        const [toDayStart, toDayEnd] = getDayRange(payrollGroup, toPeriod);
+        const [fromDayStart, fromDayEnd] = getDayRange(payrollGroup, fromPeriod, fromMonth, fromYear);
+        const [toDayStart, toDayEnd] = getDayRange(payrollGroup, toPeriod, toMonth, toYear);
 
         const fromDateStr = formatRangeDate(fromMonth, fromDayStart, fromYear);
         const toDateStr = formatRangeDate(toMonth, toDayEnd, toYear);
