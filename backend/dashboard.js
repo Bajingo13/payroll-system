@@ -846,10 +846,24 @@ module.exports = function (app, pool) {
 
       let payrollSummary = null;
       let payrollHistory = [];
+      let payrollSettings = null;
       let evaluations = [];
       let evaluationSummary = buildEvaluationSummary([]);
 
       if (employee) {
+        const [settingsRows] = await conn.execute(
+          `SELECT
+              setting_id,
+              hours_in_day
+           FROM employee_payroll_settings
+           WHERE employee_id = ?
+           ORDER BY setting_id DESC
+           LIMIT 1`,
+          [employee.employee_id]
+        );
+
+        payrollSettings = settingsRows[0] || null;
+
         const [summaryRows] = await conn.execute(
           `SELECT
               ep.gross_pay,
@@ -938,6 +952,7 @@ module.exports = function (app, pool) {
         success: true,
         user,
         employee,
+        payrollSettings,
         payrollSummary,
         payrollHistory,
         evaluations,
