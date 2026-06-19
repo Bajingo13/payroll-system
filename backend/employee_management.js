@@ -17,6 +17,13 @@ module.exports = function (app, pool) {
         return Math.min(days, 7);
     }
 
+    function normalizeHoursInDay(value) {
+        if (value === null || value === undefined || value === '') return null;
+        const hours = Number(value);
+        if (!Number.isFinite(hours) || hours <= 0) return null;
+        return Math.min(hours, 24);
+    }
+
     async function ensureUserAccountColumns(conn) {
         const [columns] = await conn.execute(
             `SELECT COLUMN_NAME
@@ -769,7 +776,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
                     comp.main_computation || null,
                     comp.basis_absences || null,
                     comp.basis_overtime || null,
-                    comp.hours_in_day || null,
+                    normalizeHoursInDay(comp.hours_in_day),
                     comp.week_in_year || null,
                     comp.days_in_year_ot || null,
                     comp.rate_basis_ot || null,
@@ -1869,7 +1876,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
                         comp.main_computation || null,
                         comp.days_in_year || null,
                         normalizeDaysInWeek(comp.days_in_week),
-                        comp.hours_in_day || null,
+                        normalizeHoursInDay(comp.hours_in_day),
                         comp.week_in_year || null,
                         comp.strict_no_overtime ? 1 : 0,
                             otRates.includes(comp.ot_rate) ? comp.ot_rate : "STANDARD OT RATE",
@@ -1894,7 +1901,7 @@ app.get("/api/employee_details/:id", async (req, res) => {
                         comp.main_computation || null,
                         comp.days_in_year || null,
                         normalizeDaysInWeek(comp.days_in_week),
-                        comp.hours_in_day || null,
+                        normalizeHoursInDay(comp.hours_in_day),
                         comp.week_in_year || null,
                         comp.strict_no_overtime ? 1 : 0,
                             otRates.includes(comp.ot_rate) ? comp.ot_rate : "STANDARD OT RATE",
