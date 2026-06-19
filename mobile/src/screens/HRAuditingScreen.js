@@ -35,7 +35,8 @@ export default function HRAuditingScreen({ navigation }) {
     try {
       const { data } = await api.get('/audit_logs', { params: { page: pg, limit: 30 } });
       if (!data.success) throw new Error(data.message);
-      setLogs(pg === 1 ? (data.logs || []) : (prev) => [...prev, ...(data.logs || [])]);
+      if (pg === 1) { setLogs(data.logs || []); }
+      else { setLogs((prev) => [...prev, ...(data.logs || [])]); }
       setTotalPages(data.totalPages || 1);
       setPage(pg);
       setError('');

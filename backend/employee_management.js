@@ -1716,15 +1716,16 @@ app.get("/api/employee_details/:id", async (req, res) => {
         const empCode = req.params.empCode;
         const body = req.body || {};
         const safe = (v) => (v === undefined || v === "" ? null : typeof v === "string" ? v.trim() : v);
+        let conn;
+        let auditPayload = null;
 
         try {
-            const conn = await pool.getConnection();
+            conn = await pool.getConnection();
 
             // Step 1: Get employee_id of the current record
             const [empRows] = await conn.query(`SELECT employee_id FROM employees WHERE emp_code = ?`, [empCode]);
             if (empRows.length === 0) {
-            conn.release();
-            return res.status(404).json({ success: false, message: "Employee not found" });
+                return res.status(404).json({ success: false, message: "Employee not found" });
             }
             const employeeId = empRows[0].employee_id;
 
@@ -1736,7 +1737,6 @@ app.get("/api/employee_details/:id", async (req, res) => {
             );
 
             if (dupRows.length > 0) {
-                conn.release();
                 return res.status(400).json({ success: false, message: "Employee ID already exists" });
             }
             }
@@ -2086,7 +2086,11 @@ app.get("/api/employee_details/:id", async (req, res) => {
             });
 
             await conn.commit();
-            await logAudit(pool, req.body.user_id, req.body.admin_name, `Updated Employee ${empCode}`, 'Success');
+            auditPayload = {
+                userId: req.body.user_id,
+                adminName: req.body.admin_name,
+                action: `Updated Employee ${empCode}`
+            };
             res.json({
                 success: true,
                 message: "Employee updated successfully",
@@ -2094,13 +2098,18 @@ app.get("/api/employee_details/:id", async (req, res) => {
                 systemAccount: systemAccountResult,
                 systemAccountUserId: systemAccountResult?.user_id || null
             });
-            conn.release();
         } catch (error) {
+            if (conn) await conn.rollback().catch(() => {});
             console.error("❌ Error updating employee:", error);
             if (error.code === "ER_DUP_ENTRY") {
             return res.status(400).json({ success: false, message: "Employee ID already exists" });
             }
             res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : "Server error while updating employee", error: error.message });
+        } finally {
+            if (conn) conn.release();
+            if (auditPayload) {
+                await logAudit(pool, auditPayload.userId, auditPayload.adminName, auditPayload.action, 'Success');
+            }
         }
     });
 

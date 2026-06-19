@@ -195,6 +195,8 @@ export default function HRDashboardScreen({ navigation }) {
       .catch(() => {});
     const socket = io(BASE_URL, { query: { user_id: user.user_id }, transports: ['websocket'], reconnectionAttempts: 5 });
     socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
+    socket.on('connect_error', () => {});
+    socket.on('error', () => {});
     return () => socket.disconnect();
   }, [user?.user_id]);
 
