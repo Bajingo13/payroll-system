@@ -11,7 +11,7 @@ const ENTRY_PERIOD_OPTIONS = ['Weekly', 'Monthly', 'First Half', 'Second Half', 
 const CONTRIBUTION_COLUMNS = [
   { id: 1, label: 'SSS', defaultComputation: 'Gross' },
   { id: 2, label: 'Pag-ibig', defaultComputation: 'Fix' },
-  { id: 3, label: 'Philhealth', defaultComputation: 'Basic - Lost Hours' },
+  { id: 3, label: 'Philhealth', defaultComputation: 'Basic' },
   { id: 4, label: 'WTax', defaultComputation: 'Gross Taxable' }
 ];
 const CONTRIBUTION_PERIOD_OPTIONS = ['Both', 'First', 'Second', 'First Half', 'Second Half', 'Monthly', 'Weekly'];
@@ -29,6 +29,7 @@ function contributionComputationOptionsFor(typeId) {
 
 function contributionPeriodOptionsFor(payrollPeriod) {
   const value = String(payrollPeriod || '').toLowerCase();
+  //if (!value) return "Please select a payroll period first";
   if (value.includes('week')) return ['Weekly'];
   if (value.includes('semi') || value.includes('half')) return ['First Half', 'Second Half', 'Both'];
   if (value.includes('month')) return ['Monthly'];
@@ -124,13 +125,21 @@ function createBlankEvaluationForm() {
   };
 }
 
+function todayDateInputValue() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function createDefaultContributionEntry(typeId) {
   const column = CONTRIBUTION_COLUMNS.find((item) => item.id === typeId);
   return {
     contribution_type_id: typeId,
     enabled: true,
-    start_date: '',
-    period: 'Both',
+    start_date: todayDateInputValue(),
+    period: 'Second Half',
     type_option: 'Computed',
     computation: column?.defaultComputation || '',
     ee_share: '',
@@ -141,6 +150,8 @@ function createDefaultContributionEntry(typeId) {
 }
 
 function createBlankEmployeeForm() {
+  const today = todayDateInputValue();
+
   return {
     emp_code: '',
     first_name: '',
@@ -168,9 +179,9 @@ function createBlankEmployeeForm() {
     class: '',
     position: '',
     employee_type: '',
-    training_date: '',
-    date_hired: '',
-    date_regular: '',
+    training_date: today,
+    date_hired: today,
+    date_regular: today,
     date_resigned: '',
     date_terminated: '',
     end_of_contract: '',
@@ -578,7 +589,25 @@ export default function EmployeeManagementPage() {
   }
 
   function updateAddField(field, value) {
-    setAddForm((current) => ({ ...current, [field]: value }));
+    setAddForm((current) => {
+      if (field !== 'emp_code') {
+        return { ...current, [field]: value };
+      }
+
+      const account = current.systemAccount || {};
+      const currentUsername = String(account.username || '');
+      const previousEmpCode = String(current.emp_code || '');
+      const shouldSyncUsername = !currentUsername || currentUsername === previousEmpCode;
+
+      return {
+        ...current,
+        emp_code: value,
+        systemAccount: {
+          ...account,
+          username: shouldSyncUsername ? value : account.username
+        }
+      };
+    });
   }
 
   function updateNestedAddField(group, field, value) {
@@ -803,10 +832,33 @@ export default function EmployeeManagementPage() {
   function validateAddTab(tabId) {
     if (tabId === 'basic') {
       if (!addForm.emp_code.trim()) return 'Employee ID is required in Basic Information.';
-      if (!addForm.first_name.trim()) return 'First Name is required in Basic Information.';
       if (!addForm.last_name.trim()) return 'Last Name is required in Basic Information.';
+      if (!addForm.gender) return 'Gender is required in Basic Information.';
+      if (!addForm.civil_status) return 'Civil Status is required in Basic Information.';
+      if (!addForm.birth_date) return 'Birth Date is required in Basic Information.';
       if (!addForm.email.trim()) return 'Email is required in Basic Information.';
-      if (!addForm.date_hired) return 'Date Hired is required in Basic Information.';
+    }
+
+    if (tabId === 'payrollInfo') {
+      if (!addForm.training_date) return 'Training Date is required in Payroll Information.';
+      if (!addForm.date_hired) return 'Date Hired is required in Payroll Information.';
+      if (!addForm.company.trim()) return 'Company is required in Payroll Information.';
+      if (!addForm.department.trim()) return 'Department is required in Payroll Information.';
+    }
+
+    if (tabId === 'payrollComputation') {
+      const comp = addForm.payrollComputation || {};
+      const taxInsurance = addForm.taxInsurance || {};
+      if (!comp.payroll_period) return 'Payroll Period is required in Payroll Computation.';
+      if (!comp.payroll_rate) return 'Payroll Rate is required in Payroll Computation.';
+      if (comp.main_computation === '' || comp.main_computation === null || comp.main_computation === undefined) return 'Amount Rate is required in Payroll Computation.';
+      if (comp.days_in_year === '' || comp.days_in_year === null || comp.days_in_year === undefined) return 'Days in a Year is required in Payroll Computation.';
+      if (comp.days_in_week === '' || comp.days_in_week === null || comp.days_in_week === undefined) return 'Days in a Week is required in Payroll Computation.';
+      if (comp.hours_in_day === '' || comp.hours_in_day === null || comp.hours_in_day === undefined) return 'Hours in a Day is required in Payroll Computation.';
+      if (comp.week_in_year === '' || comp.week_in_year === null || comp.week_in_year === undefined) return 'Week in a Year is required in Payroll Computation.';
+      if (!comp.ot_rate) return 'OT Rate is required in Payroll Computation.';
+      if (!taxInsurance.tax_status) return 'Tax Status is required in Payroll Computation.';
+      if (taxInsurance.tax_exemption === '' || taxInsurance.tax_exemption === null || taxInsurance.tax_exemption === undefined) return 'Tax Exemption is required in Payroll Computation.';
     }
 
     if (tabId === 'systemAccount') {
@@ -1043,29 +1095,29 @@ export default function EmployeeManagementPage() {
     return (
       <div className="legacy-info-grid">
         <div className="legacy-form-box">
-          <p className="required-fields-note">Required: Employee ID, Last Name, First Name, Email, Date Hired.</p>
+          <p className="required-fields-note">Required: Employee ID, Last Name, Gender, Civil Status, Birth Date, Email, Training Date, Date Hired, Company, Department.</p>
           {renderFormRow('Employee ID:', <input required aria-required="true" value={addForm.emp_code} onChange={(event) => updateAddField('emp_code', event.target.value)} />, { required: true })}
           {renderFormRow('Last Name:', <input required aria-required="true" value={addForm.last_name} onChange={(event) => updateAddField('last_name', event.target.value)} />, { required: true })}
-          {renderFormRow('First Name:', <input required aria-required="true" value={addForm.first_name} onChange={(event) => updateAddField('first_name', event.target.value)} />, { required: true })}
+          {renderFormRow('First Name:', <input value={addForm.first_name} onChange={(event) => updateAddField('first_name', event.target.value)} />)}
           {renderFormRow('Middle Name:', <input value={addForm.middle_name} onChange={(event) => updateAddField('middle_name', event.target.value)} />)}
           {renderFormRow('Nickname:', <input value={addForm.nickname} onChange={(event) => updateAddField('nickname', event.target.value)} />)}
           {renderFormRow('Gender:', (
-            <select value={addForm.gender} onChange={(event) => updateAddField('gender', event.target.value)}>
-              <option value="">-- Select --</option>
+            <select required aria-required="true" value={addForm.gender} onChange={(event) => updateAddField('gender', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
-          ))}
+          ), { required: true })}
           {renderFormRow('Civil Status:', (
-            <select value={addForm.civil_status} onChange={(event) => updateAddField('civil_status', event.target.value)}>
-              <option value="">-- Select --</option>
+            <select required aria-required="true" value={addForm.civil_status} onChange={(event) => updateAddField('civil_status', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
               <option value="Single">Single</option>
               <option value="Married">Married</option>
               <option value="Widowed">Widowed</option>
               <option value="Separated">Separated</option>
             </select>
-          ))}
-          {renderFormRow('Birth Date:', <input type="date" value={addForm.birth_date} onChange={(event) => updateAddField('birth_date', event.target.value)} />)}
+          ), { required: true })}
+          {renderFormRow('Birth Date:', <input type="date" required aria-required="true" value={addForm.birth_date} onChange={(event) => updateAddField('birth_date', event.target.value)} />, { required: true })}
           {renderFormRow('Street:', <input value={addForm.street} onChange={(event) => updateAddField('street', event.target.value)} />)}
           {renderFormRow('City:', <input value={addForm.city} onChange={(event) => updateAddField('city', event.target.value)} />)}
           {renderFormRow('Country:', <input value={addForm.country} onChange={(event) => updateAddField('country', event.target.value)} />)}
@@ -1109,7 +1161,7 @@ export default function EmployeeManagementPage() {
         <h4>Payroll Information</h4>
         <div className="legacy-payroll-grid">
           <div>
-            {renderFormRow('Training Date:', <input type="date" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />)}
+            {renderFormRow('Training Date:', <input type="date" required aria-required="true" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />, { required: true })}
           {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
             {renderFormRow('Date Regular:', <input type="date" value={addForm.date_regular} onChange={(event) => updateAddField('date_regular', event.target.value)} />)}
             {renderFormRow('Date Resigned:', <input type="date" value={addForm.date_resigned} onChange={(event) => updateAddField('date_resigned', event.target.value)} />)}
@@ -1120,6 +1172,11 @@ export default function EmployeeManagementPage() {
               <label>Rehired</label>
             </div>
             {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
+            useEffect(() => {
+              if (!addForm.rehired && addForm.rehired_date) {
+                updateAddField('rehired_date', '');
+              }
+            }, [addForm.rehired]);
             <hr className="divider" />
             {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
             {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
@@ -1130,11 +1187,11 @@ export default function EmployeeManagementPage() {
             {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}
           </div>
           <div>
-            {renderFormRow('Company:', <input value={addForm.company} onChange={(event) => updateAddField('company', event.target.value)} />)}
+            {renderFormRow('Company:', <input required aria-required="true" value={addForm.company} onChange={(event) => updateAddField('company', event.target.value)} />, { required: true })}
             {renderFormRow('Location:', <input value={addForm.location} onChange={(event) => updateAddField('location', event.target.value)} />)}
             {renderFormRow('Branch:', <input value={addForm.branch} onChange={(event) => updateAddField('branch', event.target.value)} />)}
             {renderFormRow('Division:', <input value={addForm.division} onChange={(event) => updateAddField('division', event.target.value)} />)}
-            {renderFormRow('Department:', <input value={addForm.department} onChange={(event) => updateAddField('department', event.target.value)} />)}
+            {renderFormRow('Department:', <input required aria-required="true" value={addForm.department} onChange={(event) => updateAddField('department', event.target.value)} />, { required: true })}
             {renderFormRow('Class:', <input value={addForm.class} onChange={(event) => updateAddField('class', event.target.value)} />)}
             {renderFormRow('Position:', <input value={addForm.position} onChange={(event) => updateAddField('position', event.target.value)} />)}
             {renderFormRow('Employee Type:', <input value={addForm.employee_type} onChange={(event) => updateAddField('employee_type', event.target.value)} />)}
@@ -1298,6 +1355,8 @@ export default function EmployeeManagementPage() {
             {renderFormRow(
               'Payroll Period:',
               <select
+                required
+                aria-required="true"
                 value={comp.payroll_period || ''}
                 onChange={(event) =>
                   updateNestedAddField('payrollComputation', 'payroll_period', event.target.value)
@@ -1312,10 +1371,12 @@ export default function EmployeeManagementPage() {
                   </option>
                 ))}
               </select>
-            )}
+            , { required: true })}
             {renderFormRow(
               'Payroll Rate:',
               <select
+                required
+                aria-required="true"
                 value={comp.payroll_rate || ''}
                 onChange={(event) =>
                   updateNestedAddField('payrollComputation', 'payroll_rate', event.target.value)
@@ -1330,14 +1391,14 @@ export default function EmployeeManagementPage() {
                   </option>
                 ))}
               </select>
-            )}
-            {renderFormRow('Amount Rate:', <input type="number" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />)}
+            , { required: true })}
+            {renderFormRow('Amount Rate:', <input type="number" required aria-required="true" value={comp.main_computation || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'main_computation', event.target.value)} />, { required: true })}
             <hr className="divider" />
             <h4>Basis of Computation for Absences, Late and Undertime</h4>
-            {renderFormRow('Days in a Year:', <input type="number" value={comp.days_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year', event.target.value)} />)}
-            {renderFormRow('Days in a Week:', <input type="number" min="1" max="7" value={comp.days_in_week || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_week', event.target.value)} />)}
-            {renderFormRow('Hours in a Day:', <input type="number" min="1" max="24" value={comp.hours_in_day || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'hours_in_day', event.target.value)} />)}
-            {renderFormRow('Week in a Year:', <input type="number" value={comp.week_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'week_in_year', event.target.value)} />)}
+            {renderFormRow('Days in a Year:', <input type="number" required aria-required="true" value={comp.days_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year', event.target.value)} />, { required: true })}
+            {renderFormRow('Days in a Week:', <input type="number" required aria-required="true" min="1" max="7" value={comp.days_in_week || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_week', event.target.value)} />, { required: true })}
+            {renderFormRow('Hours in a Day:', <input type="number" required aria-required="true" min="1" max="24" value={comp.hours_in_day || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'hours_in_day', event.target.value)} />, { required: true })}
+            {renderFormRow('Week in a Year:', <input type="number" required aria-required="true" value={comp.week_in_year || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'week_in_year', event.target.value)} />, { required: true })}
           </div>
           <div>
             <h4>Basis of Computation for Overtime</h4>
@@ -1346,36 +1407,29 @@ export default function EmployeeManagementPage() {
               <label>STRICTLY NO OVERTIME</label>
             </div>
             {renderFormRow('OT Rate:', (
-              <select value={comp.ot_rate || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'ot_rate', event.target.value)}>
-                <option value="">-- Select --</option>
+              <select required aria-required="true" value={comp.ot_rate || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'ot_rate', event.target.value)}>
+                <option value="" disabled>-- Select --</option>
                 {OT_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
-            ))}
+            ), { required: true })}
             {renderFormRow('Days in a Year (O.T.):', <input type="number" value={comp.days_in_year_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year_ot', event.target.value)} />)}
             {renderFormRow('Rate Basis for OT:', <input type="number" value={comp.rate_basis_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'rate_basis_ot', event.target.value)} />)}
             <hr className="divider" />
-            <div className="em-tax-panel">
-              <label>
-                <span>Tax Status</span>
-                <select value={tax.tax_status || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_status', event.target.value)}>
-                  <option value="">-- Select --</option>
-                  {TAX_STATUS_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
+            <div>
+              {renderFormRow('Tax Status:', (
+                <select required aria-required="true" value={tax.tax_status || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_status', event.target.value)}>
+                  <option value="" disabled>-- Select --</option>
+                  {TAX_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                 </select>
-              </label>
-              <label>
-                <span>Tax Exemption</span>
-                <input type="number" value={tax.tax_exemption || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_exemption', event.target.value)} />
-              </label>
-              <label>
-                <span>Premium paid on Health and/or Hospital Insurance</span>
-                <input type="number" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />
-              </label>
-              <label>
-                <span>Regional Min. Wage Rate</span>
-                <input value={tax.regional_minimum_wage_rate_id || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'regional_minimum_wage_rate_id', event.target.value)} />
-              </label>
+              ), { required: true })}
+              {renderFormRow('Tax Exemption:', <input type="number" required aria-required="true" disabled placeholder="0.00" value={tax.tax_exemption || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_exemption', event.target.value)} />, { required: true })}
+              {renderFormRow('Premium paid on Health and/or Hospital Insurance:', <input type="number" required aria-required="true" placeholder="0.00" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />, { required: true })}
+              {renderFormRow('Regional Min. Wage Rate:', (
+                <select required aria-required="true" value={tax.regional_minimum_wage_rate_id || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'regional_minimum_wage_rate_id', event.target.value)}>
+                  <option value="" disabled>-- Select --</option>
+                  {/*REGIONAL_MIN_WAGE_RATE_OPTIONS*/OT_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              ), { required: true })}
             </div>
           </div>
         </div>
@@ -1429,7 +1483,7 @@ export default function EmployeeManagementPage() {
                             value={row.period || ''}
                             onChange={(event) => updateContributionEntry(column.id, 'period', event.target.value)}
                           >
-                            <option value="">-- Select --</option>
+                            <option value="" disabled>-- Select --</option>
                             {periodOptions.map((option) => (
                               <option key={option} value={option}>{option}</option>
                             ))}
@@ -1448,7 +1502,7 @@ export default function EmployeeManagementPage() {
                             value={row.type_option || ''}
                             onChange={(event) => updateContributionEntry(column.id, 'type_option', event.target.value)}
                           >
-                            <option value="">-- Select --</option>
+                            <option value="" disabled>-- Select --</option>
                             {CONTRIBUTION_TYPE_OPTIONS.map((option) => (
                               <option key={option} value={option}>{option}</option>
                             ))}
@@ -1467,7 +1521,7 @@ export default function EmployeeManagementPage() {
                             value={row.computation || ''}
                             onChange={(event) => updateContributionEntry(column.id, 'computation', event.target.value)}
                           >
-                            <option value="">-- Select --</option>
+                            <option value="" disabled>-- Select --</option>
                             {contributionComputationOptionsFor(column.id).map((option) => (
                               <option key={option} value={option}>{option}</option>
                             ))}
