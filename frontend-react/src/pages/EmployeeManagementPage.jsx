@@ -88,7 +88,6 @@ function getContributionPreview(column, row, mc) {
 
   return { ee: '', er: '', ecc: '', locked: true, auto: true };
 }
-const TAX_STATUS_OPTIONS = ['SINGLE', 'ME', 'MWE', 'Z', 'S', 'ME1', 'ME2', 'ME3', 'ME4'];
 const ADD_EMPLOYEE_TABS = [
   { id: 'basic', label: 'Basic Information' },
   { id: 'systemAccount', label: 'Create Account Setting' },
@@ -1095,7 +1094,7 @@ export default function EmployeeManagementPage() {
     return (
       <div className="legacy-info-grid">
         <div className="legacy-form-box">
-          <p className="required-fields-note">Required: Employee ID, Last Name, Gender, Civil Status, Birth Date, Email, Training Date, Date Hired, Company, Department.</p>
+          <p className="required-fields-note">Required: Employee ID, Last Name, Gender, Civil Status, Birth Date, Email, Training Date, Date Hired, Company, Department, Employee Status.</p>
           {renderFormRow('Employee ID:', <input required aria-required="true" value={addForm.emp_code} onChange={(event) => updateAddField('emp_code', event.target.value)} />, { required: true })}
           {renderFormRow('Last Name:', <input required aria-required="true" value={addForm.last_name} onChange={(event) => updateAddField('last_name', event.target.value)} />, { required: true })}
           {renderFormRow('First Name:', <input value={addForm.first_name} onChange={(event) => updateAddField('first_name', event.target.value)} />)}
@@ -1149,60 +1148,6 @@ export default function EmployeeManagementPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    if (!addForm.rehired && addForm.rehired_date) {
-      updateAddField('rehired_date', '');
-    }
-  }, [addForm.rehired]);
-  
-  function renderPayrollInfoAddTab() {
-    return (
-      <div className="legacy-form-box">
-        <h4>Payroll Information</h4>
-        <div className="legacy-payroll-grid">
-          <div>
-            {renderFormRow('Training Date:', <input type="date" required aria-required="true" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />, { required: true })}
-            {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
-            {renderFormRow('Date Regular:', <input type="date" value={addForm.date_regular} onChange={(event) => updateAddField('date_regular', event.target.value)} />)}
-            {renderFormRow('Date Resigned:', <input type="date" value={addForm.date_resigned} onChange={(event) => updateAddField('date_resigned', event.target.value)} />)}
-            {renderFormRow('Date Terminated:', <input type="date" value={addForm.date_terminated} onChange={(event) => updateAddField('date_terminated', event.target.value)} />)}
-            {renderFormRow('End of Contract:', <input type="date" value={addForm.end_of_contract} onChange={(event) => updateAddField('end_of_contract', event.target.value)} />)}
-            <div className="legacy-checkbox-row">
-              <input type="checkbox" checked={addForm.rehired} onChange={(event) => updateAddField('rehired', event.target.checked)} />
-              <label>Rehired</label>
-            </div>
-            {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
-            <hr className="divider" />
-            {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
-            {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
-            {renderFormRow('GSIS:', <input value={addForm.gsis_no} onChange={(event) => updateAddField('gsis_no', event.target.value)} />)}
-            {renderFormRow('Pag-IBIG:', <input value={addForm.pagibig_no} onChange={(event) => updateAddField('pagibig_no', event.target.value)} />)}
-            {renderFormRow('PhilHealth:', <input value={addForm.philhealth_no} onChange={(event) => updateAddField('philhealth_no', event.target.value)} />)}
-            {renderFormRow('TIN:', <input value={addForm.tin_no} onChange={(event) => updateAddField('tin_no', event.target.value)} />)}
-            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}
-          </div>
-          <div>
-            {renderFormRow('Company:', <input required aria-required="true" value={addForm.company} onChange={(event) => updateAddField('company', event.target.value)} />, { required: true })}
-            {renderFormRow('Location:', <input value={addForm.location} onChange={(event) => updateAddField('location', event.target.value)} />)}
-            {renderFormRow('Branch:', <input value={addForm.branch} onChange={(event) => updateAddField('branch', event.target.value)} />)}
-            {renderFormRow('Division:', <input value={addForm.division} onChange={(event) => updateAddField('division', event.target.value)} />)}
-            {renderFormRow('Department:', <input required aria-required="true" value={addForm.department} onChange={(event) => updateAddField('department', event.target.value)} />, { required: true })}
-            {renderFormRow('Class:', <input value={addForm.class} onChange={(event) => updateAddField('class', event.target.value)} />)}
-            {renderFormRow('Position:', <input value={addForm.position} onChange={(event) => updateAddField('position', event.target.value)} />)}
-            {renderFormRow('Employee Type:', <input value={addForm.employee_type} onChange={(event) => updateAddField('employee_type', event.target.value)} />)}
-            {renderFormRow('Employee Status:', <input value={addForm.status} onChange={(event) => updateAddField('status', event.target.value)} />)}
-            <hr className="divider" />
-            {renderFormRow('ATM:', <input value={addForm.atm_no} onChange={(event) => updateAddField('atm_no', event.target.value)} />)}
-            {renderFormRow('Bank:', <input value={addForm.bank_name} onChange={(event) => updateAddField('bank_name', event.target.value)} />)}
-            {renderFormRow('Bank Branch:', <input value={addForm.bank_branch} onChange={(event) => updateAddField('bank_branch', event.target.value)} />)}
-            {renderFormRow('Projects:', <input value={addForm.projects} onChange={(event) => updateAddField('projects', event.target.value)} />)}
-            {renderFormRow('Salary Type:', <input value={addForm.salary_type} onChange={(event) => updateAddField('salary_type', event.target.value)} />)}
           </div>
         </div>
       </div>
@@ -1305,24 +1250,169 @@ export default function EmployeeManagementPage() {
     );
   }
 
+  function renderPayrollInfoAddTab() {
+    return (
+      <div className="legacy-form-box">
+        <h4>Payroll Information</h4>
+        <div className="legacy-payroll-grid">
+          <div>
+            {renderFormRow('Training Date:', <input type="date" required aria-required="true" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />, { required: true })}
+            {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
+            {renderFormRow('Date Regular:', <input type="date" value={addForm.date_regular} onChange={(event) => updateAddField('date_regular', event.target.value)} />)}
+            {renderFormRow('Date Resigned:', <input type="date" value={addForm.date_resigned} onChange={(event) => updateAddField('date_resigned', event.target.value)} />)}
+            {renderFormRow('Date Terminated:', <input type="date" value={addForm.date_terminated} onChange={(event) => updateAddField('date_terminated', event.target.value)} />)}
+            {renderFormRow('End of Contract:', <input type="date" value={addForm.end_of_contract} onChange={(event) => updateAddField('end_of_contract', event.target.value)} />)}
+            <div className="legacy-checkbox-row">
+              <input type="checkbox" checked={addForm.rehired} onChange={(event) => updateAddField('rehired', event.target.checked)} />
+              <label>Rehired</label>
+            </div>
+            {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
+            <hr className="divider" />
+            {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
+            {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
+            {renderFormRow('GSIS:', <input value={addForm.gsis_no} onChange={(event) => updateAddField('gsis_no', event.target.value)} />)}
+            {renderFormRow('Pag-IBIG:', <input value={addForm.pagibig_no} onChange={(event) => updateAddField('pagibig_no', event.target.value)} />)}
+            {renderFormRow('PhilHealth:', <input value={addForm.philhealth_no} onChange={(event) => updateAddField('philhealth_no', event.target.value)} />)}
+            {renderFormRow('TIN:', <input value={addForm.tin_no} onChange={(event) => updateAddField('tin_no', event.target.value)} />)}
+            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}
+          </div>
+          <div>
+            {renderFormRow('Company:', <select required aria-required="true" value={addForm.company || ''} onChange={(event) => updateAddField('company', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {companies.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            , { required: true })}
+            {renderFormRow('Location:', <select value={addForm.location || ''} onChange={(event) => updateAddField('location', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {locations.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Branch:', <select value={addForm.branch || ''} onChange={(event) => updateAddField('branch', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {branches.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Division:', <select value={addForm.division || ''} onChange={(event) => updateAddField('division', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {divisions.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Department:', <select required aria-required="true" value={addForm.department || ''} onChange={(event) => updateAddField('department', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {departments.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            , { required: true })}
+            {renderFormRow('Class:', <select value={addForm.class || ''} onChange={(event) => updateAddField('class', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {classes.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Position:', <select value={addForm.position || ''} onChange={(event) => updateAddField('position', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {positions.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Employee Type:', <select value={addForm.employee_type || ''} onChange={(event) => updateAddField('employee_type', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {employeeTypes.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Employee Status:', <select required aria-required="true" value={addForm.status || ''} onChange={(event) => updateAddField('status', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {employeeStatuses.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            , { required: true })}
+            <hr className="divider" />
+            {renderFormRow('ATM:', <input value={addForm.atm_no} onChange={(event) => updateAddField('atm_no', event.target.value)} />)}
+            {renderFormRow('Bank:', <select value={addForm.bank || ''} onChange={(event) => updateAddField('bank', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {banks.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Bank Branch:', <select value={addForm.bank_branch || ''} onChange={(event) => updateAddField('bank_branch', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {bankBranches.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Projects:', <select value={addForm.project || ''} onChange={(event) => updateAddField('project', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {projects.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+            {renderFormRow('Salary Type:', <select value={addForm.salary_type || ''} onChange={(event) => updateAddField('salary_type', event.target.value)}>
+              <option value="" disabled>-- Select --</option>
+              {salaryTypes.map((item, index) => (<option key={index} value={item.value}>{item.value}</option>))}
+              </select>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    if (!addForm.rehired && addForm.rehired_date) {
+      updateAddField('rehired_date', '');
+    }
+  }, [addForm.rehired]);
+  
   const fetchDropdownOptions = async (category) => {
     const res = await fetch(`/api/system_lists?category=${category}`);
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   };
 
+  const [companies, setCompanies] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [divisions, setDivisions] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [employeeTypes, setEmployeeTypes] = useState([]);
+  const [employeeStatuses, setEmployeeStatuses] = useState([]);
+  const [banks, setBanks] = useState([]);
+  const [bankBranches, setBankBranches] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [salaryTypes, setSalaryTypes] = useState([]);
   const [payrollPeriods, setPayrollPeriods] = useState([]);
   const [payrollRates, setPayrollRates] = useState([]);
 
   useEffect(() => {
     const load = async () => {
-      const [periods, rates] = await Promise.all([
+      const [companies, locations, branches, divisions, departments, classes, positions, employeeTypes, employeeStatuses, banks, bankBranches, projects, salaryTypes, payrollPeriods, payrollRates] = await Promise.all([
+        fetchDropdownOptions("company"),
+        fetchDropdownOptions("location"),
+        fetchDropdownOptions("branch"),
+        fetchDropdownOptions("division"),
+        fetchDropdownOptions("department"),
+        fetchDropdownOptions("class"),
+        fetchDropdownOptions("position"),
+        fetchDropdownOptions("employee_type"),
+        fetchDropdownOptions("status"),
+        fetchDropdownOptions("bank"),
+        fetchDropdownOptions("bank_branch"),
+        fetchDropdownOptions("projects"),
+        fetchDropdownOptions("salary_type"),
         fetchDropdownOptions("payroll_period"),
         fetchDropdownOptions("payroll_rate"),
       ]);
 
-      setPayrollPeriods(periods);
-      setPayrollRates(rates);
+      setCompanies(companies);
+      setLocations(locations);
+      setBranches(branches);
+      setDivisions(divisions);
+      setDepartments(departments);
+      setClasses(classes);
+      setPositions(positions);
+      setEmployeeTypes(employeeTypes);
+      setEmployeeStatuses(employeeStatuses);
+      setBanks(banks);
+      setBankBranches(bankBranches);
+      setProjects(projects);
+      setSalaryTypes(salaryTypes);
+      setPayrollPeriods(payrollPeriods);
+      setPayrollRates(payrollRates);
     };
 
     load();
@@ -1343,6 +1433,47 @@ export default function EmployeeManagementPage() {
       return changed ? { ...current, contributions: nextRows } : current;
     });
   }, [addForm.payrollComputation?.payroll_period]);
+
+  const fetchTaxOptions = async () => {
+    const res = await fetch('/api/tax_exemptions_lists');
+    const data = await res.json();
+
+    if (!data.success || !Array.isArray(data.tax_exemptions)) {
+      return [];
+    }
+
+    return data.tax_exemptions;
+  };
+
+  const fetchRegionalOptions = async () => {
+    const res = await fetch('/api/regional_minimum_wage_rates');
+    const data = await res.json();
+
+    if (!data.success || !Array.isArray(data.regional_wage_rates)) {
+      return [];
+    }
+
+    return data.regional_wage_rates;
+  };
+
+  const [TAX_STATUS_OPTIONS, setTaxStatusOptions] = useState([]);
+  const [REGIONAL_OPTIONS, setRegionalOptions] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      const [taxStatusOptions] = await Promise.all([
+        fetchTaxOptions(),
+      ]);
+      const [regionalOptions] = await Promise.all([
+        fetchRegionalOptions(),
+      ]);
+
+      setTaxStatusOptions(taxStatusOptions);
+      setRegionalOptions(regionalOptions);
+    };
+
+    load();
+  }, []);
 
   function renderPayrollComputationAddTab() {
     const comp = addForm.payrollComputation || {};
@@ -1456,6 +1587,7 @@ export default function EmployeeManagementPage() {
             />)}
             {renderFormRow('Rate Basis for OT:', <input
               type="number"
+              placeholder="0.00"
               disabled={comp.strict_no_overtime}
               value={comp.rate_basis_ot || ''}
               onChange={(event) =>
@@ -1469,19 +1601,65 @@ export default function EmployeeManagementPage() {
             <hr className="divider" />
             <div>
               {renderFormRow('Tax Status:', (
-                <select required aria-required="true" value={tax.tax_status || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_status', event.target.value)}>
-                  <option value="" disabled>-- Select --</option>
-                  {TAX_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                <select required value={tax.tax_status || ''} onChange={(event) => {
+                  const selected = TAX_STATUS_OPTIONS.find(
+                    item => item.description === event.target.value
+                  );
+
+                  updateNestedAddField(
+                    'taxInsurance',
+                    'tax_status',
+                    event.target.value
+                  );
+
+                  updateNestedAddField(
+                    'taxInsurance',
+                    'tax_exemption',
+                    selected?.amount || ''
+                  );
+                }}>
+                  <option value="" disabled>
+                    -- Select --
+                  </option>
+
+                  {TAX_STATUS_OPTIONS.map((option) => (
+                    <option
+                      key={option.description}
+                      value={option.description}
+                      data-amount={option.amount}
+                    >
+                      {option.description}
+                    </option>
+                  ))}
                 </select>
               ), { required: true })}
               {renderFormRow('Tax Exemption:', <input type="number" required aria-required="true" disabled placeholder="0.00" value={tax.tax_exemption || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'tax_exemption', event.target.value)} />, { required: true })}
-              {renderFormRow('Premium paid on Health and/or Hospital Insurance:', <input type="number" required aria-required="true" placeholder="0.00" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />, { required: true })}
+              {renderFormRow('Premium paid on Health and/or Hospital Insurance:', <input type="number" placeholder="0.00" value={tax.insurance || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'insurance', event.target.value)} />)}
               {renderFormRow('Regional Min. Wage Rate:', (
-                <select required aria-required="true" value={tax.regional_minimum_wage_rate_id || ''} onChange={(event) => updateNestedAddField('taxInsurance', 'regional_minimum_wage_rate_id', event.target.value)}>
-                  <option value="" disabled>-- Select --</option>
-                  {/*REGIONAL_MIN_WAGE_RATE_OPTIONS*/OT_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                <select
+                  value={tax.regional_minimum_wage_rate_id || ''}
+                  onChange={(event) => {
+                    updateNestedAddField(
+                      'taxInsurance',
+                      'regional_minimum_wage_rate_id',
+                      event.target.value
+                    );
+                  }}
+                >
+                  <option value="" disabled>
+                    -- Select --
+                  </option>
+
+                  {REGIONAL_OPTIONS.map((option) => (
+                    <option
+                      key={option.regional_minimum_wage_rate_id}
+                      value={option.regional_minimum_wage_rate_id}
+                    >
+                      {option.region_code}
+                    </option>
+                  ))}
                 </select>
-              ), { required: true })}
+              ))}
             </div>
           </div>
         </div>
