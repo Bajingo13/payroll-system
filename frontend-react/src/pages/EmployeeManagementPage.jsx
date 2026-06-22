@@ -1155,6 +1155,12 @@ export default function EmployeeManagementPage() {
     );
   }
 
+  useEffect(() => {
+    if (!addForm.rehired && addForm.rehired_date) {
+      updateAddField('rehired_date', '');
+    }
+  }, [addForm.rehired]);
+  
   function renderPayrollInfoAddTab() {
     return (
       <div className="legacy-form-box">
@@ -1162,7 +1168,7 @@ export default function EmployeeManagementPage() {
         <div className="legacy-payroll-grid">
           <div>
             {renderFormRow('Training Date:', <input type="date" required aria-required="true" value={addForm.training_date} onChange={(event) => updateAddField('training_date', event.target.value)} />, { required: true })}
-          {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
+            {renderFormRow('Date Hired:', <input type="date" required aria-required="true" value={addForm.date_hired} onChange={(event) => updateAddField('date_hired', event.target.value)} />, { required: true })}
             {renderFormRow('Date Regular:', <input type="date" value={addForm.date_regular} onChange={(event) => updateAddField('date_regular', event.target.value)} />)}
             {renderFormRow('Date Resigned:', <input type="date" value={addForm.date_resigned} onChange={(event) => updateAddField('date_resigned', event.target.value)} />)}
             {renderFormRow('Date Terminated:', <input type="date" value={addForm.date_terminated} onChange={(event) => updateAddField('date_terminated', event.target.value)} />)}
@@ -1172,19 +1178,14 @@ export default function EmployeeManagementPage() {
               <label>Rehired</label>
             </div>
             {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
-            {/* useEffect(() => {
-              if (!addForm.rehired && addForm.rehired_date) {
-                updateAddField('rehired_date', '');
-              }
-            }, [addForm.rehired]); */}
             <hr className="divider" />
-            /*{renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
+            {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
             {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
             {renderFormRow('GSIS:', <input value={addForm.gsis_no} onChange={(event) => updateAddField('gsis_no', event.target.value)} />)}
             {renderFormRow('Pag-IBIG:', <input value={addForm.pagibig_no} onChange={(event) => updateAddField('pagibig_no', event.target.value)} />)}
             {renderFormRow('PhilHealth:', <input value={addForm.philhealth_no} onChange={(event) => updateAddField('philhealth_no', event.target.value)} />)}
             {renderFormRow('TIN:', <input value={addForm.tin_no} onChange={(event) => updateAddField('tin_no', event.target.value)} />)}
-            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}*/
+            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}
           </div>
           <div>
             {renderFormRow('Company:', <input required aria-required="true" value={addForm.company} onChange={(event) => updateAddField('company', event.target.value)} />, { required: true })}
@@ -1403,17 +1404,68 @@ export default function EmployeeManagementPage() {
           <div>
             <h4>Basis of Computation for Overtime</h4>
             <div className="legacy-checkbox-row">
-              <input type="checkbox" checked={!!comp.strict_no_overtime} onChange={(event) => updateNestedAddField('payrollComputation', 'strict_no_overtime', event.target.checked)} />
+              <input type="checkbox" checked={!!comp.strict_no_overtime} onChange={(event) => {
+                const checked = event.target.checked;
+
+                updateNestedAddField(
+                  'payrollComputation',
+                  'strict_no_overtime',
+                  checked
+                );
+
+                if (checked) {
+                  updateNestedAddField('payrollComputation', 'ot_rate', '');
+                  updateNestedAddField('payrollComputation', 'days_in_year_ot', '');
+                  updateNestedAddField('payrollComputation', 'rate_basis_ot', '');
+                }
+              }} />
               <label>STRICTLY NO OVERTIME</label>
             </div>
             {renderFormRow('OT Rate:', (
-              <select required aria-required="true" value={comp.ot_rate || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'ot_rate', event.target.value)}>
-                <option value="" disabled>-- Select --</option>
-                {OT_RATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+              <select
+                required={!comp.strict_no_overtime}
+                disabled={comp.strict_no_overtime}
+                value={comp.ot_rate || ''}
+                onChange={(event) =>
+                  updateNestedAddField(
+                    'payrollComputation',
+                    'ot_rate',
+                    event.target.value
+                  )
+                }
+              >
+              <option value="" disabled>-- Select --</option>
+              {OT_RATE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
               </select>
             ), { required: true })}
-            {renderFormRow('Days in a Year (O.T.):', <input type="number" value={comp.days_in_year_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'days_in_year_ot', event.target.value)} />)}
-            {renderFormRow('Rate Basis for OT:', <input type="number" value={comp.rate_basis_ot || ''} onChange={(event) => updateNestedAddField('payrollComputation', 'rate_basis_ot', event.target.value)} />)}
+            {renderFormRow('Days in a Year (O.T.):', <input
+              type="number"
+              disabled={comp.strict_no_overtime}
+              value={comp.days_in_year_ot || ''}
+              onChange={(event) =>
+                updateNestedAddField(
+                  'payrollComputation',
+                  'days_in_year_ot',
+                  event.target.value
+                )
+              }
+            />)}
+            {renderFormRow('Rate Basis for OT:', <input
+              type="number"
+              disabled={comp.strict_no_overtime}
+              value={comp.rate_basis_ot || ''}
+              onChange={(event) =>
+                updateNestedAddField(
+                  'payrollComputation',
+                  'rate_basis_ot',
+                  event.target.value
+                )
+              }
+            />)}
             <hr className="divider" />
             <div>
               {renderFormRow('Tax Status:', (
