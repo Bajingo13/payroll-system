@@ -24,7 +24,8 @@
         "android.permission.INTERNET",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "ios": {
@@ -36,7 +37,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "f5f51382-f7c7-4473-b621-9e7b77f4df08"
       }
     },
     "plugins": [
@@ -62,6 +63,7 @@
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to verify you are at the office."
         }
       ]
-    ]
+    ],
+    "owner": "astreablue"
   }
 }

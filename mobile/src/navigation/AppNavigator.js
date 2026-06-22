@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,76 +95,24 @@ function EmployeeTabs() {
 
 const HR_TABS = [
   { name: 'HR Dashboard', icon: 'grid',     label: 'Home',    component: HRDashboardScreen },
-  { name: 'Attendance',   icon: 'calendar', label: 'Attend',  component: HRAttendanceScreen },
+  { name: 'Attendance',   icon: 'calendar', label: 'Attendance',  component: HRAttendanceScreen },
   { name: 'Leave',        icon: 'leaf',     label: 'Leave',   component: HRLeaveManagementScreen },
   { name: 'Overtime',     icon: 'time',     label: 'OT',      component: HROvertimeManagementScreen },
   { name: 'Modules',      icon: 'apps',     label: 'More',    component: HRModulesScreen },
 ];
 
-function HRCustomTabBar({ state, navigation }) {
-  const screenW = Dimensions.get('window').width;
-  const pb      = Platform.OS === 'ios' ? 20 : 8;
-
-  return (
-    <View style={{
-      flexDirection: 'row',
-      width: screenW,
-      backgroundColor: '#0f172a',
-      borderTopWidth: 1,
-      borderTopColor: '#1e293b',
-      paddingBottom: pb,
-      paddingTop: 8,
-      elevation: 20,
-      shadowColor: '#000',
-      shadowOpacity: 0.5,
-      shadowRadius: 10,
-    }}>
-      {HR_TABS.map((tab, index) => {
-        const focused = state.index === index;
-        return (
-          <TouchableOpacity
-            key={tab.name}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4 }}
-            onPress={() => navigation.navigate(tab.name)}
-            activeOpacity={0.75}
-          >
-            <View style={{
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingHorizontal: 14,
-              paddingVertical: 5,
-              borderRadius: 12,
-              backgroundColor: focused ? 'rgba(139,92,246,0.15)' : 'transparent',
-            }}>
-              <Ionicons
-                name={focused ? tab.icon : tab.icon + '-outline'}
-                size={21}
-                color={focused ? '#a78bfa' : '#4b5563'}
-              />
-              <Text style={{
-                fontSize: 10,
-                fontWeight: focused ? '700' : '500',
-                color: focused ? '#a78bfa' : '#4b5563',
-                marginTop: 3,
-              }}>
-                {tab.label}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
 function HRTabs() {
   return (
     <Tab.Navigator
-      tabBar={(props) => <HRCustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={({ route }) => tabScreenOptions(route, HR_TAB_ICONS)}
     >
       {HR_TABS.map((tab) => (
-        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
+        <Tab.Screen
+          key={tab.name}
+          name={tab.name}
+          component={tab.component}
+          options={{ tabBarLabel: tab.label }}
+        />
       ))}
     </Tab.Navigator>
   );

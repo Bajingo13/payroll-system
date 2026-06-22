@@ -4,25 +4,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 
 const T = {
-  bg:         '#0f172a',
-  surface:    '#1e293b',
-  border:     '#334155',
-  accent:     '#8b5cf6',
-  accentLight:'#a78bfa',
-  textPrimary:'#f1f5f9',
-  textSub:    '#94a3b8',
-  textMuted:  '#64748b',
-  headerBg:   '#1e1b4b',
+  bg:         '#f8fafc',
+  surface:    '#ffffff',
+  border:     '#e2e8f0',
+  accent:     '#1e40af',
+  accentLight:'#2563eb',
+  textPrimary:'#0f172a',
+  textSub:    '#64748b',
+  textMuted:  '#94a3b8',
+  headerBg:   '#1e3a8a',
 };
 
 const HRIS_MODULES = [
-  { icon: 'people',          label: 'Employee File',       color: '#8b5cf6', screen: 'HREmployeeFile' },
+  { icon: 'people',          label: 'Employee File',       color: '#2563eb', screen: 'HREmployeeFile' },
   { icon: 'folder-open',     label: '201 Files',           color: '#22d3ee', screen: 'HR201Files' },
   { icon: 'git-branch',      label: 'Org Setup',           color: '#34d399', screen: 'HROrgSetup' },
-  { icon: 'calendar',        label: 'Employee Attendance', color: '#60a5fa', screen: 'Attendance' },
-  { icon: 'leaf',            label: 'Leave Management',    color: '#34d399', screen: 'Leave' },
-  { icon: 'time',            label: 'Overtime Mgmt',       color: '#fbbf24', screen: 'Overtime' },
-  { icon: 'calendar-number', label: 'Schedule Mgmt',       color: '#c084fc', screen: 'HRSchedule' },
+  { icon: 'calendar',        label: 'Attendance',          color: '#60a5fa', screen: 'Attendance' },
+  { icon: 'leaf',            label: 'Leave',               color: '#34d399', screen: 'Leave' },
+  { icon: 'time',            label: 'Overtime',            color: '#fbbf24', screen: 'Overtime' },
+  { icon: 'calendar-number', label: 'Schedule',            color: '#c084fc', screen: 'HRSchedule' },
   { icon: 'trending-up',     label: 'Performance',         color: '#f87171', screen: 'HRPerformance' },
 ];
 
@@ -52,7 +52,7 @@ function ModuleCard({ item, onPress }) {
       <View style={[s.cardIcon, { backgroundColor: item.color + '20' }]}>
         <Ionicons name={item.icon} size={26} color={item.color} />
       </View>
-      <Text style={s.cardLabel}>{item.label}</Text>
+      <Text style={s.cardLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{item.label}</Text>
       {isLinked && <View style={[s.linkDot, { backgroundColor: item.color }]} />}
     </TouchableOpacity>
   );
@@ -70,12 +70,24 @@ export default function HRModulesScreen({ navigation }) {
     <View style={s.root}>
       {/* ── Header ── */}
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
-        <View style={s.rolePill}>
-          <Ionicons name="apps" size={11} color={T.accentLight} />
-          <Text style={s.rolePillText}>HR Management</Text>
+        <View style={s.headerRow}>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <View style={s.rolePill}>
+              <Ionicons name="apps" size={11} color={T.accentLight} />
+              <Text style={s.rolePillText}>HR Management</Text>
+            </View>
+            <Text style={s.headerTitle}>Modules</Text>
+            <Text style={s.headerSub}>Quick access to all HR functions</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
+              <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+              <Text style={s.avatarText}>{String((user?.full_name?.split(' ')[0] || 'H')[0]).toUpperCase()}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <Text style={s.headerTitle}>Modules</Text>
-        <Text style={s.headerSub}>Quick access to all HR functions</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.body}>
@@ -103,10 +115,14 @@ const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: T.bg },
 
   header: { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 20 },
-  rolePill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(139,92,246,0.4)' },
-  rolePillText: { fontSize: 10, color: T.accentLight, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  headerTitle: { fontSize: 26, fontWeight: '900', color: T.textPrimary },
-  headerSub:   { fontSize: 12, color: T.textSub, marginTop: 3 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headerIconBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
+  avatarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  avatarText:{ color: '#fff', fontSize: 16, fontWeight: '900' },
+  rolePill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  rolePillText: { fontSize: 10, color: '#bfdbfe', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  headerTitle: { fontSize: 26, fontWeight: '900', color: '#fff' },
+  headerSub:   { fontSize: 12, color: '#93c5fd', marginTop: 3 },
 
   body: { padding: 16, paddingBottom: 48, gap: 12 },
 
@@ -125,6 +141,6 @@ const s = StyleSheet.create({
   },
   cardDimmed: { opacity: 0.5 },
   cardIcon:   { width: 50, height: 50, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  cardLabel:  { fontSize: 11, fontWeight: '700', color: T.textSub, textAlign: 'center', lineHeight: 15 },
+  cardLabel:  { fontSize: 10, fontWeight: '700', color: T.textSub, textAlign: 'center', lineHeight: 14 },
   linkDot:    { width: 6, height: 6, borderRadius: 3 },
 });

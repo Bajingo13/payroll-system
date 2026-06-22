@@ -17,16 +17,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, getApiMessage } from '../api/client';
 
 const T = {
-  bg: '#0f172a', surface: '#1e293b', surfaceAlt: '#273548',
-  border: '#334155', accent: '#8b5cf6', accentLight: '#a78bfa',
-  textPrimary: '#f1f5f9', textSub: '#94a3b8', textMuted: '#64748b',
-  headerBg: '#1e1b4b',
+  bg: '#f8fafc', surface: '#ffffff', surfaceAlt: '#f1f5f9',
+  border: '#e2e8f0', accent: '#1e40af', accentLight: '#2563eb',
+  textPrimary: '#0f172a', textSub: '#64748b', textMuted: '#94a3b8',
+  headerBg: '#1e3a8a',
 };
 
 const EVENT_COLORS = {
   'Regular Holiday': '#f87171',
   'Special Holiday': '#fbbf24',
-  'Company Event':   '#8b5cf6',
+  'Company Event':   '#2563eb',
   'Observance':      '#22d3ee',
 };
 const EVENT_TYPES = ['Regular Holiday', 'Special Holiday', 'Company Event', 'Observance'];
@@ -416,11 +416,11 @@ const s = StyleSheet.create({
   // Header
   header:     { backgroundColor: T.headerBg, paddingHorizontal: 14, paddingBottom: 14 },
   headerRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  backBtn:    { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(139,92,246,0.2)', alignItems: 'center', justifyContent: 'center' },
-  headerTitle:{ flex: 1, fontSize: 20, fontWeight: '900', color: T.textPrimary },
+  backBtn:    { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  headerTitle:{ flex: 1, fontSize: 20, fontWeight: '900', color: '#fff' },
   addBtn:     { width: 36, height: 36, borderRadius: 12, backgroundColor: T.accent, alignItems: 'center', justifyContent: 'center' },
   monthNav:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  monthArrow: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(139,92,246,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)' },
+  monthArrow: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#bfdbfe' },
   monthLabel: { flex: 1, fontSize: 16, fontWeight: '800', color: T.textPrimary, textAlign: 'center' },
 
   body: { paddingBottom: 60 },
@@ -443,7 +443,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
     marginVertical: 2,
   },
-  dayCellToday:    { backgroundColor: T.accentBg || '#2d1f52', borderWidth: 1, borderColor: T.accent },
+  dayCellToday:    { backgroundColor: '#dbeafe', borderWidth: 1, borderColor: T.accent },
   dayCellSelected: { backgroundColor: T.accent },
 
   dayNum:         { fontSize: 13, fontWeight: '600', color: T.textSub },
@@ -475,7 +475,7 @@ const s = StyleSheet.create({
   eventDate:    { fontSize: 11, color: T.textSub, marginTop: 3 },
   eventDesc:    { fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 15 },
   eventRight:   { padding: 10, alignItems: 'flex-end', justifyContent: 'space-between' },
-  paidBadge:    { backgroundColor: '#0d2e1e', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 3 },
+  paidBadge:    { backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 3 },
   paidText:     { fontSize: 9, color: '#34d399', fontWeight: '800' },
   deleteBtn:    { padding: 4 },
 
@@ -487,7 +487,7 @@ const s = StyleSheet.create({
 
   // ── Error / Toast ──
   errorText: { color: '#f87171', fontSize: 12, marginBottom: 8 },
-  toast:     { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#0d2e1e', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#065f46' },
+  toast:     { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0' },
   toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   // ── Add Modal ──
