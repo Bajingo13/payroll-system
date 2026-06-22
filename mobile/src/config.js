@@ -10,10 +10,10 @@
 
 const ENV = {
   local:      'http://192.168.68.128:12687/api',
-  production: 'https://YOUR-APP.up.railway.app/api',  // ← replace with your Railway URL
+  production: 'https://payroll-system-production-6f3a.up.railway.app/api',
 };
 
 // Set to 'production' before building the APK
-const ACTIVE_ENV = 'local';
+const ACTIVE_ENV = 'production';
 
 export const API_BASE_URL = ENV[ACTIVE_ENV];
