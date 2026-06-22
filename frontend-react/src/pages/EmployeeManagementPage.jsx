@@ -1172,19 +1172,19 @@ export default function EmployeeManagementPage() {
               <label>Rehired</label>
             </div>
             {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
-            useEffect(() => {
+            {/* useEffect(() => {
               if (!addForm.rehired && addForm.rehired_date) {
                 updateAddField('rehired_date', '');
               }
-            }, [addForm.rehired]);
+            }, [addForm.rehired]); */}
             <hr className="divider" />
-            {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
+            /*{renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
             {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
             {renderFormRow('GSIS:', <input value={addForm.gsis_no} onChange={(event) => updateAddField('gsis_no', event.target.value)} />)}
             {renderFormRow('Pag-IBIG:', <input value={addForm.pagibig_no} onChange={(event) => updateAddField('pagibig_no', event.target.value)} />)}
             {renderFormRow('PhilHealth:', <input value={addForm.philhealth_no} onChange={(event) => updateAddField('philhealth_no', event.target.value)} />)}
             {renderFormRow('TIN:', <input value={addForm.tin_no} onChange={(event) => updateAddField('tin_no', event.target.value)} />)}
-            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}
+            {renderFormRow('Branch Code:', <input value={addForm.branch_code} onChange={(event) => updateAddField('branch_code', event.target.value)} />)}*/
           </div>
           <div>
             {renderFormRow('Company:', <input required aria-required="true" value={addForm.company} onChange={(event) => updateAddField('company', event.target.value)} />, { required: true })}
