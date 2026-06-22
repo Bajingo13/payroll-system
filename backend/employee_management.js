@@ -289,6 +289,7 @@ module.exports = function (app, pool) {
             account_status: 'Active'
         };
     }
+
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
@@ -403,128 +404,119 @@ module.exports = function (app, pool) {
         }
     });
 
+    // ========== EMPLOYEE AUTOCOMPLETE ==========
+    app.get("/api/employee_autocomplete", async (req, res) => {
+        const { q = "" } = req.query;
 
-    
+        let conn;
+        try {
+            conn = await pool.getConnection();
 
+            const keyword = `%${String(q).trim()}%`;
 
-        // ========== EMPLOYEE AUTOCOMPLETE ==========
-app.get("/api/employee_autocomplete", async (req, res) => {
-    const { q = "" } = req.query;
+            const [rows] = await conn.query(
+                `SELECT 
+                    e.employee_id,
+                    e.emp_code,
+                    e.first_name,
+                    e.last_name,
+                    CONCAT(e.first_name, ' ', e.last_name) AS full_name
+                FROM employees e
+                WHERE
+                    e.emp_code LIKE ?
+                    OR e.first_name LIKE ?
+                    OR e.last_name LIKE ?
+                    OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?
+                ORDER BY e.first_name ASC, e.last_name ASC
+                LIMIT 50`,
+                [keyword, keyword, keyword, keyword]
+            );
 
-    let conn;
-    try {
-        conn = await pool.getConnection();
-
-        const keyword = `%${String(q).trim()}%`;
-
-        const [rows] = await conn.query(
-            `SELECT 
-                e.employee_id,
-                e.emp_code,
-                e.first_name,
-                e.last_name,
-                CONCAT(e.first_name, ' ', e.last_name) AS full_name
-             FROM employees e
-             WHERE
-                e.emp_code LIKE ?
-                OR e.first_name LIKE ?
-                OR e.last_name LIKE ?
-                OR CONCAT(e.first_name, ' ', e.last_name) LIKE ?
-             ORDER BY e.first_name ASC, e.last_name ASC
-             LIMIT 50`,
-            [keyword, keyword, keyword, keyword]
-        );
-
-        res.json({
-            success: true,
-            employees: rows.map(emp => ({
-                employee_id: emp.employee_id,
-                emp_code: emp.emp_code,
-                first_name: emp.first_name,
-                last_name: emp.last_name,
-                full_name: emp.full_name,
-                display: `${emp.emp_code} - ${emp.full_name}`
-            }))
-        });
-    } catch (err) {
-        console.error("Error fetching employee autocomplete:", err);
-        res.status(500).json({
-            success: false,
-            message: "Server error",
-            error: err.message
-        });
-    } finally {
-        if (conn) conn.release();
-    }
-});
-
-
-
-// ===========employee details===========
-app.get("/api/employee_details/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const conn = await pool.getConnection();
-
-    const [rows] = await conn.query(`
-            SELECT 
-                e.employee_id,
-                e.emp_code,
-                e.first_name,
-                e.last_name,
-                e.status,
-                ee.company,
-                ee.department,
-                ee.position,
-                ee.employee_type,
-                ea.salary_type,
-                ec.email,
-                ec.mobile_no
-            FROM employees e
-            LEFT JOIN employee_employment ee ON ee.employment_id = (
-                SELECT em.employment_id
-                FROM employee_employment em
-                WHERE em.employee_id = e.employee_id
-                ORDER BY em.employment_id DESC
-                LIMIT 1
-            )
-            LEFT JOIN employee_accounts ea ON ea.account_id = (
-                SELECT a.account_id
-                FROM employee_accounts a
-                WHERE a.employee_id = e.employee_id
-                ORDER BY a.account_id DESC
-                LIMIT 1
-            )
-            LEFT JOIN employee_contacts ec ON ec.contact_id = (
-                SELECT c.contact_id
-                FROM employee_contacts c
-                WHERE c.employee_id = e.employee_id
-                ORDER BY c.contact_id DESC
-                LIMIT 1
-            )
-            WHERE e.employee_id = ?
-    `, [id]);
-
-    conn.release();
-
-    if (rows.length === 0) {
-      return res.json({ success: false });
-    }
-
-    res.json({
-      success: true,
-      employee: rows[0]
+            res.json({
+                success: true,
+                employees: rows.map(emp => ({
+                    employee_id: emp.employee_id,
+                    emp_code: emp.emp_code,
+                    first_name: emp.first_name,
+                    last_name: emp.last_name,
+                    full_name: emp.full_name,
+                    display: `${emp.emp_code} - ${emp.full_name}`
+                }))
+            });
+        } catch (err) {
+            console.error("Error fetching employee autocomplete:", err);
+            res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: err.message
+            });
+        } finally {
+            if (conn) conn.release();
+        }
     });
 
-  } catch (err) {
-    console.error("Error fetching employee details:", err);
-    res.status(500).json({ success: false });
-  }
-});
+    // ===========employee details===========
+    app.get("/api/employee_details/:id", async (req, res) => {
+        const { id } = req.params;
 
+        try {
+            const conn = await pool.getConnection();
 
+            const [rows] = await conn.query(`
+                    SELECT 
+                        e.employee_id,
+                        e.emp_code,
+                        e.first_name,
+                        e.last_name,
+                        e.status,
+                        ee.company,
+                        ee.department,
+                        ee.position,
+                        ee.employee_type,
+                        ea.salary_type,
+                        ec.email,
+                        ec.mobile_no
+                    FROM employees e
+                    LEFT JOIN employee_employment ee ON ee.employment_id = (
+                        SELECT em.employment_id
+                        FROM employee_employment em
+                        WHERE em.employee_id = e.employee_id
+                        ORDER BY em.employment_id DESC
+                        LIMIT 1
+                    )
+                    LEFT JOIN employee_accounts ea ON ea.account_id = (
+                        SELECT a.account_id
+                        FROM employee_accounts a
+                        WHERE a.employee_id = e.employee_id
+                        ORDER BY a.account_id DESC
+                        LIMIT 1
+                    )
+                    LEFT JOIN employee_contacts ec ON ec.contact_id = (
+                        SELECT c.contact_id
+                        FROM employee_contacts c
+                        WHERE c.employee_id = e.employee_id
+                        ORDER BY c.contact_id DESC
+                        LIMIT 1
+                    )
+                    WHERE e.employee_id = ?
+            `, [id]);
 
+            conn.release();
+
+            if (rows.length === 0) {
+            return res.json({ success: false });
+            }
+
+            res.json({
+            success: true,
+            employee: rows[0]
+            });
+
+        } catch (err) {
+            console.error("Error fetching employee details:", err);
+            res.status(500).json({ success: false });
+        }
+    });
 
     // ========== ADD NEW EMPLOYEE ==========
     app.post("/api/add_employee", async (req, res) => {
@@ -2186,5 +2178,4 @@ app.get("/api/employee_details/:id", async (req, res) => {
         res.status(500).json({ success: false, message: "Failed to load employees." });
       }
     });
-
 };

@@ -1918,13 +1918,15 @@ export default function EmployeeManagementPage() {
                       const preview = getContributionPreview(column, row, comp.main_computation);
                       return (
                         <td key={column.id}>
-                          <input
-                            type="number"
-                            value={preview.er ?? ''}
-                            placeholder={preview.auto ? 'Auto' : undefined}
-                            disabled={!row.enabled || preview.locked}
-                            onChange={(event) => updateContributionEntry(column.id, 'er_share', event.target.value)}
-                          />
+                          {column.id !== 4 && (
+                            <input
+                              type="number"
+                              value={preview.er ?? ''}
+                              placeholder={preview.auto ? 'Auto' : undefined}
+                              disabled={!row.enabled || preview.locked}
+                              onChange={(event) => updateContributionEntry(column.id, 'er_share', event.target.value)}
+                            />
+                          )}
                         </td>
                       );
                     })}
@@ -1934,19 +1936,25 @@ export default function EmployeeManagementPage() {
                     {CONTRIBUTION_COLUMNS.map((column) => {
                       const row = getContributionEntry(column.id);
                       const preview = getContributionPreview(column, row, comp.main_computation);
+
                       return (
                         <td key={column.id}>
-                          <input
-                            type="number"
-                            value={preview.ecc ?? ''}
-                            placeholder={preview.auto ? 'Auto' : undefined}
-                            disabled={!row.enabled || preview.locked}
-                            onChange={(event) => updateContributionEntry(column.id, 'ecc', event.target.value)}
-                          />
+                          {column.id !== 3 && (
+                            <input
+                              type="number"
+                              value={preview.ecc ?? ''}
+                              placeholder={preview.auto ? 'Auto' : undefined}
+                              disabled={!row.enabled || preview.locked}
+                              onChange={(event) =>
+                                updateContributionEntry(column.id, 'ecc', event.target.value)
+                              }
+                            />
+                          )}
                         </td>
                       );
                     })}
                   </tr>
+                  <tr><td></td><td></td><td>HDMF II</td></tr>
                 </tbody>
               </table>
             </div>
