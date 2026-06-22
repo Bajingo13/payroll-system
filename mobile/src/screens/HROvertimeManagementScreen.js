@@ -17,24 +17,24 @@ import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 
 const T = {
-  bg:         '#0f172a',
-  surface:    '#1e293b',
-  surfaceAlt: '#273548',
-  border:     '#334155',
-  accent:     '#8b5cf6',
-  accentLight:'#a78bfa',
-  accentBg:   '#2d1f52',
-  textPrimary:'#f1f5f9',
-  textSub:    '#94a3b8',
-  textMuted:  '#64748b',
-  headerBg:   '#1e1b4b',
+  bg:         '#f8fafc',
+  surface:    '#ffffff',
+  surfaceAlt: '#f1f5f9',
+  border:     '#e2e8f0',
+  accent:     '#1e40af',
+  accentLight:'#2563eb',
+  accentBg:   '#dbeafe',
+  textPrimary:'#0f172a',
+  textSub:    '#64748b',
+  textMuted:  '#94a3b8',
+  headerBg:   '#1e3a8a',
 };
 
 const STATUS_CFG = {
-  Pending:   { color: '#fbbf24', bg: '#3d2e10', border: '#78350f', icon: 'time' },
-  Approved:  { color: '#34d399', bg: '#0d2e1e', border: '#065f46', icon: 'checkmark-circle' },
-  Rejected:  { color: '#f87171', bg: '#3d1515', border: '#7f1d1d', icon: 'close-circle' },
-  Cancelled: { color: '#64748b', bg: '#1e293b', border: '#334155', icon: 'ban' },
+  Pending:   { color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: 'time' },
+  Approved:  { color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', icon: 'checkmark-circle' },
+  Rejected:  { color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: 'close-circle' },
+  Cancelled: { color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', icon: 'ban' },
 };
 
 function formatDate(v) {
@@ -133,9 +133,14 @@ export default function HROvertimeManagementScreen({ navigation }) {
             <Text style={s.headerTitle}>Overtime Requests</Text>
             <Text style={s.headerSub}>Review and action employee overtime</Text>
           </View>
-          <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
-            <Ionicons name="notifications" size={20} color={T.accentLight} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
+              <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+              <Text style={s.avatarText}>{String((user?.full_name?.split(' ')[0] || 'H')[0]).toUpperCase()}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={s.statRow}>
@@ -231,7 +236,7 @@ export default function HROvertimeManagementScreen({ navigation }) {
               ) : null}
 
               {req.rejection_reason ? (
-                <View style={[s.reasonWrap, { backgroundColor: '#3d1515', borderColor: '#7f1d1d' }]}>
+                <View style={[s.reasonWrap, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
                   <Ionicons name="close-circle-outline" size={12} color="#f87171" />
                   <Text style={[s.reasonText, { color: '#f87171' }]}>{req.rejection_reason}</Text>
                 </View>
@@ -317,11 +322,13 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg },
   header:    { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
-  rolePill:  { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(139,92,246,0.4)' },
-  rolePillText: { fontSize: 10, color: T.accentLight, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: T.textPrimary },
-  headerSub:   { fontSize: 12, color: T.textSub, marginTop: 2 },
-  headerIconBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: 12 },
+  rolePill:  { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  rolePillText: { fontSize: 10, color: '#bfdbfe', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  headerTitle: { fontSize: 24, fontWeight: '900', color: '#fff' },
+  headerSub:   { fontSize: 12, color: '#93c5fd', marginTop: 2 },
+  headerIconBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
+  avatarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  avatarText:{ color: '#fff', fontSize: 16, fontWeight: '900' },
   statRow:  { flexDirection: 'row', gap: 8 },
   statPill: { flex: 1, backgroundColor: T.surface, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1 },
   statCount:{ fontSize: 20, fontWeight: '900' },
@@ -331,7 +338,7 @@ const s = StyleSheet.create({
   filterChipActive: { backgroundColor: T.accent, borderColor: T.accent },
   filterText: { fontSize: 12, color: T.textSub, fontWeight: '700' },
   filterTextActive: { color: '#fff' },
-  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3d1515', borderRadius: 12, borderWidth: 1, borderColor: '#7f1d1d', padding: 12, marginHorizontal: 14, marginBottom: 4 },
+  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12, marginHorizontal: 14, marginBottom: 4 },
   errorText: { color: '#f87171', fontSize: 13, flex: 1 },
   list:        { flex: 1 },
   listContent: { padding: 14, gap: 10, paddingBottom: 40 },
@@ -351,11 +358,11 @@ const s = StyleSheet.create({
   reasonWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, backgroundColor: T.surfaceAlt, borderRadius: 10, padding: 9, borderWidth: 1, borderColor: T.border, marginBottom: 10 },
   reasonText: { flex: 1, fontSize: 12, color: T.textSub, lineHeight: 17 },
   actionRow:  { flexDirection: 'row', gap: 8, marginTop: 4 },
-  rejectBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 12, backgroundColor: '#3d1515', borderWidth: 1, borderColor: '#7f1d1d' },
+  rejectBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 12, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
   rejectBtnText: { color: '#f87171', fontWeight: '800', fontSize: 13 },
   approveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 12, backgroundColor: T.accent },
   approveBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0d2e1e', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#065f46' },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0' },
   toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
   empty:      { alignItems: 'center', paddingVertical: 56, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: T.textSub },
@@ -372,6 +379,6 @@ const s = StyleSheet.create({
   modalCancel:   { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: T.surfaceAlt, borderWidth: 1, borderColor: T.border },
   modalCancelText: { color: T.textSub, fontWeight: '700', fontSize: 14 },
   modalConfirm:  { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: T.accent },
-  modalConfirmRed: { backgroundColor: '#7f1d1d' },
+  modalConfirmRed: { backgroundColor: '#dc2626' },
   modalConfirmText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 });

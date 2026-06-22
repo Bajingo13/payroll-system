@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 
-const T = { bg:'#0f172a', surface:'#1e293b', surfaceAlt:'#273548', border:'#334155', accent:'#8b5cf6', accentLight:'#a78bfa', textPrimary:'#f1f5f9', textSub:'#94a3b8', textMuted:'#64748b', headerBg:'#1e1b4b' };
+const T = { bg:'#f8fafc', surface:'#ffffff', surfaceAlt:'#f1f5f9', border:'#e2e8f0', accent:'#1e40af', accentLight:'#2563eb', textPrimary:'#0f172a', textSub:'#64748b', textMuted:'#94a3b8', headerBg:'#1e3a8a' };
 
 function ratingColor(r) {
   const n = String(r || '').toLowerCase();
@@ -69,7 +69,7 @@ export default function HRPerformanceScreen({ navigation }) {
         {/* Summary pills */}
         <View style={s.summaryRow}>
           {[
-            { label: 'Rated',   value: summary.employeesWithRatings || 0, color: '#8b5cf6' },
+            { label: 'Rated',   value: summary.employeesWithRatings || 0, color: '#2563eb' },
             { label: 'Avg Score', value: Number(summary.averageScore || 0).toFixed(1), color: '#22d3ee' },
             { label: 'Latest',  value: summary.latestRating || '—', color: '#34d399' },
           ].map((p) => (
@@ -164,10 +164,10 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg },
   header: { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(139,92,246,0.2)', alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: T.textPrimary },
-  headerSub: { fontSize: 11, color: T.textSub },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  headerSub: { fontSize: 11, color: '#93c5fd' },
   summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   summaryPill: { flex: 1, backgroundColor: T.surface, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: T.border },
   summaryVal: { fontSize: 18, fontWeight: '900' },
@@ -177,7 +177,7 @@ const s = StyleSheet.create({
   body: { padding: 14, gap: 10, paddingBottom: 48 },
   card: { backgroundColor: T.surface, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: T.border },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  empAvatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#2d1f52', alignItems: 'center', justifyContent: 'center' },
+  empAvatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
   empAvatarText: { color: T.accentLight, fontSize: 15, fontWeight: '900' },
   empInfo: { flex: 1 },
   empName: { fontSize: 13, fontWeight: '800', color: T.textPrimary },

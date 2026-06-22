@@ -19,34 +19,34 @@ const BASE_URL = API_BASE_URL.replace('/api', '');
 
 // ── Design tokens (HR dark theme) ─────────────────────────────────────────
 const T = {
-  bg:         '#0f172a',   // page background — deep navy
-  surface:    '#1e293b',   // card surface
-  surfaceAlt: '#273548',   // slightly lighter surface
-  border:     '#334155',   // subtle card border
-  accent:     '#8b5cf6',   // violet primary
-  accentLight:'#a78bfa',   // light violet (text on dark)
-  accentBg:   '#2d1f52',   // violet tinted background
-  textPrimary:'#f1f5f9',
-  textSub:    '#94a3b8',
-  textMuted:  '#64748b',
-  headerFrom: '#3b1f8c',   // gradient start
-  headerTo:   '#1e1b4b',   // gradient end
+  bg:         '#f8fafc',
+  surface:    '#ffffff',
+  surfaceAlt: '#f1f5f9',
+  border:     '#e2e8f0',
+  accent:     '#1e40af',
+  accentLight:'#2563eb',
+  accentBg:   '#dbeafe',
+  textPrimary:'#0f172a',
+  textSub:    '#64748b',
+  textMuted:  '#94a3b8',
+  headerFrom: '#1e40af',
+  headerTo:   '#1e3a8a',
 };
 
-const CHART_COLORS = ['#8b5cf6', '#22d3ee', '#f59e0b', '#f87171', '#34d399', '#fb923c'];
+const CHART_COLORS = ['#2563eb', '#22d3ee', '#f59e0b', '#f87171', '#34d399', '#fb923c'];
 
 const RISK_PALETTE = {
-  High:   { bg: '#3d1515', text: '#f87171', border: '#7f1d1d' },
-  Medium: { bg: '#3d2e10', text: '#fbbf24', border: '#78350f' },
-  Low:    { bg: '#0d2e1e', text: '#34d399', border: '#065f46' },
-  Stable: { bg: '#1e293b', text: '#94a3b8', border: '#334155' },
+  High:   { bg: '#fef2f2', text: '#dc2626', border: '#fecaca' },
+  Medium: { bg: '#fffbeb', text: '#d97706', border: '#fde68a' },
+  Low:    { bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0' },
+  Stable: { bg: '#f8fafc', text: '#64748b', border: '#e2e8f0' },
 };
 
 const INSIGHT_COLORS = {
-  danger:  { bg: '#3d1515', fg: '#f87171', border: '#7f1d1d',  iconBg: '#4d1919' },
-  warning: { bg: '#3d2e10', fg: '#fbbf24', border: '#78350f',  iconBg: '#4a3210' },
-  success: { bg: '#0d2e1e', fg: '#34d399', border: '#065f46',  iconBg: '#0d3520' },
-  info:    { bg: '#1a2640', fg: '#60a5fa', border: '#1e3a5f',  iconBg: '#1e2d4d' },
+  danger:  { bg: '#fef2f2', fg: '#dc2626', border: '#fecaca', iconBg: '#fee2e2' },
+  warning: { bg: '#fffbeb', fg: '#d97706', border: '#fde68a', iconBg: '#fef3c7' },
+  success: { bg: '#f0fdf4', fg: '#16a34a', border: '#bbf7d0', iconBg: '#dcfce7' },
+  info:    { bg: '#eff6ff', fg: '#2563eb', border: '#bfdbfe', iconBg: '#dbeafe' },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ export default function HRDashboardScreen({ navigation }) {
   const firstName    = user?.full_name?.split(' ')[0] || 'HR Manager';
 
   const kpis = [
-    { icon: 'people',    label: 'Total',     value: Number(summary.totalEmployees || 0).toLocaleString(),  sub: 'Employees',          color: '#8b5cf6' },
+    { icon: 'people',    label: 'Total',     value: Number(summary.totalEmployees || 0).toLocaleString(),  sub: 'Employees',          color: '#2563eb' },
     { icon: 'checkmark-circle', label: 'Active', value: Number(activeEmp || 0).toLocaleString(),          sub: 'Currently employed', color: '#34d399' },
     { icon: 'cash',      label: 'Payroll',    value: Number(summary.processedPayrolls || 0).toLocaleString(), sub: 'Processed runs',  color: '#22d3ee' },
     { icon: 'document-text', label: 'Leaves', value: String(pendingLeaves),                               sub: 'Pending approval',   color: '#fbbf24' },
@@ -270,7 +270,7 @@ export default function HRDashboardScreen({ navigation }) {
         <View style={s.headerInner}>
           <View style={s.headerLeft}>
             <View style={s.rolePill}>
-              <Ionicons name="shield-checkmark" size={11} color={T.accentLight} />
+              <Ionicons name="shield-checkmark" size={11} color="#bfdbfe" />
               <Text style={s.rolePillText}>{user?.role || 'HR'} · People Operations</Text>
             </View>
             <Text style={s.headerGreeting}>Welcome back,</Text>
@@ -279,7 +279,7 @@ export default function HRDashboardScreen({ navigation }) {
           </View>
           <View style={s.headerRight}>
             <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
-              <Ionicons name="notifications" size={20} color={T.accentLight} />
+              <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
               {unreadCount > 0 && (
                 <View style={s.notifBadge}><Text style={s.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
               )}
@@ -317,7 +317,7 @@ export default function HRDashboardScreen({ navigation }) {
         {/* ── WORKFORCE ── */}
         <SectionLabel title="Workforce" icon="people" />
 
-        <Card accent="#8b5cf6">
+        <Card accent="#2563eb">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Employee Status</Text>
             <Text style={s.cardBadge}>{Number(summary.totalEmployees || 0)} total</Text>
@@ -328,7 +328,7 @@ export default function HRDashboardScreen({ navigation }) {
               <Text style={s.bigStatLabel}>Active</Text>
             </View>
             <View style={s.bigStatBox}>
-              <Text style={[s.bigStat, { color: '#8b5cf6' }]}>{activeP}%</Text>
+              <Text style={[s.bigStat, { color: '#2563eb' }]}>{activeP}%</Text>
               <Text style={s.bigStatLabel}>Workforce active</Text>
             </View>
           </View>
@@ -342,13 +342,12 @@ export default function HRDashboardScreen({ navigation }) {
           }
         </Card>
 
-        {/* ── OPERATIONS ── */}
-        <SectionLabel title="Operations" icon="layers" />
+        {/* ── PAYROLL ── */}
+        <SectionLabel title="Payroll" icon="cash" />
 
-        {/* Payroll */}
         <Card accent="#22d3ee">
           <View style={s.cardTitleRow}>
-            <Text style={s.cardTitle}>Payroll</Text>
+            <Text style={s.cardTitle}>Payroll Status</Text>
             <Text style={s.cardBadge}>{summary.processedPayrolls || 0} runs</Text>
           </View>
           {payrollItems.length === 0
@@ -359,7 +358,37 @@ export default function HRDashboardScreen({ navigation }) {
           }
         </Card>
 
-        {/* Leave Requests */}
+        <Card accent="#34d399">
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle}>Payroll Forecast</Text>
+            <Text style={s.cardBadge}>Recent runs</Text>
+          </View>
+          {forecast === null
+            ? <Text style={s.emptyText}>No completed payroll runs available.</Text>
+            : <>
+                {forecast.runs.map((run, i) => (
+                  <View key={run.run_id} style={s.forecastRow}>
+                    <View style={[s.forecastNum, { backgroundColor: i === 0 ? '#34d399' + '22' : T.surfaceAlt }]}>
+                      <Text style={[s.forecastNumText, { color: i === 0 ? '#34d399' : T.textSub }]}>{i + 1}</Text>
+                    </View>
+                    <View style={s.forecastBody}>
+                      <Text style={s.forecastRange}>{run.payroll_range || `Run #${run.run_id}`}</Text>
+                      <Text style={s.forecastCount}>{run.headcount} employees</Text>
+                    </View>
+                    <Text style={[s.forecastAmt, { color: i === 0 ? '#34d399' : T.textSub }]}>{money(run.total_net_pay)}</Text>
+                  </View>
+                ))}
+                <View style={s.cardFooter}>
+                  <Text style={s.footerText}>Avg/Run <Text style={s.footerBold}>{money(forecast.avg)}</Text></Text>
+                  <Text style={s.footerText}>Projected <Text style={[s.footerBold, { color: '#34d399' }]}>{money(forecast.projected)}</Text></Text>
+                </View>
+              </>
+          }
+        </Card>
+
+        {/* ── LEAVE & OVERTIME ── */}
+        <SectionLabel title="Leave & Overtime" icon="calendar" />
+
         <Card accent="#fbbf24">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Leave Requests</Text>
@@ -377,8 +406,7 @@ export default function HRDashboardScreen({ navigation }) {
           }
         </Card>
 
-        {/* Overtime Trends */}
-        <Card accent="#c084fc">
+        <Card accent="#60a5fa">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Overtime Trends</Text>
             <Text style={s.cardBadge}>4 Weeks</Text>
@@ -404,7 +432,7 @@ export default function HRDashboardScreen({ navigation }) {
               })()
           }
           <View style={s.cardFooter}>
-            <Text style={s.footerText}>Next wk est. <Text style={[s.footerBold, { color: '#c084fc' }]}>{Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs</Text></Text>
+            <Text style={s.footerText}>Next wk est. <Text style={[s.footerBold, { color: '#60a5fa' }]}>{Number(as.nextWeekOtForecast || 0).toFixed(1)} hrs</Text></Text>
             <Text style={s.footerText}>Trend <Text style={s.footerBold}>{analytics?.forecast?.direction || 'Stable'}</Text></Text>
           </View>
         </Card>
@@ -412,7 +440,6 @@ export default function HRDashboardScreen({ navigation }) {
         {/* ── RISK & ANALYTICS ── */}
         <SectionLabel title="Risk & Analytics" icon="alert-circle" />
 
-        {/* Turnover Risk */}
         <Card accent="#f87171">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Turnover Risk</Text>
@@ -441,7 +468,6 @@ export default function HRDashboardScreen({ navigation }) {
           }
         </Card>
 
-        {/* Performance Metrics */}
         <Card accent="#22d3ee">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Performance Signals</Text>
@@ -465,7 +491,6 @@ export default function HRDashboardScreen({ navigation }) {
           ))}
         </Card>
 
-        {/* Attendance Analytics */}
         <Card accent="#fbbf24">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Attendance Analytics</Text>
@@ -488,17 +513,15 @@ export default function HRDashboardScreen({ navigation }) {
           }
         </Card>
 
-        {/* ── INTELLIGENCE ── */}
-        <SectionLabel title="AI Intelligence" icon="sparkles" />
+        {/* ── AI INSIGHTS ── */}
+        <SectionLabel title="AI Insights" icon="sparkles" />
 
-        {/* Health Score + AI Insights */}
-        <Card accent="#8b5cf6">
+        <Card accent="#2563eb">
           <View style={s.cardTitleRow}>
-            <Text style={s.cardTitle}>AI Insights</Text>
+            <Text style={s.cardTitle}>Workforce Intelligence</Text>
             <View style={s.aiBadge}><Text style={s.aiBadgeText}>✦ AI</Text></View>
           </View>
 
-          {/* Health gauge */}
           <View style={s.healthRow}>
             <View style={[s.healthGauge, { borderColor: healthColor }]}>
               <Text style={[s.healthScore, { color: healthColor }]}>{healthScore}</Text>
@@ -516,7 +539,6 @@ export default function HRDashboardScreen({ navigation }) {
 
           <View style={s.divider} />
 
-          {/* Insights */}
           <View style={s.insightList}>
             {aiInsights.map((ins) => {
               const ic = INSIGHT_COLORS[ins.type];
@@ -536,7 +558,6 @@ export default function HRDashboardScreen({ navigation }) {
 
           <View style={s.divider} />
 
-          {/* Recommended Actions */}
           <Text style={s.subLabel}>Recommended Actions</Text>
           {aiRecs.map((rec, i) => {
             const pc = rec.priority === 'High' ? '#f87171' : rec.priority === 'Medium' ? '#fbbf24' : '#94a3b8';
@@ -549,34 +570,6 @@ export default function HRDashboardScreen({ navigation }) {
               </View>
             );
           })}
-        </Card>
-
-        {/* Payroll Forecast */}
-        <Card accent="#34d399">
-          <View style={s.cardTitleRow}>
-            <Text style={s.cardTitle}>Payroll Forecast</Text>
-          </View>
-          {forecast === null
-            ? <Text style={s.emptyText}>No completed payroll runs available.</Text>
-            : <>
-                {forecast.runs.map((run, i) => (
-                  <View key={run.run_id} style={s.forecastRow}>
-                    <View style={[s.forecastNum, { backgroundColor: i === 0 ? '#34d399' + '22' : T.surfaceAlt }]}>
-                      <Text style={[s.forecastNumText, { color: i === 0 ? '#34d399' : T.textSub }]}>{i + 1}</Text>
-                    </View>
-                    <View style={s.forecastBody}>
-                      <Text style={s.forecastRange}>{run.payroll_range || `Run #${run.run_id}`}</Text>
-                      <Text style={s.forecastCount}>{run.headcount} employees</Text>
-                    </View>
-                    <Text style={[s.forecastAmt, { color: i === 0 ? '#34d399' : T.textSub }]}>{money(run.total_net_pay)}</Text>
-                  </View>
-                ))}
-                <View style={s.cardFooter}>
-                  <Text style={s.footerText}>Avg/Run <Text style={s.footerBold}>{money(forecast.avg)}</Text></Text>
-                  <Text style={s.footerText}>Projected <Text style={[s.footerBold, { color: '#34d399' }]}>{money(forecast.projected)}</Text></Text>
-                </View>
-              </>
-          }
         </Card>
       </View>
     </ScrollView>
@@ -599,35 +592,35 @@ const s = StyleSheet.create({
   },
   headerCircle1: {
     position: 'absolute', width: 200, height: 200, borderRadius: 100,
-    backgroundColor: '#8b5cf6', opacity: 0.08,
+    backgroundColor: '#60a5fa', opacity: 0.12,
     top: -60, right: -40,
   },
   headerCircle2: {
     position: 'absolute', width: 140, height: 140, borderRadius: 70,
-    backgroundColor: '#a78bfa', opacity: 0.06,
+    backgroundColor: '#93c5fd', opacity: 0.08,
     top: 20, right: 80,
   },
   headerInner:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   headerLeft:   { flex: 1, marginRight: 8 },
-  rolePill:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(139,92,246,0.25)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(139,92,246,0.4)' },
-  rolePillText: { fontSize: 11, color: T.accentLight, fontWeight: '700', letterSpacing: 0.3 },
-  headerGreeting: { fontSize: 13, color: T.textSub, fontWeight: '500' },
-  headerName:   { fontSize: 26, fontWeight: '900', color: T.textPrimary, marginTop: 2 },
-  headerDate:   { fontSize: 11, color: T.textMuted, marginTop: 4 },
-  headerRight:  { alignItems: 'center', gap: 10 },
-  headerIconBtn:{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: 12 },
+  rolePill:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  rolePillText: { fontSize: 11, color: '#bfdbfe', fontWeight: '700', letterSpacing: 0.3 },
+  headerGreeting: { fontSize: 13, color: '#93c5fd', fontWeight: '500' },
+  headerName:   { fontSize: 26, fontWeight: '900', color: '#fff', marginTop: 2 },
+  headerDate:   { fontSize: 11, color: '#93c5fd', marginTop: 4 },
+  headerRight:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerIconBtn:{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
   notifBadge:   { position: 'absolute', top: 4, right: 4, backgroundColor: '#f87171', borderRadius: 7, minWidth: 14, height: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
   notifBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800' },
-  avatarBtn:    { width: 40, height: 40, borderRadius: 20, backgroundColor: T.accent, alignItems: 'center', justifyContent: 'center' },
+  avatarBtn:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   avatarText:   { color: '#fff', fontSize: 16, fontWeight: '900' },
 
   // ── KPI Strip ──
-  kpiStrip:     { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.25)', marginHorizontal: -20, paddingHorizontal: 12, paddingVertical: 14, gap: 4 },
+  kpiStrip:     { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.12)', marginHorizontal: -20, paddingHorizontal: 12, paddingVertical: 14, gap: 4 },
   kpiItem:      { flex: 1, alignItems: 'center', gap: 3 },
   kpiIconWrap:  { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   kpiValue:     { fontSize: 18, fontWeight: '900' },
-  kpiLabel:     { fontSize: 9, color: T.textPrimary, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
-  kpiSub:       { fontSize: 8, color: T.textMuted, textAlign: 'center' },
+  kpiLabel:     { fontSize: 9, color: '#fff', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
+  kpiSub:       { fontSize: 8, color: '#93c5fd', textAlign: 'center' },
 
   // ── Body ──
   body: { padding: 14, gap: 12 },
@@ -745,7 +738,7 @@ const s = StyleSheet.create({
   forecastAmt:    { fontSize: 13, fontWeight: '800' },
 
   // ── Error / Empty ──
-  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3d1515', borderRadius: 12, borderWidth: 1, borderColor: '#7f1d1d', padding: 12 },
-  errorText: { color: '#f87171', fontSize: 13, flex: 1 },
+  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12 },
+  errorText: { color: '#b91c1c', fontSize: 13, flex: 1 },
   emptyText: { fontSize: 13, color: T.textMuted, fontStyle: 'italic', paddingVertical: 4 },
 });

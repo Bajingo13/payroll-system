@@ -23,17 +23,17 @@ const ASSET_BASE = API_BASE_URL.replace('/api', '');
 
 // ── HR dark theme ─────────────────────────────────────────────────────────
 const T = {
-  bg:         '#0f172a',
-  surface:    '#1e293b',
-  surfaceAlt: '#273548',
-  border:     '#334155',
-  accent:     '#8b5cf6',
-  accentLight:'#a78bfa',
-  accentBg:   '#2d1f52',
-  textPrimary:'#f1f5f9',
-  textSub:    '#94a3b8',
-  textMuted:  '#64748b',
-  headerBg:   '#1e1b4b',
+  bg:         '#f8fafc',
+  surface:    '#ffffff',
+  surfaceAlt: '#f1f5f9',
+  border:     '#e2e8f0',
+  accent:     '#1e40af',
+  accentLight:'#2563eb',
+  accentBg:   '#dbeafe',
+  textPrimary:'#0f172a',
+  textSub:    '#64748b',
+  textMuted:  '#94a3b8',
+  headerBg:   '#1e3a8a',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -60,11 +60,11 @@ function formatTime(value) {
 }
 
 function getStatus(row) {
-  if (!row.time_in)  return { label: 'Absent',     color: '#f87171', bg: '#3d1515', border: '#7f1d1d' };
-  if (!row.time_out) return { label: 'Incomplete',  color: '#fbbf24', bg: '#3d2e10', border: '#78350f' };
+  if (!row.time_in)  return { label: 'Absent',     color: '#dc2626', bg: '#fef2f2', border: '#fecaca' };
+  if (!row.time_out) return { label: 'Incomplete', color: '#d97706', bg: '#fffbeb', border: '#fde68a' };
   if (Number(row.undertime_minutes || 0) > 0)
                      return { label: 'Undertime',   color: '#fb923c', bg: '#3d2210', border: '#7c2d12' };
-  return               { label: 'Complete',    color: '#34d399', bg: '#0d2e1e', border: '#065f46' };
+  return               { label: 'Complete',    color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' };
 }
 
 function fmtHours(h) {
@@ -189,7 +189,7 @@ export default function HRAttendanceScreen({ navigation }) {
   const isToday = dateStr === todayStr;
 
   const SUMMARY_PILLS = [
-    { label: 'Total',      value: counts.total,      color: '#a78bfa' },
+    { label: 'Total',      value: counts.total,      color: '#2563eb' },
     { label: 'Present',    value: counts.present,    color: '#34d399' },
     { label: 'Absent',     value: counts.absent,     color: '#f87171' },
     { label: 'Incomplete', value: counts.incomplete, color: '#fbbf24' },
@@ -210,9 +210,14 @@ export default function HRAttendanceScreen({ navigation }) {
             <Text style={s.headerTitle}>Employee Attendance</Text>
             <Text style={s.headerSub}>Timekeeping and attendance monitoring</Text>
           </View>
-          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')}>
-            <Ionicons name="notifications" size={20} color={T.accentLight} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')}>
+              <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+              <Text style={s.headerAvatarText}>{String((user?.full_name?.split(' ')[0] || 'H')[0]).toUpperCase()}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Date navigator */}
@@ -448,16 +453,18 @@ const s = StyleSheet.create({
   header:    { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 0 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   headerLeft:{ flex: 1, marginRight: 8 },
-  rolePill:  { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(139,92,246,0.4)' },
-  rolePillText: { fontSize: 10, color: T.accentLight, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: T.textPrimary },
-  headerSub:   { fontSize: 11, color: T.textSub, marginTop: 2 },
-  iconBtn:   { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: 12 },
+  rolePill:  { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  rolePillText: { fontSize: 10, color: '#bfdbfe', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  headerSub:   { fontSize: 11, color: '#93c5fd', marginTop: 2 },
+  iconBtn:   { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
+  avatarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  headerAvatarText: { color: '#fff', fontSize: 16, fontWeight: '900' },
 
   // Date nav
   dateNav:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  dateArrow:  { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139,92,246,0.15)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)' },
-  datePill:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: 'rgba(139,92,246,0.12)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(139,92,246,0.25)' },
+  dateArrow:  { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dbeafe', borderRadius: 10, borderWidth: 1, borderColor: '#bfdbfe' },
+  datePill:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#bfdbfe' },
   datePillText: { flex: 1, fontSize: 12, color: T.textPrimary, fontWeight: '700' },
   todayDot:   { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34d399' },
 
@@ -478,7 +485,7 @@ const s = StyleSheet.create({
   filterTextActive: { color: '#fff' },
 
   // Error
-  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3d1515', borderRadius: 12, borderWidth: 1, borderColor: '#7f1d1d', padding: 12, marginHorizontal: 14, marginBottom: 4 },
+  errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12, marginHorizontal: 14, marginBottom: 4 },
   errorText: { color: '#f87171', fontSize: 13, flex: 1 },
 
   // List

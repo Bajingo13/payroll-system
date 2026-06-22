@@ -4,6 +4,7 @@ import {
   Dimensions,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -17,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { getApiMessage } from '../api/client';
+import { api, getApiMessage } from '../api/client';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -40,6 +41,12 @@ export default function LoginScreen() {
   const [uFocus, setUFocus] = useState(false);
   const [pFocus, setPFocus] = useState(false);
 
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUsername, setResetUsername] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetSuccess, setResetSuccess] = useState(false);
+
   async function handleLogin() {
     if (!username.trim() || !password) { setError('Please enter your username and password.'); return; }
     setError(''); setLoading(true);
@@ -47,13 +54,48 @@ export default function LoginScreen() {
       const user = await login(username.trim(), password);
       if (normalizeRole(user.role) === 'admin') {
         await logout();
-        setError('Admin accounts must use the web system.');
+        setError('Admin accounts are not supported on the mobile app. Please use the web system. Only HR and Employee accounts can log in here.');
         setLoading(false);
       }
     } catch (err) {
       setError(getApiMessage(err, 'Invalid username or password.'));
       setLoading(false);
     }
+  }
+
+  async function handlePasswordResetRequest() {
+    if (!resetUsername.trim()) {
+      setResetMessage('Please enter your username.');
+      setResetSuccess(false);
+      return;
+    }
+    setResetMessage('');
+    setResetLoading(true);
+    try {
+      const { data } = await api.post('/password-reset/request', { username: resetUsername.trim() });
+      setResetMessage(data.message || 'Password reset instructions will be sent to the email linked to that username.');
+      setResetSuccess(true);
+      setResetUsername('');
+    } catch (err) {
+      setResetMessage(getApiMessage(err, 'Unable to request password reset.'));
+      setResetSuccess(false);
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  function openResetModal() {
+    setResetOpen(true);
+    setResetMessage('');
+    setResetUsername('');
+    setResetSuccess(false);
+  }
+
+  function closeResetModal() {
+    setResetOpen(false);
+    setResetMessage('');
+    setResetUsername('');
+    setResetSuccess(false);
   }
 
   return (
@@ -176,6 +218,11 @@ export default function LoginScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
+            {/* Forgot Password */}
+            <TouchableOpacity onPress={openResetModal} style={s.forgotBtn}>
+              <Text style={s.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+
             {/* Footer */}
             <View style={s.footerRow}>
               <View style={s.footerLine} />
@@ -186,6 +233,86 @@ export default function LoginScreen() {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Forgot Password Modal */}
+      <Modal
+        visible={resetOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeResetModal}
+      >
+        <View style={s.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalKAV}>
+            <View style={s.modalCard}>
+              <LinearGradient
+                colors={['transparent', '#3b82f6', 'transparent']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={s.accentLine}
+              />
+
+              <View style={s.modalHeader}>
+                <Text style={s.modalTitle}>Reset Password</Text>
+                <TouchableOpacity onPress={closeResetModal} style={s.modalClose}>
+                  <Ionicons name="close" size={20} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={s.modalIntro}>
+                Enter your username and we will send reset instructions to the email linked to your account.
+              </Text>
+
+              <Text style={s.label}>Username</Text>
+              <View style={s.field}>
+                <View style={s.iconBox}>
+                  <Ionicons name="person" size={15} color="#94a3b8" />
+                </View>
+                <TextInput
+                  style={s.input}
+                  placeholder="Enter your username"
+                  placeholderTextColor="#cbd5e1"
+                  value={resetUsername}
+                  onChangeText={v => { setResetUsername(v); setResetMessage(''); setResetSuccess(false); }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onSubmitEditing={handlePasswordResetRequest}
+                />
+              </View>
+
+              {resetMessage ? (
+                <View style={[s.errBox, resetSuccess && s.successBox]}>
+                  <Ionicons
+                    name={resetSuccess ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+                    size={14}
+                    color={resetSuccess ? '#16a34a' : '#b91c1c'}
+                  />
+                  <Text style={[s.errText, resetSuccess && s.successText]}>{resetMessage}</Text>
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={handlePasswordResetRequest}
+                disabled={resetLoading}
+                activeOpacity={0.87}
+                style={s.btnWrap}
+              >
+                <LinearGradient
+                  colors={resetLoading ? ['#94a3b8', '#94a3b8'] : ['#1d4ed8', '#3b82f6']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={s.btn}
+                >
+                  {resetLoading
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={s.btnText}>Send Reset Link</Text>}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={closeResetModal} style={s.cancelBtn}>
+                <Text style={s.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -280,8 +407,42 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
   },
 
+  // Forgot password link
+  forgotBtn: { alignSelf: 'center', marginBottom: 20, marginTop: -10 },
+  forgotText: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+
   // Footer
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   footerLine: { flex: 1, height: 1, backgroundColor: '#1e3a5f', opacity: 0.6 },
   footerText: { fontSize: 10, color: '#64748b', fontWeight: '500' },
+
+  // Forgot password modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalKAV: { width: '90%', maxWidth: 380 },
+  modalCard: {
+    backgroundColor: '#122040',
+    borderRadius: 24, padding: 24,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 24, elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 12,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: '#f1f5f9' },
+  modalClose: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: '#1e3a5f', alignItems: 'center', justifyContent: 'center',
+  },
+  modalIntro: { fontSize: 13, color: '#94a3b8', marginBottom: 20, lineHeight: 19 },
+  successBox: {
+    backgroundColor: 'rgba(22,163,74,0.1)',
+    borderColor: 'rgba(22,163,74,0.25)',
+  },
+  successText: { color: '#4ade80' },
+  cancelBtn: { alignSelf: 'center', marginTop: 10 },
+  cancelText: { color: '#64748b', fontSize: 13, fontWeight: '600' },
 });

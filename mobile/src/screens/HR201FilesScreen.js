@@ -5,12 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 
-const T = { bg:'#0f172a', surface:'#1e293b', surfaceAlt:'#273548', border:'#334155', accent:'#8b5cf6', accentLight:'#a78bfa', textPrimary:'#f1f5f9', textSub:'#94a3b8', textMuted:'#64748b', headerBg:'#1e1b4b' };
+const T = { bg:'#f8fafc', surface:'#ffffff', surfaceAlt:'#f1f5f9', border:'#e2e8f0', accent:'#1e40af', accentLight:'#2563eb', textPrimary:'#0f172a', textSub:'#64748b', textMuted:'#94a3b8', headerBg:'#1e3a8a' };
 
 const DOC_STATUS = {
-  Active:   { color: '#34d399', bg: '#0d2e1e' },
-  Expired:  { color: '#f87171', bg: '#3d1515' },
-  Expiring: { color: '#fbbf24', bg: '#3d2e10' },
+  Active:   { color: '#16a34a', bg: '#f0fdf4' },
+  Expired:  { color: '#dc2626', bg: '#fef2f2' },
+  Expiring: { color: '#d97706', bg: '#fffbeb' },
 };
 
 function formatDate(v) {
@@ -150,10 +150,10 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg }, flex: { flex: 1 },
   header: { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(139,92,246,0.2)', alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: T.textPrimary },
-  headerSub: { fontSize: 11, color: T.textSub },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  headerSub: { fontSize: 11, color: '#93c5fd' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 9 },
   searchInput: { flex: 1, fontSize: 13, color: T.textPrimary, padding: 0 },
   backBar: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 14, borderBottomWidth: 1, borderBottomColor: T.border },
@@ -165,7 +165,7 @@ const s = StyleSheet.create({
   selectedMeta: { fontSize: 11, color: T.textSub },
   docList: { padding: 14, gap: 10, paddingBottom: 40 },
   docCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: T.border },
-  docIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: T.accentBg || '#2d1f52', alignItems: 'center', justifyContent: 'center' },
+  docIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
   docBody: { flex: 1 },
   docName: { fontSize: 13, fontWeight: '700', color: T.textPrimary },
   docType: { fontSize: 11, color: T.textSub },
@@ -174,7 +174,7 @@ const s = StyleSheet.create({
   docStatusText: { fontSize: 10, fontWeight: '800' },
   listContent: { padding: 14, gap: 10, paddingBottom: 40 },
   empCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: T.border },
-  empAvatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#2d1f52', alignItems: 'center', justifyContent: 'center' },
+  empAvatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
   empAvatarText: { color: T.accentLight, fontSize: 15, fontWeight: '900' },
   empBody: { flex: 1 },
   empName: { fontSize: 13, fontWeight: '700', color: T.textPrimary },

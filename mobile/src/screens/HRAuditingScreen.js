@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, getApiMessage } from '../api/client';
 
-const T = { bg:'#0f172a', surface:'#1e293b', surfaceAlt:'#273548', border:'#334155', accent:'#8b5cf6', accentLight:'#a78bfa', textPrimary:'#f1f5f9', textSub:'#94a3b8', textMuted:'#64748b', headerBg:'#1e1b4b' };
+const T = { bg:'#f8fafc', surface:'#ffffff', surfaceAlt:'#f1f5f9', border:'#e2e8f0', accent:'#1e40af', accentLight:'#2563eb', textPrimary:'#0f172a', textSub:'#64748b', textMuted:'#94a3b8', headerBg:'#1e3a8a' };
 
 function actionColor(action) {
   const a = String(action || '').toLowerCase();
@@ -110,9 +110,9 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg },
   header: { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(139,92,246,0.2)', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: T.textPrimary },
-  headerSub: { fontSize: 11, color: T.textSub },
+  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  headerSub: { fontSize: 11, color: '#93c5fd' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 9 },
   searchInput: { flex: 1, fontSize: 13, color: T.textPrimary, padding: 0 },
   body: { padding: 14, gap: 8, paddingBottom: 48 },

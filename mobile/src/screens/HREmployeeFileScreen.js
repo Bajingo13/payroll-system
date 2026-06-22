@@ -17,18 +17,18 @@ import { api, getApiMessage } from '../api/client';
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 const T = {
-  bg: '#0f172a', surface: '#1e293b', surfaceAlt: '#273548',
-  border: '#334155', accent: '#8b5cf6', accentLight: '#a78bfa',
-  accentBg: '#2d1f52', textPrimary: '#f1f5f9', textSub: '#94a3b8',
-  textMuted: '#64748b', headerBg: '#1e1b4b',
+  bg: '#f8fafc', surface: '#ffffff', surfaceAlt: '#f1f5f9',
+  border: '#e2e8f0', accent: '#1e40af', accentLight: '#2563eb',
+  accentBg: '#dbeafe', textPrimary: '#0f172a', textSub: '#64748b',
+  textMuted: '#94a3b8', headerBg: '#1e3a8a',
 };
 
 const STATUS_CFG = {
-  Active:      { color: '#34d399', bg: '#0d2e1e', border: '#065f46' },
-  Inactive:    { color: '#94a3b8', bg: '#1e293b', border: '#334155' },
-  Resigned:    { color: '#f87171', bg: '#3d1515', border: '#7f1d1d' },
-  Terminated:  { color: '#f87171', bg: '#3d1515', border: '#7f1d1d' },
-  Probationary:{ color: '#fbbf24', bg: '#3d2e10', border: '#78350f' },
+  Active:      { color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+  Inactive:    { color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
+  Resigned:    { color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  Terminated:  { color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  Probationary:{ color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
 };
 
 function statusCfg(s) { return STATUS_CFG[s] || STATUS_CFG.Inactive; }
@@ -77,11 +77,11 @@ function SectionCard({ title, icon, children }) {
 
 // ── Detail view ───────────────────────────────────────────────────────────
 const DETAIL_TABS = [
-  { key: 'personal',   label: 'Personal',   icon: 'person',        color: '#8b5cf6', bg: '#2d1f52' },
+  { key: 'personal',   label: 'Personal',   icon: 'person',        color: '#2563eb', bg: '#dbeafe' },
   { key: 'employment', label: 'Employment', icon: 'briefcase',     color: '#22d3ee', bg: '#0d2e38' },
-  { key: 'govids',     label: "Gov't IDs",  icon: 'card',          color: '#34d399', bg: '#0d2e1e' },
-  { key: 'payroll',    label: 'Payroll',    icon: 'cash',          color: '#fbbf24', bg: '#3d2e10' },
-  { key: 'account',    label: 'Account',    icon: 'shield',        color: '#f87171', bg: '#3d1515' },
+  { key: 'govids',     label: "Gov't IDs", icon: 'card',          color: '#16a34a', bg: '#f0fdf4' },
+  { key: 'payroll',    label: 'Payroll',    icon: 'cash',          color: '#d97706', bg: '#fffbeb' },
+  { key: 'account',    label: 'Account',    icon: 'shield',        color: '#dc2626', bg: '#fef2f2' },
   { key: 'evals',      label: 'Evals',      icon: 'trending-up',   color: '#fb923c', bg: '#3d2010' },
 ];
 
@@ -655,10 +655,10 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.bg },
   header: { backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(139,92,246,0.2)', alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: T.textPrimary },
-  headerSub: { fontSize: 11, color: T.textSub },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  headerSub: { fontSize: 11, color: '#93c5fd' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8 },
   searchInput: { flex: 1, fontSize: 13, color: T.textPrimary, padding: 0 },
   sortRow: { flexDirection: 'row', gap: 6 },
@@ -733,12 +733,12 @@ const ds = StyleSheet.create({
   saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16a34a', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   saveBtnText: { fontSize: 12, color: '#fff', fontWeight: '800' },
 
-  editBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#3d2e10', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#78350f' },
+  editBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fffbeb', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#fde68a' },
   editBannerText: { fontSize: 11, color: '#fbbf24', flex: 1 },
-  errorBar: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#3d1515', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#7f1d1d' },
+  errorBar: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fef2f2', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#fecaca' },
   errorBarText: { fontSize: 11, color: '#f87171', flex: 1 },
 
-  toast: { position: 'absolute', bottom: 24, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#0d2e1e', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#065f46', zIndex: 99 },
+  toast: { position: 'absolute', bottom: 24, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', zIndex: 99 },
   toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   readOnlyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 12, backgroundColor: T.surfaceAlt },
