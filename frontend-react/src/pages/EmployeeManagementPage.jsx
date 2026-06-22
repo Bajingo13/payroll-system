@@ -7,7 +7,7 @@ const SORT_OPTIONS = ['ID', 'Name', 'Company', 'Department', 'Position', 'Status
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 const PAYROLL_RATE_OPTIONS = ['Piece Rate', 'Hourly Rate', 'Daily Rate', 'Weekly Rate', 'Monthly Rate'];
 const OT_RATE_OPTIONS = ['STANDARD OT RATE'];
-const ENTRY_PERIOD_OPTIONS = ['Weekly', 'Monthly', 'First Half', 'Second Half', 'Both'];
+const ENTRY_PERIOD_OPTIONS = ['1st Week', '2nd Week', '3rd Week', '4th Week', 'Monthly', 'First Half', 'Second Half', 'Both'];
 const CONTRIBUTION_COLUMNS = [
   { id: 1, label: 'SSS', defaultComputation: 'Gross' },
   { id: 2, label: 'Pag-ibig', defaultComputation: 'Fix' },
@@ -29,8 +29,8 @@ function contributionComputationOptionsFor(typeId) {
 
 function contributionPeriodOptionsFor(payrollPeriod) {
   const value = String(payrollPeriod || '').toLowerCase();
-  //if (!value) return "Please select a payroll period first";
-  if (value.includes('week')) return ['Weekly'];
+  if (!value) return "Please select a payroll period first";
+  if (value.includes('week')) return ['1st Week', '2nd Week', '3rd Week', '4th Week'];
   if (value.includes('semi') || value.includes('half')) return ['First Half', 'Second Half', 'Both'];
   if (value.includes('month')) return ['Monthly'];
   return CONTRIBUTION_PERIOD_OPTIONS;
@@ -46,19 +46,29 @@ function round2(value) {
 function pagibigFormulaPreview(formula, mc) {
   const f = String(formula || '').trim().toLowerCase();
   const MC = Number(mc) || 0;
-  if (f === 'ee (2% of mc) max 100 & er (2% of mc) max 100') {
-    return { ee_share: Math.min(round2(MC * 0.02), 100), er_share: Math.min(round2(MC * 0.02), 100) };
+
+  if (f === 'fix') {
+    return { ee_share: 100, er_share: 100 };
   }
+
+  if (f === 'ee (2% of mc) max 100 & er (2% of mc) max 100') {
+    const val = Math.min(round2(MC * 0.02), 100);
+    return { ee_share: val, er_share: val };
+  }
+
   if (f === 'ee (2% of mc) & er (fix 100)') {
     return { ee_share: round2(MC * 0.02), er_share: 100 };
   }
+
   if (f === 'ee (2% of mc + er - 100) & er (fix 100)') {
-    const er = 100;
-    return { ee_share: round2(0.02 * (MC + er - 100)), er_share: er };
+    return { ee_share: round2(MC * 0.02), er_share: 100 };
   }
+
   if (f === 'ee & er (2% of mc)') {
-    return { ee_share: round2(MC * 0.02), er_share: round2(MC * 0.02) };
+    const val = round2(MC * 0.02);
+    return { ee_share: val, er_share: val };
   }
+
   return null;
 }
 
@@ -68,26 +78,81 @@ function pagibigFormulaPreview(formula, mc) {
 // Taxable/Gross Pay/EWT) are resolved by the payroll engine's bracket tables
 // at payroll-run time, so they're shown locked with an "Auto" placeholder
 // instead of a stale manually-typed number.
-function getContributionPreview(column, row, mc) {
-  const isComputed = String(row.type_option || '').toLowerCase() === 'computed';
-  if (!isComputed) {
-    return { ee: row.ee_share, er: row.er_share, ecc: row.ecc, locked: false, auto: false };
+function formatInputValue(columnId, value) {
+  if (columnId === 2) {
+    // Pag-IBIG (formula-based) → do not override
+    return value;
   }
 
-  const formula = String(row.computation || '').trim().toLowerCase();
-  if (formula === 'fix') {
-    return { ee: row.ee_share, er: row.er_share, ecc: row.ecc, locked: false, auto: false };
+  if (value === '' || value === null || value === undefined) {
+    return '0.00';
   }
 
-  if (column.id === 2) {
-    const preview = pagibigFormulaPreview(row.computation, mc);
-    if (preview) {
-      return { ee: preview.ee_share, er: preview.er_share, ecc: '', locked: true, auto: false };
-    }
-  }
-
-  return { ee: '', er: '', ecc: '', locked: true, auto: true };
+  return value;
 }
+
+function getContributionPreview(column, row, mc) {
+  const isComputed =
+    String(row.type_option || '').toLowerCase() === 'computed';
+
+  const computed = pagibigFormulaPreview(row.computation, mc);
+
+  // fallback to computed values
+  const baseEE = computed?.ee_share ?? '';
+  const baseER = computed?.er_share ?? '';
+
+  // INPUT MODE → editable but still uses formula as default
+  if (!isComputed) {
+    const isPagibig = column.id === 2;
+
+    const computed = isPagibig
+      ? pagibigFormulaPreview(row.computation, mc)
+      : null;
+
+    const baseEE = computed?.ee_share ?? '';
+    const baseER = computed?.er_share ?? '';
+
+    const eeValue =
+      row.ee_share === '' || row.ee_share === null || row.ee_share === undefined
+        ? baseEE
+        : row.ee_share;
+
+    const erValue =
+      row.er_share === '' || row.er_share === null || row.er_share === undefined
+        ? baseER
+        : row.er_share;
+
+    return {
+      ee: isPagibig ? eeValue : formatInputValue(column.id, row.ee_share),
+      er: isPagibig ? erValue : formatInputValue(column.id, row.er_share),
+      ecc: isPagibig
+        ? (row.ecc === '' || row.ecc == null ? '' : row.ecc)
+        : formatInputValue(column.id, row.ecc),
+      locked: false,
+      auto: false
+    };
+  }
+
+  // COMPUTED MODE → forced formula
+  if (computed) {
+    return {
+      ee: baseEE === 0 ? '' : baseEE,
+      er: baseER === 0 ? '' : baseER,
+      ecc: '',
+      locked: true,
+      auto: true
+    };
+  }
+
+  return {
+    ee: '',
+    er: '',
+    ecc: '',
+    locked: true,
+    auto: true
+  };
+}
+
 const ADD_EMPLOYEE_TABS = [
   { id: 'basic', label: 'Basic Information' },
   { id: 'systemAccount', label: 'Create Account Setting' },
@@ -138,7 +203,7 @@ function createDefaultContributionEntry(typeId) {
     contribution_type_id: typeId,
     enabled: true,
     start_date: todayDateInputValue(),
-    period: 'Second Half',
+    period: typeId === 4 ? 'Both' : 'Second Half',
     type_option: 'Computed',
     computation: column?.defaultComputation || '',
     ee_share: '',
@@ -484,6 +549,8 @@ export default function EmployeeManagementPage() {
     }
   }
 
+  const [originalContributions, setOriginalContributions] = useState({});
+
   async function loadEmployeeDetails(empCode) {
     if (!empCode) return;
 
@@ -539,6 +606,12 @@ export default function EmployeeManagementPage() {
           ...Array.from({ length: Math.max(0, 4 - dependents.length) }, () => ({ name: '', birthday: '' }))
         ].slice(0, Math.max(4, dependents.length))
       });
+      setOriginalContributions(
+        (employee.contributions || []).reduce((acc, item) => {
+          acc[item.contribution_type_id] = { ...item };
+          return acc;
+        }, {})
+      );
       setCreatedEmpCode(empCode);
       setAddActiveTab('basic');
       setDetailModalOpen(true);
@@ -627,13 +700,27 @@ export default function EmployeeManagementPage() {
   function updateContributionEntry(typeId, field, value) {
     setAddForm((current) => {
       const rows = [...(current.contributions || [])];
-      const index = rows.findIndex((row) => String(row.contribution_type_id) === String(typeId));
+      const index = rows.findIndex(
+        (row) => String(row.contribution_type_id) === String(typeId)
+      );
+
       const base = index >= 0 ? rows[index] : createDefaultContributionEntry(typeId);
       const nextRow = { ...base, [field]: value };
 
       if (field === 'period') nextRow.period_id = value;
       if (field === 'type_option') nextRow.type_option_id = value;
-      if (field === 'computation') nextRow.computation_id = value;
+
+      if (field === 'computation') {
+        nextRow.computation_id = value;
+
+        if (String(typeId) === '2') {
+          const preview = pagibigFormulaPreview(value, nextRow.mc); // use your MC field name here
+
+          nextRow.ee_share = preview?.ee_share ?? '';
+          nextRow.er_share = preview?.er_share ?? '';
+          nextRow.ecc = 0;
+        }
+      }
 
       if (index >= 0) rows[index] = nextRow;
       else rows.push(nextRow);
@@ -1679,7 +1766,34 @@ export default function EmployeeManagementPage() {
                           <input
                             type="checkbox"
                             checked={!!row.enabled}
-                            onChange={(event) => updateContributionEntry(column.id, 'enabled', event.target.checked)}
+                            onChange={(event) => {
+                              const enabled = event.target.checked;
+
+                              if (enabled) {
+                                const original = originalContributions[column.id];
+
+                                if (original) {
+                                  Object.entries(original).forEach(([field, value]) => {
+                                    updateContributionEntry(column.id, field, value);
+                                  });
+                                } else {
+                                  const defaults = createDefaultContributionEntry(column.id);
+
+                                  Object.entries(defaults).forEach(([field, value]) => {
+                                    updateContributionEntry(column.id, field, value);
+                                  });
+                                }
+                              } else {
+                                updateContributionEntry(column.id, 'enabled', false);
+                                updateContributionEntry(column.id, 'start_date', '');
+                                updateContributionEntry(column.id, 'period', '');
+                                updateContributionEntry(column.id, 'type_option', '');
+                                updateContributionEntry(column.id, 'computation', '');
+                                updateContributionEntry(column.id, 'ee_share', '');
+                                updateContributionEntry(column.id, 'er_share', '');
+                                updateContributionEntry(column.id, 'ecc', '');
+                              }
+                            }}
                           />
                         </th>
                       );
@@ -1696,6 +1810,7 @@ export default function EmployeeManagementPage() {
                           <input
                             type="date"
                             value={row.start_date || ''}
+                            disabled={!row.enabled}
                             onChange={(event) => updateContributionEntry(column.id, 'start_date', event.target.value)}
                           />
                         </td>
@@ -1706,17 +1821,33 @@ export default function EmployeeManagementPage() {
                     <td>Period</td>
                     {CONTRIBUTION_COLUMNS.map((column) => {
                       const row = getContributionEntry(column.id);
-                      const periodOptions = contributionPeriodOptionsFor(comp.payroll_period);
+                      const hasPayrollPeriod = !!comp.payroll_period;
+
+                      const periodOptions = hasPayrollPeriod
+                        ? contributionPeriodOptionsFor(comp.payroll_period)
+                        : [];
+
                       return (
                         <td key={column.id}>
                           <select
                             value={row.period || ''}
-                            onChange={(event) => updateContributionEntry(column.id, 'period', event.target.value)}
+                            disabled={!row.enabled}
+                            onChange={(event) =>
+                              updateContributionEntry(column.id, 'period', event.target.value)
+                            }
                           >
-                            <option value="" disabled>-- Select --</option>
-                            {periodOptions.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
+                            <option value="">
+                              {comp.payroll_period
+                                ? '-- Select --'
+                                : '-- Please select a payroll period first --'}
+                            </option>
+
+                            {comp.payroll_period &&
+                              contributionPeriodOptionsFor(comp.payroll_period).map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
                           </select>
                         </td>
                       );
@@ -1730,6 +1861,7 @@ export default function EmployeeManagementPage() {
                         <td key={column.id}>
                           <select
                             value={row.type_option || ''}
+                            disabled={!row.enabled}
                             onChange={(event) => updateContributionEntry(column.id, 'type_option', event.target.value)}
                           >
                             <option value="" disabled>-- Select --</option>
@@ -1749,6 +1881,7 @@ export default function EmployeeManagementPage() {
                         <td key={column.id}>
                           <select
                             value={row.computation || ''}
+                            disabled={!row.enabled}
                             onChange={(event) => updateContributionEntry(column.id, 'computation', event.target.value)}
                           >
                             <option value="" disabled>-- Select --</option>
@@ -1769,9 +1902,9 @@ export default function EmployeeManagementPage() {
                         <td key={column.id}>
                           <input
                             type="number"
-                            value={preview.ee || ''}
+                            value={preview.ee ?? ''}
                             placeholder={preview.auto ? 'Auto' : undefined}
-                            disabled={preview.locked}
+                            disabled={!row.enabled || preview.locked}
                             onChange={(event) => updateContributionEntry(column.id, 'ee_share', event.target.value)}
                           />
                         </td>
@@ -1787,9 +1920,9 @@ export default function EmployeeManagementPage() {
                         <td key={column.id}>
                           <input
                             type="number"
-                            value={preview.er || ''}
+                            value={preview.er ?? ''}
                             placeholder={preview.auto ? 'Auto' : undefined}
-                            disabled={preview.locked}
+                            disabled={!row.enabled || preview.locked}
                             onChange={(event) => updateContributionEntry(column.id, 'er_share', event.target.value)}
                           />
                         </td>
@@ -1805,9 +1938,9 @@ export default function EmployeeManagementPage() {
                         <td key={column.id}>
                           <input
                             type="number"
-                            value={preview.ecc || ''}
+                            value={preview.ecc ?? ''}
                             placeholder={preview.auto ? 'Auto' : undefined}
-                            disabled={preview.locked}
+                            disabled={!row.enabled || preview.locked}
                             onChange={(event) => updateContributionEntry(column.id, 'ecc', event.target.value)}
                           />
                         </td>
