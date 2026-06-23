@@ -3206,7 +3206,8 @@ select:focus {
   vertical-align: middle;
 }
 
-.em-contribution-table td:first-child {
+.em-contribution-table td:first-child,
+.em-contribution-table tr:last-child td:nth-child(3) {
   width: 110px;
   padding-right: 8px;
   font-weight: 700;
