@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -31,7 +31,7 @@ function normalizeRole(raw) {
 }
 
 export default function LoginScreen() {
-  const { login, logout } = useAuth();
+  const { login, commitLogin, logout, justLoggedOut, clearLogoutFlag } = useAuth();
   const insets = useSafeAreaInsets();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -40,6 +40,20 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [uFocus, setUFocus] = useState(false);
   const [pFocus, setPFocus] = useState(false);
+
+  const passwordRef    = useRef(null);
+  const loginTimerRef  = useRef(null);
+  const [toast, setToast] = useState('');
+
+  useEffect(() => () => { if (loginTimerRef.current) clearTimeout(loginTimerRef.current); }, []);
+
+  useEffect(() => {
+    if (justLoggedOut) {
+      setToast('You have been logged out successfully.');
+      setTimeout(() => setToast(''), 2500);
+      clearLogoutFlag();
+    }
+  }, [justLoggedOut]);
 
   const [resetOpen, setResetOpen] = useState(false);
   const [resetUsername, setResetUsername] = useState('');
@@ -56,7 +70,12 @@ export default function LoginScreen() {
         await logout();
         setError('Admin accounts are not supported on the mobile app. Please use the web system. Only HR and Employee accounts can log in here.');
         setLoading(false);
+        return;
       }
+      // Show toast then navigate
+      setToast('Logged in successfully!');
+      setLoading(false);
+      loginTimerRef.current = setTimeout(() => commitLogin(user), 1200);
     } catch (err) {
       setError(getApiMessage(err, 'Invalid username or password.'));
       setLoading(false);
@@ -125,11 +144,10 @@ export default function LoginScreen() {
           {/* ── Hero / Logo ── */}
           <View style={s.hero}>
             <Image
-              source={require('../../assets/logo.png')}
+              source={require('../../assets/astreablue-logo.png')}
               style={s.logo}
               resizeMode="contain"
             />
-            <Text style={s.company}>Intelligence Inc.</Text>
             <View style={s.pill}>
               <View style={s.pillDot} />
               <Text style={s.pillText}>HRIS Mobile</Text>
@@ -162,6 +180,9 @@ export default function LoginScreen() {
                   value={username}
                   onChangeText={v => { setUsername(v); setError(''); }}
                   autoCapitalize="none" autoCorrect={false}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                   onFocus={() => setUFocus(true)}
                   onBlur={() => setUFocus(false)}
                 />
@@ -176,17 +197,23 @@ export default function LoginScreen() {
                   <Ionicons name="lock-closed" size={15} color={pFocus ? '#fff' : '#94a3b8'} />
                 </View>
                 <TextInput
+                  ref={passwordRef}
                   style={[s.input, { flex: 1 }]}
                   placeholder="Enter your password"
                   placeholderTextColor="#cbd5e1"
                   value={password}
                   onChangeText={v => { setPassword(v); setError(''); }}
                   secureTextEntry={!showPassword}
+                  returnKeyType="done"
                   onFocus={() => setPFocus(true)}
                   onBlur={() => setPFocus(false)}
                   onSubmitEditing={handleLogin}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={s.eye}>
+                <TouchableOpacity
+                  onPress={() => setShowPassword(v => !v)}
+                  style={s.eye}
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
                 </TouchableOpacity>
               </View>
@@ -234,6 +261,13 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {toast ? (
+        <View style={s.toast}>
+          <Ionicons name="checkmark-circle" size={16} color="#34d399" />
+          <Text style={s.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+
       {/* Forgot Password Modal */}
       <Modal
         visible={resetOpen}
@@ -252,7 +286,7 @@ export default function LoginScreen() {
 
               <View style={s.modalHeader}>
                 <Text style={s.modalTitle}>Reset Password</Text>
-                <TouchableOpacity onPress={closeResetModal} style={s.modalClose}>
+                <TouchableOpacity onPress={closeResetModal} style={s.modalClose} accessibilityLabel="Close">
                   <Ionicons name="close" size={20} color="#94a3b8" />
                 </TouchableOpacity>
               </View>
@@ -335,12 +369,8 @@ const s = StyleSheet.create({
   },
 
   // Hero
-  hero: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 32, gap: 6 },
-  logo: { width: 190, height: 95, marginBottom: 6 },
-  company: {
-    fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '700',
-    letterSpacing: 2, textTransform: 'uppercase',
-  },
+  hero: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 32, gap: 10 },
+  logo: { width: 240, height: 78 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -385,6 +415,9 @@ const s = StyleSheet.create({
   iconBoxOn: { backgroundColor: '#3b82f6' },
   input: { flex: 1, fontSize: 15, color: '#e2e8f0', fontWeight: '500' },
   eye: { padding: 14 },
+
+  toast: { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   // Error
   errBox: {

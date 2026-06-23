@@ -59,7 +59,11 @@ function formatTime(value) {
   return d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
 }
 
-function getStatus(row) {
+function getStatus(row, selectedDate) {
+  // If the employee hadn't been hired yet on this date, it's not a real absence
+  if (row.date_hired && selectedDate && selectedDate < String(row.date_hired).slice(0, 10)) {
+    return { label: 'Not Yet Hired', color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' };
+  }
   if (!row.time_in)  return { label: 'Absent',     color: '#dc2626', bg: '#fef2f2', border: '#fecaca' };
   if (!row.time_out) return { label: 'Incomplete', color: '#d97706', bg: '#fffbeb', border: '#fde68a' };
   if (Number(row.undertime_minutes || 0) > 0)
@@ -156,10 +160,11 @@ export default function HRAttendanceScreen({ navigation }) {
     });
   }, [records]);
 
-  // ── Summary counts ──
+  // ── Summary counts — exclude pre-hire ghost records ──
   const counts = useMemo(() => {
     const c = { total: 0, present: 0, incomplete: 0, absent: 0, late: 0 };
     uniqueRecords.forEach((r) => {
+      if (getStatus(r, dateStr).label === 'Not Yet Hired') return;
       c.total++;
       if (!r.time_in)        c.absent++;
       else if (!r.time_out)  c.incomplete++;
@@ -167,13 +172,13 @@ export default function HRAttendanceScreen({ navigation }) {
       if (Number(r.late_minutes || 0) > 0 && r.time_in) c.late++;
     });
     return c;
-  }, [uniqueRecords]);
+  }, [uniqueRecords, dateStr]);
 
-  // ── Filtered list ──
+  // ── Filtered list — exclude pre-hire ghost records entirely ──
   const filtered = useMemo(() => {
-    let list = uniqueRecords;
+    let list = uniqueRecords.filter((r) => getStatus(r, dateStr).label !== 'Not Yet Hired');
     if (statusFilter !== 'All') {
-      list = list.filter((r) => getStatus(r).label === statusFilter);
+      list = list.filter((r) => getStatus(r, dateStr).label === statusFilter);
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -184,7 +189,7 @@ export default function HRAttendanceScreen({ navigation }) {
       );
     }
     return list;
-  }, [uniqueRecords, statusFilter, search]);
+  }, [uniqueRecords, statusFilter, search, dateStr]);
 
   const isToday = dateStr === todayStr;
 
@@ -211,10 +216,10 @@ export default function HRAttendanceScreen({ navigation }) {
             <Text style={s.headerSub}>Timekeeping and attendance monitoring</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')}>
+            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')} accessibilityLabel="Notifications">
               <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
             </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})} accessibilityLabel="Account settings">
               <Text style={s.headerAvatarText}>{String((user?.full_name?.split(' ')[0] || 'H')[0]).toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
@@ -222,15 +227,15 @@ export default function HRAttendanceScreen({ navigation }) {
 
         {/* Date navigator */}
         <View style={s.dateNav}>
-          <TouchableOpacity style={s.dateArrow} onPress={() => shiftDate(-1)}>
+          <TouchableOpacity style={s.dateArrow} onPress={() => shiftDate(-1)} accessibilityLabel="Previous day">
             <Ionicons name="chevron-back" size={18} color={T.accentLight} />
           </TouchableOpacity>
-          <TouchableOpacity style={s.datePill} onPress={() => setShowPicker(true)}>
+          <TouchableOpacity style={s.datePill} onPress={() => setShowPicker(true)} accessibilityLabel="Select date">
             <Ionicons name="calendar-outline" size={13} color={T.accentLight} />
             <Text style={s.datePillText}>{formatDisplayDate(dateStr)}</Text>
             {isToday && <View style={s.todayDot} />}
           </TouchableOpacity>
-          <TouchableOpacity style={[s.dateArrow, isToday && { opacity: 0.3 }]} onPress={() => shiftDate(1)} disabled={isToday}>
+          <TouchableOpacity style={[s.dateArrow, isToday && { opacity: 0.3 }]} onPress={() => shiftDate(1)} disabled={isToday} accessibilityLabel="Next day">
             <Ionicons name="chevron-forward" size={18} color={T.accentLight} />
           </TouchableOpacity>
         </View>
@@ -268,7 +273,7 @@ export default function HRAttendanceScreen({ navigation }) {
             placeholderTextColor={T.textMuted}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search">
               <Ionicons name="close-circle" size={15} color={T.textMuted} />
             </TouchableOpacity>
           )}
@@ -311,7 +316,7 @@ export default function HRAttendanceScreen({ navigation }) {
         )}
 
         {filtered.map((row, i) => {
-          const status   = getStatus(row);
+          const status   = getStatus(row, dateStr);
           const name     = row.employee_name || row.full_name || 'Employee';
           const timeIn   = formatTime(row.time_in);
           const breakOut = formatTime(row.break_out);
@@ -436,7 +441,7 @@ export default function HRAttendanceScreen({ navigation }) {
       <Modal visible={Boolean(photoModal)} transparent animationType="fade" onRequestClose={() => setPhotoModal(null)}>
         <Pressable style={s.photoModalBg} onPress={() => setPhotoModal(null)}>
           <Image source={{ uri: photoModal }} style={s.photoModalImg} resizeMode="contain" />
-          <TouchableOpacity style={s.photoModalClose} onPress={() => setPhotoModal(null)}>
+          <TouchableOpacity style={s.photoModalClose} onPress={() => setPhotoModal(null)} accessibilityLabel="Close photo">
             <Ionicons name="close-circle" size={36} color="#fff" />
           </TouchableOpacity>
         </Pressable>

@@ -47,7 +47,9 @@ export default function LeaveScreen({ navigation }) {
   const [error, setError] = useState('');
   const [tab, setTab] = useState('request');
   const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
-  const [successMsg, setSuccessMsg] = useState('');
+  const [toast,         setToast]         = useState('');
+  const [cancelConfirm, setCancelConfirm] = useState(null); // leave_id pending cancel
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2500); }
   const [datePicker, setDatePicker] = useState(null); // 'start_date' | 'end_date' | null
   const [cancelling, setCancelling] = useState(null); // request_id being cancelled
 
@@ -84,6 +86,12 @@ export default function LeaveScreen({ navigation }) {
   async function submitLeave() {
     if (!form.leave_type_id) { setError('Please select a leave type.'); return; }
     if (!form.start_date || !form.end_date) { setError('Please enter start and end dates.'); return; }
+    const startD = new Date(`${form.start_date}T00:00:00`);
+    const endD   = new Date(`${form.end_date}T00:00:00`);
+    if (Number.isNaN(startD.getTime()) || Number.isNaN(endD.getTime())) {
+      setError('Invalid date format. Use YYYY-MM-DD.'); return;
+    }
+    if (endD < startD) { setError('End date cannot be before start date.'); return; }
     if (!form.reason.trim()) { setError('Please provide a reason.'); return; }
     setError(''); setSubmitting(true);
     try {
@@ -92,7 +100,7 @@ export default function LeaveScreen({ navigation }) {
         start_date: form.start_date, end_date: form.end_date, reason: form.reason.trim(),
       });
       if (!data.success) throw new Error(data.message);
-      setSuccessMsg(data.message || 'Your leave request has been submitted successfully.');
+      showToast(data.message || 'Leave request submitted successfully.');
       setForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
       await loadOverview(); setTab('history');
     } catch (err) { setError(getApiMessage(err, 'Failed to submit leave request.')); }
@@ -107,7 +115,7 @@ export default function LeaveScreen({ navigation }) {
       if (!data.success) throw new Error(data.message);
       await loadOverview();
     } catch (err) { setError(getApiMessage(err, 'Failed to cancel leave request.')); }
-    finally { setCancelling(null); }
+    finally { setCancelling(null); setCancelConfirm(null); }
   }
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -194,7 +202,7 @@ export default function LeaveScreen({ navigation }) {
               <Ionicons name="calendar-outline" size={16} color="#94a3b8" style={s.inputIcon} />
               <TextInput style={s.input} value={form.start_date} onChangeText={(v) => setF('start_date', v)}
                 placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
-              <TouchableOpacity onPress={() => openPicker('start_date')} style={s.pickerBtn}>
+              <TouchableOpacity onPress={() => openPicker('start_date')} style={s.pickerBtn} accessibilityLabel="Open start date picker">
                 <Ionicons name="calendar" size={18} color="#1e40af" />
               </TouchableOpacity>
             </View>
@@ -204,14 +212,19 @@ export default function LeaveScreen({ navigation }) {
               <Ionicons name="calendar-outline" size={16} color="#94a3b8" style={s.inputIcon} />
               <TextInput style={s.input} value={form.end_date} onChangeText={(v) => setF('end_date', v)}
                 placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
-              <TouchableOpacity onPress={() => openPicker('end_date')} style={s.pickerBtn}>
+              <TouchableOpacity onPress={() => openPicker('end_date')} style={s.pickerBtn} accessibilityLabel="Open end date picker">
                 <Ionicons name="calendar" size={18} color="#1e40af" />
               </TouchableOpacity>
             </View>
 
             {datePicker && (
               <DateTimePicker
-                value={form[datePicker] ? new Date(form[datePicker]) : new Date()}
+                value={(() => {
+                  const str = form[datePicker];
+                  if (!str) return new Date();
+                  const d = new Date(`${str}T00:00:00`);
+                  return Number.isNaN(d.getTime()) ? new Date() : d;
+                })()}
                 mode="date"
                 display="default"
                 onChange={onDateChange}
@@ -268,7 +281,7 @@ export default function LeaveScreen({ navigation }) {
                   {isPending && (
                     <TouchableOpacity
                       style={s.cancelBtn}
-                      onPress={() => cancelLeave(req.leave_id || req.request_id)}
+                      onPress={() => setCancelConfirm(req.leave_id || req.request_id)}
                       disabled={Boolean(cancelling)}
                     >
                       {isCancelling
@@ -283,18 +296,35 @@ export default function LeaveScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* Success Modal */}
-      <Modal visible={Boolean(successMsg)} transparent animationType="fade" onRequestClose={() => setSuccessMsg('')}>
-        <Pressable style={s.dialogBackdrop} onPress={() => setSuccessMsg('')}>
-          <Pressable style={s.dialog} onPress={() => {}}>
-            <View style={s.dialogIconWrap}>
-              <Ionicons name="checkmark-circle" size={32} color="#15803d" />
+      {toast ? (
+        <View style={s.toast}>
+          <Ionicons name="checkmark-circle" size={16} color="#34d399" />
+          <Text style={s.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+
+      <Modal visible={Boolean(cancelConfirm)} transparent animationType="fade" onRequestClose={() => !cancelling && setCancelConfirm(null)}>
+        <Pressable style={s.warnBackdrop} onPress={() => !cancelling && setCancelConfirm(null)}>
+          <Pressable style={s.warnDialog} onPress={() => {}}>
+            <View style={s.warnIconWrap}>
+              <Ionicons name="close-circle-outline" size={28} color="#dc2626" />
             </View>
-            <Text style={s.dialogTitle}>Request Submitted</Text>
-            <Text style={s.dialogMsg}>{successMsg}</Text>
-            <TouchableOpacity style={s.dialogOkBtn} onPress={() => setSuccessMsg('')}>
-              <Text style={s.dialogOkText}>OK</Text>
-            </TouchableOpacity>
+            <Text style={s.warnTitle}>Cancel Leave Request</Text>
+            <Text style={s.warnMsg}>Are you sure you want to cancel this leave request? This action cannot be undone.</Text>
+            <View style={s.warnActions}>
+              <TouchableOpacity style={s.warnKeepBtn} onPress={() => setCancelConfirm(null)} disabled={Boolean(cancelling)}>
+                <Text style={s.warnKeepText}>Keep Request</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.warnDiscardBtn, Boolean(cancelling) && { opacity: 0.6 }]}
+                onPress={() => cancelLeave(cancelConfirm)}
+                disabled={Boolean(cancelling)}
+              >
+                {cancelling
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.warnDiscardText}>Cancel Request</Text>}
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -353,11 +383,16 @@ const s = StyleSheet.create({
   pickerBtn: { padding: 6 },
   cancelBtn: { marginTop: 10, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', alignItems: 'center' },
   cancelBtnText: { color: '#b91c1c', fontSize: 13, fontWeight: '700' },
-  dialogBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  dialog: { backgroundColor: '#fff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, elevation: 12 },
-  dialogIconWrap: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  dialogTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
-  dialogMsg: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  dialogOkBtn: { backgroundColor: '#1e40af', borderRadius: 14, paddingVertical: 13, paddingHorizontal: 40, alignItems: 'center' },
-  dialogOkText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
+  warnBackdrop:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  warnDialog:      { backgroundColor: '#fff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, elevation: 12 },
+  warnIconWrap:    { width: 60, height: 60, borderRadius: 20, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  warnTitle:       { fontSize: 18, fontWeight: '900', color: '#0f172a', marginBottom: 10 },
+  warnMsg:         { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  warnActions:     { flexDirection: 'row', gap: 12, width: '100%' },
+  warnKeepBtn:     { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#f1f5f9', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  warnKeepText:    { fontSize: 14, fontWeight: '700', color: '#64748b' },
+  warnDiscardBtn:  { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#dc2626', alignItems: 'center' },
+  warnDiscardText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

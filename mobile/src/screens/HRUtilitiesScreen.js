@@ -63,7 +63,7 @@ export default function HRUtilitiesScreen({ navigation }) {
     <View style={s.root}>
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View style={s.headerRow}>
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={T.accentLight} />
           </TouchableOpacity>
           <View>

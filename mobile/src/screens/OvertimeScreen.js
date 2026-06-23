@@ -60,7 +60,9 @@ export default function OvertimeScreen({ navigation }) {
   const [error, setError] = useState('');
   const [tab, setTab] = useState('request');
   const [form, setForm] = useState({ overtime_date: '', start_time: '', end_time: '', reason: '' });
-  const [successMsg, setSuccessMsg] = useState('');
+  const [toast,         setToast]         = useState('');
+  const [cancelConfirm, setCancelConfirm] = useState(null); // request_id pending cancel
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2500); }
   const [activePicker, setActivePicker] = useState(null); // 'date' | 'start_time' | 'end_time' | null
   const [cancelling, setCancelling] = useState(null); // request_id being cancelled
 
@@ -83,7 +85,8 @@ export default function OvertimeScreen({ navigation }) {
 
   function getPickerValue(field) {
     if (field === 'date') {
-      return form.overtime_date ? new Date(form.overtime_date) : new Date();
+      const d = new Date(`${form.overtime_date}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? new Date() : d;
     }
     const timeStr = field === 'start_time' ? form.start_time : form.end_time;
     if (timeStr) {
@@ -110,7 +113,15 @@ export default function OvertimeScreen({ navigation }) {
 
   async function submitOvertime() {
     if (!form.overtime_date) { setError('Please enter the overtime date.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.overtime_date) || Number.isNaN(new Date(`${form.overtime_date}T00:00:00`).getTime())) {
+      setError('Invalid date format. Use YYYY-MM-DD.'); return;
+    }
     if (!form.start_time || !form.end_time) { setError('Please enter start and end times.'); return; }
+    const s = new Date(`2000-01-01T${form.start_time}:00`);
+    const e = new Date(`2000-01-01T${form.end_time}:00`);
+    if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime()) && e <= s) {
+      setError('End time must be after start time.'); return;
+    }
     if (!form.reason.trim()) { setError('Please provide a reason.'); return; }
     setError(''); setSubmitting(true);
     try {
@@ -119,7 +130,7 @@ export default function OvertimeScreen({ navigation }) {
         start_time: form.start_time, end_time: form.end_time, reason: form.reason.trim(),
       });
       if (!data.success) throw new Error(data.message);
-      setSuccessMsg(data.message || 'Overtime request submitted successfully.');
+      showToast(data.message || 'Overtime request submitted successfully.');
       setForm({ overtime_date: '', start_time: '', end_time: '', reason: '' });
       await loadOverview(); setTab('history');
     } catch (err) { setError(getApiMessage(err, 'Failed to submit overtime request.')); }
@@ -134,7 +145,7 @@ export default function OvertimeScreen({ navigation }) {
       if (!data.success) throw new Error(data.message);
       await loadOverview();
     } catch (err) { setError(getApiMessage(err, 'Failed to cancel overtime request.')); }
-    finally { setCancelling(null); }
+    finally { setCancelling(null); setCancelConfirm(null); }
   }
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -199,7 +210,7 @@ export default function OvertimeScreen({ navigation }) {
               <Ionicons name="calendar-outline" size={16} color="#94a3b8" style={s.inputIcon} />
               <TextInput style={s.input} value={form.overtime_date} onChangeText={(v) => setF('overtime_date', v)}
                 placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
-              <TouchableOpacity onPress={() => setActivePicker('date')} style={s.pickerBtn}>
+              <TouchableOpacity onPress={() => setActivePicker('date')} style={s.pickerBtn} accessibilityLabel="Open date picker">
                 <Ionicons name="calendar" size={18} color="#1e40af" />
               </TouchableOpacity>
             </View>
@@ -210,7 +221,7 @@ export default function OvertimeScreen({ navigation }) {
                 <Ionicons name="play-outline" size={14} color="#94a3b8" style={s.inputIcon} />
                 <TextInput style={s.input} value={form.start_time} onChangeText={(v) => setF('start_time', v)}
                   placeholder="HH:MM" placeholderTextColor="#94a3b8" />
-                <TouchableOpacity onPress={() => setActivePicker('start_time')} style={s.pickerBtn}>
+                <TouchableOpacity onPress={() => setActivePicker('start_time')} style={s.pickerBtn} accessibilityLabel="Open start time picker">
                   <Ionicons name="time" size={17} color="#1e40af" />
                 </TouchableOpacity>
               </View>
@@ -218,7 +229,7 @@ export default function OvertimeScreen({ navigation }) {
                 <Ionicons name="stop-outline" size={14} color="#94a3b8" style={s.inputIcon} />
                 <TextInput style={s.input} value={form.end_time} onChangeText={(v) => setF('end_time', v)}
                   placeholder="HH:MM" placeholderTextColor="#94a3b8" />
-                <TouchableOpacity onPress={() => setActivePicker('end_time')} style={s.pickerBtn}>
+                <TouchableOpacity onPress={() => setActivePicker('end_time')} style={s.pickerBtn} accessibilityLabel="Open end time picker">
                   <Ionicons name="time" size={17} color="#1e40af" />
                 </TouchableOpacity>
               </View>
@@ -298,7 +309,7 @@ export default function OvertimeScreen({ navigation }) {
                   {isPending && (
                     <TouchableOpacity
                       style={s.cancelBtn}
-                      onPress={() => cancelOvertime(req.request_id || req.overtime_request_id)}
+                      onPress={() => setCancelConfirm(req.request_id || req.overtime_request_id)}
                       disabled={Boolean(cancelling)}
                     >
                       {isCancelling
@@ -313,18 +324,35 @@ export default function OvertimeScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* Success Modal */}
-      <Modal visible={Boolean(successMsg)} transparent animationType="fade" onRequestClose={() => setSuccessMsg('')}>
-        <Pressable style={s.dialogBackdrop} onPress={() => setSuccessMsg('')}>
-          <Pressable style={s.dialog} onPress={() => {}}>
-            <View style={s.dialogIconWrap}>
-              <Ionicons name="checkmark-circle" size={32} color="#15803d" />
+      {toast ? (
+        <View style={s.toast}>
+          <Ionicons name="checkmark-circle" size={16} color="#34d399" />
+          <Text style={s.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+
+      <Modal visible={Boolean(cancelConfirm)} transparent animationType="fade" onRequestClose={() => !cancelling && setCancelConfirm(null)}>
+        <Pressable style={s.warnBackdrop} onPress={() => !cancelling && setCancelConfirm(null)}>
+          <Pressable style={s.warnDialog} onPress={() => {}}>
+            <View style={s.warnIconWrap}>
+              <Ionicons name="close-circle-outline" size={28} color="#dc2626" />
             </View>
-            <Text style={s.dialogTitle}>Request Submitted</Text>
-            <Text style={s.dialogMsg}>{successMsg}</Text>
-            <TouchableOpacity style={s.dialogOkBtn} onPress={() => setSuccessMsg('')}>
-              <Text style={s.dialogOkText}>OK</Text>
-            </TouchableOpacity>
+            <Text style={s.warnTitle}>Cancel Overtime Request</Text>
+            <Text style={s.warnMsg}>Are you sure you want to cancel this overtime request? This action cannot be undone.</Text>
+            <View style={s.warnActions}>
+              <TouchableOpacity style={s.warnKeepBtn} onPress={() => setCancelConfirm(null)} disabled={Boolean(cancelling)}>
+                <Text style={s.warnKeepText}>Keep Request</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.warnDiscardBtn, Boolean(cancelling) && { opacity: 0.6 }]}
+                onPress={() => cancelOvertime(cancelConfirm)}
+                disabled={Boolean(cancelling)}
+              >
+                {cancelling
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.warnDiscardText}>Cancel Request</Text>}
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -375,11 +403,16 @@ const s = StyleSheet.create({
   pickerBtn: { padding: 6 },
   cancelBtn: { marginTop: 10, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', alignItems: 'center' },
   cancelBtnText: { color: '#b91c1c', fontSize: 13, fontWeight: '700' },
-  dialogBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  dialog: { backgroundColor: '#fff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, elevation: 12 },
-  dialogIconWrap: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  dialogTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
-  dialogMsg: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  dialogOkBtn: { backgroundColor: '#1e40af', borderRadius: 14, paddingVertical: 13, paddingHorizontal: 40, alignItems: 'center' },
-  dialogOkText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
+  warnBackdrop:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  warnDialog:      { backgroundColor: '#fff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, elevation: 12 },
+  warnIconWrap:    { width: 60, height: 60, borderRadius: 20, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  warnTitle:       { fontSize: 18, fontWeight: '900', color: '#0f172a', marginBottom: 10 },
+  warnMsg:         { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  warnActions:     { flexDirection: 'row', gap: 12, width: '100%' },
+  warnKeepBtn:     { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#f1f5f9', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  warnKeepText:    { fontSize: 14, fontWeight: '700', color: '#64748b' },
+  warnDiscardBtn:  { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#dc2626', alignItems: 'center' },
+  warnDiscardText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

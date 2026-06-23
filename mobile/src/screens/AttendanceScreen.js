@@ -58,12 +58,24 @@ function getStatus(record) {
 export default function AttendanceScreen({ navigation }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [records, setRecords] = useState([]);
+  const [records,    setRecords]    = useState([]);
+  const [dateHired,  setDateHired]  = useState(null); // 'YYYY-MM-DD'
   const [from, setFrom] = useState(todayStr);
   const [to, setTo] = useState(todayStr);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activePicker, setActivePicker] = useState(null); // 'from' | 'to' | null
+
+  // Fetch hire date once on mount
+  useEffect(() => {
+    if (!user?.user_id) return;
+    api.get('/employee_dashboard', { params: { user_id: user.user_id } })
+      .then(({ data }) => {
+        const hired = data?.employee?.date_hired;
+        if (hired) setDateHired(String(hired).slice(0, 10));
+      })
+      .catch(() => {});
+  }, [user?.user_id]);
 
   function onDateChange(event, selectedDate) {
     const field = activePicker;
@@ -104,9 +116,14 @@ export default function AttendanceScreen({ navigation }) {
 
   useEffect(() => { load(from, to); }, []);
 
-  const present = records.filter((r) => getStatus(r).label === 'Present').length;
-  const absent  = records.filter((r) => getStatus(r).label === 'Absent').length;
-  const incomplete = records.filter((r) => getStatus(r).label === 'Incomplete').length;
+  // Strip any records the API returns that fall before the hire date
+  const validRecords = dateHired
+    ? records.filter((r) => !r.attendance_date || String(r.attendance_date).slice(0, 10) >= dateHired)
+    : records;
+
+  const present    = validRecords.filter((r) => getStatus(r).label === 'Present').length;
+  const absent     = validRecords.filter((r) => getStatus(r).label === 'Absent').length;
+  const incomplete = validRecords.filter((r) => getStatus(r).label === 'Incomplete').length;
 
   return (
     <ScrollView
@@ -120,6 +137,9 @@ export default function AttendanceScreen({ navigation }) {
           <View>
             <Text style={s.headerTitle}>Attendance</Text>
             <Text style={s.headerSub}>View your timekeeping records</Text>
+            {dateHired && (
+              <Text style={s.hiredNote}>Records start from {formatDateLabel(dateHired)}</Text>
+            )}
           </View>
           <HeaderActions navigation={navigation} />
         </View>
@@ -151,7 +171,21 @@ export default function AttendanceScreen({ navigation }) {
             <Ionicons name="calendar-outline" size={14} color="#93c5fd" />
             <Text style={s.filterText}>{to || 'To'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.applyBtn} onPress={() => load(from, to)}>
+          <TouchableOpacity
+            style={s.applyBtn}
+            accessibilityLabel="Search attendance records"
+            onPress={() => {
+              if (from && to && new Date(`${from}T00:00:00`) > new Date(`${to}T00:00:00`)) {
+                setError('"From" date cannot be after "To" date.');
+                return;
+              }
+              if (dateHired && from < dateHired) {
+                setError(`Attendance records start from your hire date (${formatDateLabel(dateHired)}).`);
+                return;
+              }
+              load(from, to);
+            }}
+          >
             <Ionicons name="search-outline" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -160,6 +194,8 @@ export default function AttendanceScreen({ navigation }) {
             value={getPickerDate(activePicker)}
             mode="date"
             display="default"
+            minimumDate={dateHired ? new Date(`${dateHired}T00:00:00`) : undefined}
+            maximumDate={new Date()}
             onChange={onDateChange}
           />
         )}
@@ -174,7 +210,7 @@ export default function AttendanceScreen({ navigation }) {
           </View>
         ) : null}
 
-        {records.length === 0 && !loading ? (
+        {validRecords.length === 0 && !loading ? (
           <View style={s.empty}>
             <Ionicons name="calendar-outline" size={52} color="#cbd5e1" />
             <Text style={s.emptyText}>No attendance records</Text>
@@ -182,7 +218,7 @@ export default function AttendanceScreen({ navigation }) {
           </View>
         ) : null}
 
-        {records.map((record, i) => {
+        {validRecords.map((record, i) => {
           const status = getStatus(record);
           const hours = computeHours(record);
           const lateMin = record.late_minutes != null ? Number(record.late_minutes) : 0;
@@ -265,7 +301,8 @@ const s = StyleSheet.create({
   content: { paddingBottom: 48 },
   header: { backgroundColor: '#1e3a8a', paddingHorizontal: 20, paddingBottom: 20 },
   headerTitle: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  headerSub: { fontSize: 13, color: '#93c5fd', marginTop: 2, marginBottom: 16 },
+  headerSub: { fontSize: 13, color: '#93c5fd', marginTop: 2 },
+  hiredNote: { fontSize: 11, color: '#60a5fa', marginTop: 2, marginBottom: 14, fontStyle: 'italic' },
   summaryRow: { flexDirection: 'row', gap: 6, marginBottom: 16 },
   summaryPill: { flex: 1, alignItems: 'center', borderRadius: 14, paddingVertical: 10, gap: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   summaryCount: { fontSize: 18, fontWeight: '900' },

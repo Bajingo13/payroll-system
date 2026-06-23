@@ -5,8 +5,10 @@ import { api } from '../api/client';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user,          setUser]          = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [justLoggedIn,  setJustLoggedIn]  = useState(false);
+  const [justLoggedOut, setJustLoggedOut] = useState(false);
 
   useEffect(() => {
     AsyncStorage.multiGet(['user_id', 'full_name', 'role'])
@@ -24,6 +26,7 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Step 1 — authenticate + persist, but do NOT navigate yet
   async function login(username, password) {
     const { data } = await api.post('/login', { username, password });
     if (!data.success) throw new Error(data.message || 'Invalid username or password.');
@@ -37,17 +40,29 @@ export function AuthProvider({ children }) {
       ['full_name', nextUser.full_name],
       ['role', nextUser.role],
     ]);
-    setUser(nextUser);
     return nextUser;
   }
+
+  // Step 2 — set user state (triggers navigation to Main)
+  const commitLogin = useCallback((nextUser) => {
+    setUser(nextUser);
+    setJustLoggedIn(true);
+  }, []);
 
   const logout = useCallback(async () => {
     try { await api.post('/logout'); } catch (_) {}
     await AsyncStorage.multiRemove(['user_id', 'full_name', 'role', 'session_cookie']);
+    setJustLoggedOut(true);
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, logout]);
+  const clearLoginFlag  = useCallback(() => setJustLoggedIn(false),  []);
+  const clearLogoutFlag = useCallback(() => setJustLoggedOut(false), []);
+
+  const value = useMemo(
+    () => ({ user, loading, login, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag }),
+    [user, loading, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

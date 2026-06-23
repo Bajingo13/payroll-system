@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -40,17 +41,19 @@ function fmtDate(v) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
-function InfoRow({ label, value, highlight, editing, onChange, multiline }) {
+function InfoRow({ label, value, highlight, editing, onChange, multiline, required }) {
   return (
     <View style={[ds.infoRow, editing && ds.infoRowEdit]}>
-      <Text style={ds.infoLabel}>{label}</Text>
+      <Text style={ds.infoLabel}>
+        {label}{required && editing ? <Text style={ds.requiredStar}> *</Text> : null}
+      </Text>
       {editing ? (
         <TextInput
-          style={[ds.infoInput, highlight && { color: T.accentLight }, multiline && { height: 64 }]}
+          style={[ds.infoInput, highlight && { color: T.accentLight }, multiline && { height: 64 }, required && !value?.trim() && ds.infoInputError]}
           value={value ?? ''}
           onChangeText={onChange}
           placeholderTextColor={T.textMuted}
-          placeholder={`Enter ${label.toLowerCase()}`}
+          placeholder={`Enter ${label.toLowerCase()}${required ? ' (required)' : ''}`}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
         />
@@ -122,10 +125,11 @@ function EmployeeDetail({ empCode }) {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [tab,     setTab]     = useState('personal');
-  const [editing, setEditing] = useState(false);
-  const [form,    setForm]    = useState({});
-  const [saving,  setSaving]  = useState(false);
-  const [toast,   setToast]   = useState('');
+  const [editing,      setEditing]      = useState(false);
+  const [form,         setForm]         = useState({});
+  const [saving,       setSaving]       = useState(false);
+  const [toast,        setToast]        = useState('');
+  const [discardModal, setDiscardModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -142,18 +146,15 @@ function EmployeeDetail({ empCode }) {
   }, [empCode]);
 
   function startEdit() { setForm(initForm(emp)); setEditing(true); setError(''); }
-  function cancelEdit() {
-    Alert.alert('Discard Changes', 'Unsaved changes will be lost.', [
-      { text: 'Keep Editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => setEditing(false) },
-    ]);
-  }
+  function cancelEdit() { setDiscardModal(true); }
 
   function setF(key, value) { setForm((p) => ({ ...p, [key]: value })); }
   function setPC(key, value) { setForm((p) => ({ ...p, payrollComputation: { ...p.payrollComputation, [key]: value } })); }
   function setTI(key, value) { setForm((p) => ({ ...p, taxInsurance: { ...p.taxInsurance, [key]: value } })); }
 
   async function saveChanges() {
+    if (!form.first_name?.trim()) { setError('First Name is required.'); return; }
+    if (!form.last_name?.trim())  { setError('Last Name is required.');  return; }
     setSaving(true);
     setError('');
     try {
@@ -184,7 +185,7 @@ function EmployeeDetail({ empCode }) {
       setEmp((prev) => ({ ...prev, ...form }));
       setEditing(false);
       setToast('Changes saved successfully.');
-      setTimeout(() => setToast(''), 3000);
+      setTimeout(() => setToast(''), 2500);
     } catch (err) {
       setError(getApiMessage(err, 'Failed to save changes.'));
     } finally { setSaving(false); }
@@ -289,6 +290,27 @@ function EmployeeDetail({ empCode }) {
         })}
       </View>
 
+      {/* ── Discard changes confirmation ── */}
+      <Modal visible={discardModal} transparent animationType="fade" onRequestClose={() => setDiscardModal(false)}>
+        <Pressable style={ds.warnBackdrop} onPress={() => setDiscardModal(false)}>
+          <Pressable style={ds.warnDialog} onPress={() => {}}>
+            <View style={ds.warnIconWrap}>
+              <Ionicons name="alert-circle-outline" size={28} color="#d97706" />
+            </View>
+            <Text style={ds.warnTitle}>Discard Changes</Text>
+            <Text style={ds.warnMsg}>Unsaved changes will be lost. Are you sure you want to discard them?</Text>
+            <View style={ds.warnActions}>
+              <TouchableOpacity style={ds.warnKeepBtn} onPress={() => setDiscardModal(false)}>
+                <Text style={ds.warnKeepText}>Keep Editing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={ds.warnDiscardBtn} onPress={() => { setEditing(false); setDiscardModal(false); }}>
+                <Text style={ds.warnDiscardText}>Discard</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Tab content ── */}
       <ScrollView contentContainerStyle={ds.tabContent}>
 
@@ -296,9 +318,9 @@ function EmployeeDetail({ empCode }) {
         {tab === 'personal' && (
           <>
             <SectionCard title="Personal Information" icon="person-outline">
-              <InfoRow label="First Name"   value={f.first_name}   editing={editing} onChange={(v) => setF('first_name', v)} />
+              <InfoRow label="First Name"   value={f.first_name}   editing={editing} onChange={(v) => setF('first_name', v)} required />
               <InfoRow label="Middle Name"  value={f.middle_name}  editing={editing} onChange={(v) => setF('middle_name', v)} />
-              <InfoRow label="Last Name"    value={f.last_name}    editing={editing} onChange={(v) => setF('last_name', v)} />
+              <InfoRow label="Last Name"    value={f.last_name}    editing={editing} onChange={(v) => setF('last_name', v)} required />
               <InfoRow label="Nickname"     value={f.nickname}     editing={editing} onChange={(v) => setF('nickname', v)} />
               <InfoRow label="Gender"       value={f.gender}       editing={editing} onChange={(v) => setF('gender', v)} />
               <InfoRow label="Civil Status" value={f.civil_status} editing={editing} onChange={(v) => setF('civil_status', v)} />
@@ -524,7 +546,7 @@ export default function HREmployeeFileScreen({ navigation }) {
     return (
       <View style={s.root}>
         <View style={[s.detailHeader, { paddingTop: insets.top + 16 }]}>
-          <TouchableOpacity style={s.backBtn} onPress={() => setSelected(null)}>
+          <TouchableOpacity style={s.backBtn} onPress={() => setSelected(null)} accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={T.accentLight} />
           </TouchableOpacity>
           <Text style={s.detailHeaderTitle}>Employee File</Text>
@@ -539,7 +561,7 @@ export default function HREmployeeFileScreen({ navigation }) {
     <View style={s.root}>
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View style={s.headerRow}>
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={T.accentLight} />
           </TouchableOpacity>
           <View style={s.headerText}>
@@ -558,7 +580,7 @@ export default function HREmployeeFileScreen({ navigation }) {
             placeholderTextColor={T.textMuted}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search">
               <Ionicons name="close-circle" size={15} color={T.textMuted} />
             </TouchableOpacity>
           )}
@@ -684,7 +706,7 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: T.textSub },
   errorText: { color: '#f87171', textAlign: 'center', padding: 16, fontSize: 13 },
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.headerBg, paddingHorizontal: 20, paddingBottom: 14 },
-  detailHeaderTitle: { fontSize: 18, fontWeight: '800', color: T.textPrimary },
+  detailHeaderTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
 });
 
 // Detail styles
@@ -723,6 +745,8 @@ const ds = StyleSheet.create({
   infoLabel: { fontSize: 12, color: T.textSub, flex: 1, paddingTop: 4 },
   infoValue: { fontSize: 12, fontWeight: '700', color: T.textPrimary, flex: 1.2, textAlign: 'right' },
   infoInput: { flex: 1.2, fontSize: 13, color: T.textPrimary, fontWeight: '600', backgroundColor: T.surfaceAlt, borderRadius: 8, borderWidth: 1, borderColor: T.accent + '55', paddingHorizontal: 10, paddingVertical: 7, minHeight: 38 },
+  infoInputError: { borderColor: '#f87171', backgroundColor: '#fef2f2' },
+  requiredStar: { color: '#f87171', fontWeight: '900' },
 
   headerActions: { alignItems: 'flex-end', gap: 6 },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: T.accentBg, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.accent + '55' },
@@ -738,11 +762,21 @@ const ds = StyleSheet.create({
   errorBar: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fef2f2', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#fecaca' },
   errorBarText: { fontSize: 11, color: '#f87171', flex: 1 },
 
-  toast: { position: 'absolute', bottom: 24, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', zIndex: 99 },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
   toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   readOnlyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 12, backgroundColor: T.surfaceAlt },
   readOnlyNoteText: { fontSize: 11, color: T.textMuted, flex: 1, lineHeight: 16 },
+  warnBackdrop:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  warnDialog:      { backgroundColor: T.surface, borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, elevation: 12 },
+  warnIconWrap:    { width: 60, height: 60, borderRadius: 20, backgroundColor: '#fffbeb', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  warnTitle:       { fontSize: 18, fontWeight: '900', color: T.textPrimary, marginBottom: 10 },
+  warnMsg:         { fontSize: 14, color: T.textSub, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  warnActions:     { flexDirection: 'row', gap: 12, width: '100%' },
+  warnKeepBtn:     { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: T.surfaceAlt, alignItems: 'center', borderWidth: 1, borderColor: T.border },
+  warnKeepText:    { fontSize: 14, fontWeight: '700', color: T.textSub },
+  warnDiscardBtn:  { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#dc2626', alignItems: 'center' },
+  warnDiscardText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 
   evalSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   evalSummaryPill: { flex: 1, backgroundColor: T.surface, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: T.border },

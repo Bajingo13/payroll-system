@@ -85,14 +85,15 @@ export default function HRLeaveManagementScreen({ navigation }) {
 
   function openAction(req, type) {
     setRejReason('');
+    setError('');
     setActionModal({ req, type });
   }
 
   async function submitAction() {
     if (!actionModal) return;
     const { req, type } = actionModal;
-    if (type === 'Rejected' && !rejReason.trim()) {
-      setError('Please provide a rejection reason.'); return;
+    if (type === 'Rejected' && rejReason.trim().length < 5) {
+      setError('Please provide a rejection reason (at least 5 characters).'); return;
     }
     setSubmitting(true);
     try {
@@ -129,10 +130,10 @@ export default function HRLeaveManagementScreen({ navigation }) {
             <Text style={s.headerSub}>Review and action employee leave</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
+            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')} accessibilityLabel="Notifications">
               <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
             </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})} accessibilityLabel="Account settings">
               <Text style={s.avatarText}>{String((user?.full_name?.split(' ')[0] || 'H')[0]).toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
@@ -238,11 +239,11 @@ export default function HRLeaveManagementScreen({ navigation }) {
               {/* Actions */}
               {isPending && (
                 <View style={s.actionRow}>
-                  <TouchableOpacity style={s.rejectBtn} onPress={() => openAction(req, 'Rejected')}>
+                  <TouchableOpacity style={s.rejectBtn} onPress={() => openAction(req, 'Rejected')} accessibilityLabel={`Reject leave request from ${req.employee_name}`}>
                     <Ionicons name="close" size={15} color="#f87171" />
                     <Text style={s.rejectBtnText}>Reject</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.approveBtn} onPress={() => openAction(req, 'Approved')}>
+                  <TouchableOpacity style={s.approveBtn} onPress={() => openAction(req, 'Approved')} accessibilityLabel={`Approve leave request from ${req.employee_name}`}>
                     <Ionicons name="checkmark" size={15} color="#fff" />
                     <Text style={s.approveBtnText}>Approve</Text>
                   </TouchableOpacity>
@@ -262,8 +263,8 @@ export default function HRLeaveManagementScreen({ navigation }) {
       ) : null}
 
       {/* ── Action Modal ── */}
-      <Modal visible={Boolean(actionModal)} transparent animationType="slide" onRequestClose={() => setActionModal(null)}>
-        <Pressable style={s.modalBackdrop} onPress={() => setActionModal(null)}>
+      <Modal visible={Boolean(actionModal)} transparent animationType="slide" onRequestClose={() => { setActionModal(null); setError(''); }}>
+        <Pressable style={s.modalBackdrop} onPress={() => { setActionModal(null); setError(''); }}>
           <Pressable style={s.modalSheet} onPress={() => {}}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>
@@ -291,7 +292,7 @@ export default function HRLeaveManagementScreen({ navigation }) {
             )}
             {error ? <Text style={s.modalError}>{error}</Text> : null}
             <View style={s.modalActions}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setActionModal(null)}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setActionModal(null); setError(''); }}>
                 <Text style={s.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -375,7 +376,7 @@ const s = StyleSheet.create({
   approveBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 
   // Toast
-  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0' },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
   toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   // Empty

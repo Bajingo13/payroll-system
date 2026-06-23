@@ -82,10 +82,12 @@ export default function HRCalendarScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error,      setError]      = useState('');
   const [selected,   setSelected]   = useState(null); // 'YYYY-MM-DD' or null = all
-  const [addModal,   setAddModal]   = useState(false);
-  const [form,       setForm]       = useState({ event_date: '', title: '', event_type: 'Company Event', description: '', is_paid_holiday: false });
-  const [submitting, setSubmitting] = useState(false);
-  const [toast,      setToast]      = useState('');
+  const [addModal,     setAddModal]     = useState(false);
+  const [form,         setForm]         = useState({ event_date: '', title: '', event_type: 'Company Event', description: '', is_paid_holiday: false });
+  const [submitting,   setSubmitting]   = useState(false);
+  const [toast,        setToast]        = useState('');
+  const [deleteModal,  setDeleteModal]  = useState(null); // { eventId, title }
+  const [deleting,     setDeleting]     = useState(false);
 
   async function load(y, m, isRefresh = false) {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -106,16 +108,27 @@ export default function HRCalendarScreen({ navigation }) {
     setYear(y); setMonth(m);
   }
 
-  async function deleteEvent(eventId) {
+  function deleteEvent(eventId, title) {
+    setDeleteModal({ eventId, title: title || 'this event' });
+  }
+
+  async function confirmDelete() {
+    if (!deleteModal) return;
+    setDeleting(true);
     try {
-      await api.delete(`/company-calendar/events/${eventId}`);
-      setEvents((prev) => prev.filter((e) => e.event_id !== eventId));
+      await api.delete(`/company-calendar/events/${deleteModal.eventId}`);
+      setEvents((prev) => prev.filter((e) => e.event_id !== deleteModal.eventId));
+      setDeleteModal(null);
       showToast('Event deleted.');
     } catch (err) { setError(getApiMessage(err, 'Delete failed.')); }
+    finally { setDeleting(false); }
   }
 
   async function submitAdd() {
     if (!form.event_date || !form.title.trim()) { setError('Date and title are required.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.event_date) || Number.isNaN(new Date(`${form.event_date}T00:00:00`).getTime())) {
+      setError('Invalid date format. Use YYYY-MM-DD (e.g. 2026-06-23).'); return;
+    }
     setSubmitting(true);
     try {
       const { data } = await api.post('/company-calendar/events', { ...form, is_paid_holiday: form.is_paid_holiday ? 1 : 0 });
@@ -130,7 +143,7 @@ export default function HRCalendarScreen({ navigation }) {
 
   function resetForm() { setForm({ event_date: '', title: '', event_type: 'Company Event', description: '', is_paid_holiday: false }); }
   function setF(k, v)  { setForm((p) => ({ ...p, [k]: v })); }
-  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2200); }
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   function openAddForDay(dateStr) {
     setError('');
@@ -164,22 +177,22 @@ export default function HRCalendarScreen({ navigation }) {
       {/* ── Header ── */}
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View style={s.headerRow}>
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={T.accentLight} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Company Calendar</Text>
-          <TouchableOpacity style={s.addBtn} onPress={() => { setError(''); resetForm(); setAddModal(true); }}>
+          <TouchableOpacity style={s.addBtn} onPress={() => { setError(''); resetForm(); setAddModal(true); }} accessibilityLabel="Add calendar event">
             <Ionicons name="add" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
 
         {/* Month nav */}
         <View style={s.monthNav}>
-          <TouchableOpacity style={s.monthArrow} onPress={() => shiftMonth(-1)}>
+          <TouchableOpacity style={s.monthArrow} onPress={() => shiftMonth(-1)} accessibilityLabel="Previous month">
             <Ionicons name="chevron-back" size={18} color={T.accentLight} />
           </TouchableOpacity>
           <Text style={s.monthLabel}>{fmtMonthLabel(year, month)}</Text>
-          <TouchableOpacity style={s.monthArrow} onPress={() => shiftMonth(1)}>
+          <TouchableOpacity style={s.monthArrow} onPress={() => shiftMonth(1)} accessibilityLabel="Next month">
             <Ionicons name="chevron-forward" size={18} color={T.accentLight} />
           </TouchableOpacity>
         </View>
@@ -309,7 +322,7 @@ export default function HRCalendarScreen({ navigation }) {
                   {ev.is_paid_holiday ? (
                     <View style={s.paidBadge}><Text style={s.paidText}>Paid</Text></View>
                   ) : null}
-                  <TouchableOpacity onPress={() => deleteEvent(ev.event_id)} style={s.deleteBtn}>
+                  <TouchableOpacity onPress={() => deleteEvent(ev.event_id, ev.title)} style={s.deleteBtn} accessibilityLabel={`Delete event ${ev.title || 'event'}`}>
                     <Ionicons name="trash-outline" size={16} color="#f87171" />
                   </TouchableOpacity>
                 </View>
@@ -405,6 +418,37 @@ export default function HRCalendarScreen({ navigation }) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── Delete Confirmation Modal ── */}
+      <Modal visible={Boolean(deleteModal)} transparent animationType="fade" onRequestClose={() => setDeleteModal(null)}>
+        <Pressable style={s.delBackdrop} onPress={() => setDeleteModal(null)}>
+          <Pressable style={s.delDialog} onPress={() => {}}>
+            <View style={s.delIconWrap}>
+              <Ionicons name="trash-outline" size={28} color="#dc2626" />
+            </View>
+            <Text style={s.delTitle}>Delete Event</Text>
+            <Text style={s.delMsg}>
+              Are you sure you want to delete{'\n'}
+              <Text style={{ fontWeight: '800', color: T.textPrimary }}>"{deleteModal?.title}"</Text>?{'\n'}
+              This cannot be undone.
+            </Text>
+            <View style={s.delActions}>
+              <TouchableOpacity style={s.delCancelBtn} onPress={() => setDeleteModal(null)}>
+                <Text style={s.delCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.delConfirmBtn, deleting && { opacity: 0.6 }]}
+                onPress={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.delConfirmText}>Delete</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -487,7 +531,7 @@ const s = StyleSheet.create({
 
   // ── Error / Toast ──
   errorText: { color: '#f87171', fontSize: 12, marginBottom: 8 },
-  toast:     { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0' },
+  toast:     { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
   toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   // ── Add Modal ──
@@ -509,4 +553,16 @@ const s = StyleSheet.create({
   cancelText:  { color: T.textSub, fontWeight: '700', fontSize: 14 },
   confirmBtn:  { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: T.accent },
   confirmText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+
+  // ── Delete confirmation dialog ──
+  delBackdrop:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  delDialog:      { backgroundColor: T.surface, borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, elevation: 12 },
+  delIconWrap:    { width: 60, height: 60, borderRadius: 20, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  delTitle:       { fontSize: 18, fontWeight: '900', color: T.textPrimary, marginBottom: 10 },
+  delMsg:         { fontSize: 14, color: T.textSub, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  delActions:     { flexDirection: 'row', gap: 12, width: '100%' },
+  delCancelBtn:   { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: T.surfaceAlt, alignItems: 'center', borderWidth: 1, borderColor: T.border },
+  delCancelText:  { fontSize: 14, fontWeight: '700', color: T.textSub },
+  delConfirmBtn:  { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#dc2626', alignItems: 'center' },
+  delConfirmText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

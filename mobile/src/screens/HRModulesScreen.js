@@ -80,10 +80,10 @@ export default function HRModulesScreen({ navigation }) {
             <Text style={s.headerSub}>Quick access to all HR functions</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
+            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')} accessibilityLabel="Notifications">
               <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
             </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})} accessibilityLabel="Account settings">
               <Text style={s.avatarText}>{String((user?.full_name?.split(' ')[0] || 'H')[0]).toUpperCase()}</Text>
             </TouchableOpacity>
           </View>

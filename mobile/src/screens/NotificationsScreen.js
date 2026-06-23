@@ -127,7 +127,7 @@ export default function NotificationsScreen({ navigation }) {
     <View style={[s.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
           <Text style={s.backText}>‹</Text>
         </TouchableOpacity>
         <Text style={s.title}>Notifications</Text>

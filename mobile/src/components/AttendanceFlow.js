@@ -234,10 +234,10 @@ function SelfieCapture({ capturedPhoto, onPhotoCaptured, onRetake, onSave, busy,
           <Text style={sc.previewBadgeText}>📷 Photo captured</Text>
         </View>
         <View style={sc.topActions}>
-          <TouchableOpacity style={sc.topActionBtn} onPress={onRetake} disabled={busy}>
+          <TouchableOpacity style={sc.topActionBtn} onPress={onRetake} disabled={busy} accessibilityLabel="Retake photo">
             <Text style={sc.topActionText}>‹</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={sc.topActionBtn} onPress={onClose} disabled={busy}>
+          <TouchableOpacity style={sc.topActionBtn} onPress={onClose} disabled={busy} accessibilityLabel="Close">
             <Text style={sc.topActionText}>×</Text>
           </TouchableOpacity>
         </View>
@@ -259,10 +259,10 @@ function SelfieCapture({ capturedPhoto, onPhotoCaptured, onRetake, onSave, busy,
     <View style={sc.container}>
       <CameraView ref={cameraRef} style={sc.camera} facing={cameraFacing} />
       <View style={sc.topActions}>
-        <TouchableOpacity style={sc.topActionBtn} onPress={onBack} disabled={busy}>
+        <TouchableOpacity style={sc.topActionBtn} onPress={onBack} disabled={busy} accessibilityLabel="Go back">
           <Text style={sc.topActionText}>‹</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={sc.topActionBtn} onPress={onClose} disabled={busy}>
+        <TouchableOpacity style={sc.topActionBtn} onPress={onClose} disabled={busy} accessibilityLabel="Close">
           <Text style={sc.topActionText}>×</Text>
         </TouchableOpacity>
       </View>
@@ -623,7 +623,7 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
             {/* ── Header ── */}
             <View style={c.header}>
               {step !== 'recording' ? (
-                <TouchableOpacity style={c.navBtn} onPress={goBack}>
+                <TouchableOpacity style={c.navBtn} onPress={goBack} accessibilityLabel="Go back">
                   <Text style={c.navBtnText}>‹</Text>
                 </TouchableOpacity>
               ) : <View style={c.navBtn} />}
@@ -632,7 +632,7 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
                 {step === 'recording' ? 'Time Recording' : 'Location Point'}
               </Text>
 
-              <TouchableOpacity style={c.navBtn} onPress={onClose}>
+              <TouchableOpacity style={c.navBtn} onPress={onClose} accessibilityLabel="Close">
                 <Text style={c.navBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -798,7 +798,7 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
               ) : null}
 
               <View style={c.locActions}>
-                <TouchableOpacity style={c.refreshBtn} onPress={detectLocation} disabled={locating}>
+                <TouchableOpacity style={c.refreshBtn} onPress={detectLocation} disabled={locating} accessibilityLabel="Refresh location">
                   <Text style={c.refreshBtnText}>↻</Text>
                 </TouchableOpacity>
                 <TouchableOpacity

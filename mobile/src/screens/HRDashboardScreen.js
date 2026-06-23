@@ -154,14 +154,27 @@ function Bar({ value, max, color }) {
 
 // ── Main Screen ────────────────────────────────────────────────────────────
 export default function HRDashboardScreen({ navigation }) {
-  const { user }    = useAuth();
+  const { user, justLoggedIn, clearLoginFlag } = useAuth();
   const insets      = useSafeAreaInsets();
-  const [summary,   setSummary]   = useState({});
-  const [analytics, setAnalytics] = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [refreshing,setRefreshing]= useState(false);
-  const [error,     setError]     = useState('');
+  const [summary,     setSummary]     = useState({});
+  const [analytics,   setAnalytics]   = useState(null);
+  const [aiError,     setAiError]     = useState(false);
+  const [loading,     setLoading]     = useState(true);
+  const [refreshing,  setRefreshing]  = useState(false);
+  const [error,       setError]       = useState('');
+  const [lastFetched, setLastFetched] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [toast,       setToast]       = useState('');
+
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 3000); }
+
+  useEffect(() => {
+    if (justLoggedIn) {
+      const firstName = user?.full_name?.split(' ')[0] || 'there';
+      showToast(`Welcome back, ${firstName}! You are now logged in.`);
+      clearLoginFlag();
+    }
+  }, [justLoggedIn]);
 
   async function loadData(isRefresh = false) {
     if (!user?.user_id) return;
@@ -176,7 +189,10 @@ export default function HRDashboardScreen({ navigation }) {
       const dashData = dashRes.data || {};
       if (dashData.success === false) throw new Error(dashData.message || 'Dashboard error');
       setSummary(dashData);
-      setAnalytics(aiRes.data?.success ? aiRes.data : null);
+      const aiData = aiRes.data?.success ? aiRes.data : null;
+      setAnalytics(aiData);
+      setAiError(!aiData);
+      setLastFetched(new Date());
       setError('');
     } catch (err) {
       setError(getApiMessage(err, 'Unable to load HR dashboard.'));
@@ -255,8 +271,9 @@ export default function HRDashboardScreen({ navigation }) {
   }
 
   return (
+    <View style={s.root}>
     <ScrollView
-      style={s.root}
+      style={{ flex: 1 }}
       contentContainerStyle={s.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor={T.accentLight} />}
     >
@@ -278,13 +295,13 @@ export default function HRDashboardScreen({ navigation }) {
             <Text style={s.headerDate}>{today}</Text>
           </View>
           <View style={s.headerRight}>
-            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
+            <TouchableOpacity style={s.headerIconBtn} onPress={() => navigation.navigate('Notifications')} accessibilityLabel="Notifications">
               <Ionicons name="notifications" size={20} color="rgba(255,255,255,0.85)" />
               {unreadCount > 0 && (
                 <View style={s.notifBadge}><Text style={s.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})}>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Settings', {})} accessibilityLabel="Account settings">
               <Text style={s.avatarText}>{String(firstName[0]).toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
@@ -443,7 +460,14 @@ export default function HRDashboardScreen({ navigation }) {
         <Card accent="#f87171">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Turnover Risk</Text>
-            <Text style={s.cardBadge}>{topRisks.length} flagged</Text>
+            <View style={{ alignItems: 'flex-end', gap: 2 }}>
+              <Text style={s.cardBadge}>{topRisks.length} flagged</Text>
+              {lastFetched ? (
+                <Text style={[s.cardBadge, { fontSize: 9 }]}>
+                  {'Updated ' + lastFetched.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                </Text>
+              ) : null}
+            </View>
           </View>
           {topRisks.length === 0
             ? <Text style={s.emptyText}>No risk signals available.</Text>
@@ -522,57 +546,80 @@ export default function HRDashboardScreen({ navigation }) {
             <View style={s.aiBadge}><Text style={s.aiBadgeText}>✦ AI</Text></View>
           </View>
 
-          <View style={s.healthRow}>
-            <View style={[s.healthGauge, { borderColor: healthColor }]}>
-              <Text style={[s.healthScore, { color: healthColor }]}>{healthScore}</Text>
-              <Text style={[s.healthLabel, { color: healthColor }]}>{healthLabel}</Text>
-            </View>
-            <View style={s.healthMeta}>
-              <Text style={s.healthTitle}>Workforce Health</Text>
-              <Text style={s.healthDesc}>Based on tardiness, absence, turnover risk, and OT patterns.</Text>
-              <View style={[s.healthPill, { backgroundColor: healthColor + '22', borderColor: healthColor + '55' }]}>
-                <View style={[s.healthDot, { backgroundColor: healthColor }]} />
-                <Text style={[s.healthPillText, { color: healthColor }]}>{healthLabel}</Text>
+          {aiError ? (
+            <View style={s.aiUnavailableWrap}>
+              <Ionicons name="cloud-offline-outline" size={20} color="#94a3b8" />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.aiUnavailableText, { fontWeight: '700', marginBottom: 4 }]}>
+                  AI Analytics Unavailable
+                </Text>
+                <Text style={s.aiUnavailableText}>
+                  The AI service could not be reached. Pull down to refresh and retry.
+                </Text>
               </View>
             </View>
-          </View>
-
-          <View style={s.divider} />
-
-          <View style={s.insightList}>
-            {aiInsights.map((ins) => {
-              const ic = INSIGHT_COLORS[ins.type];
-              return (
-                <View key={ins.title} style={[s.insightItem, { backgroundColor: ic.bg, borderLeftColor: ic.fg }]}>
-                  <View style={[s.insightIconWrap, { backgroundColor: ic.iconBg }]}>
-                    <Text style={s.insightEmoji}>{ins.icon}</Text>
-                  </View>
-                  <View style={s.insightBody}>
-                    <Text style={[s.insightTitle, { color: ic.fg }]}>{ins.title}</Text>
-                    <Text style={s.insightDesc}>{ins.desc}</Text>
+          ) : (
+            <>
+              <View style={s.healthRow}>
+                <View style={[s.healthGauge, { borderColor: healthColor }]}>
+                  <Text style={[s.healthScore, { color: healthColor }]}>{healthScore}</Text>
+                  <Text style={[s.healthLabel, { color: healthColor }]}>{healthLabel}</Text>
+                </View>
+                <View style={s.healthMeta}>
+                  <Text style={s.healthTitle}>Workforce Health</Text>
+                  <Text style={s.healthDesc}>Based on tardiness, absence, turnover risk, and OT patterns.</Text>
+                  <View style={[s.healthPill, { backgroundColor: healthColor + '22', borderColor: healthColor + '55' }]}>
+                    <View style={[s.healthDot, { backgroundColor: healthColor }]} />
+                    <Text style={[s.healthPillText, { color: healthColor }]}>{healthLabel}</Text>
                   </View>
                 </View>
-              );
-            })}
-          </View>
-
-          <View style={s.divider} />
-
-          <Text style={s.subLabel}>Recommended Actions</Text>
-          {aiRecs.map((rec, i) => {
-            const pc = rec.priority === 'High' ? '#f87171' : rec.priority === 'Medium' ? '#fbbf24' : '#94a3b8';
-            return (
-              <View key={i} style={s.recRow}>
-                <View style={[s.recPill, { backgroundColor: pc + '20', borderColor: pc + '50' }]}>
-                  <Text style={[s.recPillText, { color: pc }]}>{rec.priority}</Text>
-                </View>
-                <Text style={s.recText}>{rec.text}</Text>
               </View>
-            );
-          })}
+
+              <View style={s.divider} />
+
+              <View style={s.insightList}>
+                {aiInsights.map((ins) => {
+                  const ic = INSIGHT_COLORS[ins.type];
+                  return (
+                    <View key={ins.title} style={[s.insightItem, { backgroundColor: ic.bg, borderLeftColor: ic.fg }]}>
+                      <View style={[s.insightIconWrap, { backgroundColor: ic.iconBg }]}>
+                        <Text style={s.insightEmoji}>{ins.icon}</Text>
+                      </View>
+                      <View style={s.insightBody}>
+                        <Text style={[s.insightTitle, { color: ic.fg }]}>{ins.title}</Text>
+                        <Text style={s.insightDesc}>{ins.desc}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={s.divider} />
+
+              <Text style={s.subLabel}>Recommended Actions</Text>
+              {aiRecs.map((rec, i) => {
+                const pc = rec.priority === 'High' ? '#f87171' : rec.priority === 'Medium' ? '#fbbf24' : '#94a3b8';
+                return (
+                  <View key={i} style={s.recRow}>
+                    <View style={[s.recPill, { backgroundColor: pc + '20', borderColor: pc + '50' }]}>
+                      <Text style={[s.recPillText, { color: pc }]}>{rec.priority}</Text>
+                    </View>
+                    <Text style={s.recText}>{rec.text}</Text>
+                  </View>
+                );
+              })}
+            </>
+          )}
         </Card>
       </View>
     </ScrollView>
+      {toast ? (
+        <View style={s.toast}>
+          <Ionicons name="checkmark-circle" size={16} color="#34d399" />
+          <Text style={s.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -741,4 +788,8 @@ const s = StyleSheet.create({
   errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12 },
   errorText: { color: '#b91c1c', fontSize: 13, flex: 1 },
   emptyText: { fontSize: 13, color: T.textMuted, fontStyle: 'italic', paddingVertical: 4 },
+  aiUnavailableWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: T.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: T.border, padding: 10, marginBottom: 12 },
+  aiUnavailableText: { flex: 1, fontSize: 11, color: T.textMuted, lineHeight: 16 },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 });

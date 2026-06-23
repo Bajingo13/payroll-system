@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
@@ -45,6 +45,10 @@ export default function SettingsScreen({ navigation, route }) {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwShow, setPwShow] = useState({ current: false, next: false, confirm: false });
+  const pwNextRef    = useRef(null);
+  const pwConfirmRef = useRef(null);
+  const [toast, setToast] = useState('');
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   function confirmLogout() {
     setLogoutSheet(true);
@@ -77,7 +81,7 @@ export default function SettingsScreen({ navigation, route }) {
       });
       if (!data.success) throw new Error(data.message);
       setPwModal(false);
-      Alert.alert('Password Changed', 'Your password has been updated successfully.');
+      showToast('Password changed successfully.');
     } catch (err) {
       setPwError(getApiMessage(err, 'Failed to change password.'));
     } finally {
@@ -172,7 +176,7 @@ export default function SettingsScreen({ navigation, route }) {
     <View style={[s.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back">
           <Text style={s.backText}>‹</Text>
         </TouchableOpacity>
         <Text style={s.title}>Settings</Text>
@@ -182,7 +186,7 @@ export default function SettingsScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={s.content}>
         {/* Avatar with upload */}
         <View style={s.avatarSection}>
-          <TouchableOpacity style={s.avatarWrap} onPress={showPhotoOptions} disabled={uploading}>
+          <TouchableOpacity style={s.avatarWrap} onPress={showPhotoOptions} disabled={uploading} accessibilityLabel="Change profile photo">
             {photoUrl ? (
               <Image source={{ uri: photoUrl }} style={s.avatarImg} />
             ) : (
@@ -241,6 +245,13 @@ export default function SettingsScreen({ navigation, route }) {
           <Text style={s.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {toast ? (
+        <View style={s.toast}>
+          <Ionicons name="checkmark-circle" size={16} color="#34d399" />
+          <Text style={s.toastText}>{toast}</Text>
+        </View>
+      ) : null}
 
       {/* Logout confirmation modal */}
       <Modal
@@ -329,25 +340,33 @@ export default function SettingsScreen({ navigation, route }) {
               </View>
               <Text style={s.dialogTitle}>Change Password</Text>
 
-              {['current', 'next', 'confirm'].map((field) => {
-                const labels = { current: 'Current Password', next: 'New Password', confirm: 'Confirm New Password' };
-                return (
-                  <View key={field} style={s.pwInputWrap}>
-                    <TextInput
-                      style={s.pwInput}
-                      placeholder={labels[field]}
-                      placeholderTextColor="#94a3b8"
-                      secureTextEntry={!pwShow[field]}
-                      value={pwForm[field]}
-                      onChangeText={(v) => setPwForm((f) => ({ ...f, [field]: v }))}
-                      autoCapitalize="none"
-                    />
-                    <TouchableOpacity onPress={() => setPwShow((p) => ({ ...p, [field]: !p[field] }))}>
-                      <Ionicons name={pwShow[field] ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+              {[
+                { field: 'current', label: 'Current Password', returnKey: 'next',  onSubmit: () => pwNextRef.current?.focus(),    ref: null },
+                { field: 'next',    label: 'New Password',     returnKey: 'next',  onSubmit: () => pwConfirmRef.current?.focus(), ref: pwNextRef },
+                { field: 'confirm', label: 'Confirm New Password', returnKey: 'done', onSubmit: savePassword, ref: pwConfirmRef },
+              ].map(({ field, label, returnKey, onSubmit, ref }) => (
+                <View key={field} style={s.pwInputWrap}>
+                  <TextInput
+                    ref={ref}
+                    style={s.pwInput}
+                    placeholder={label}
+                    placeholderTextColor="#94a3b8"
+                    secureTextEntry={!pwShow[field]}
+                    value={pwForm[field]}
+                    onChangeText={(v) => setPwForm((f) => ({ ...f, [field]: v }))}
+                    autoCapitalize="none"
+                    returnKeyType={returnKey}
+                    blurOnSubmit={returnKey === 'done'}
+                    onSubmitEditing={onSubmit}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setPwShow((p) => ({ ...p, [field]: !p[field] }))}
+                    accessibilityLabel={pwShow[field] ? `Hide ${label}` : `Show ${label}`}
+                  >
+                    <Ionicons name={pwShow[field] ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                </View>
+              ))}
 
               {pwError ? <Text style={s.pwError}>{pwError}</Text> : null}
 
@@ -417,6 +436,9 @@ const s = StyleSheet.create({
     alignItems: 'center', borderWidth: 1, borderColor: '#fecaca',
   },
   logoutText: { color: '#b91c1c', fontWeight: '800', fontSize: 15 },
+
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   // Logout dialog
   dialogBackdrop: {

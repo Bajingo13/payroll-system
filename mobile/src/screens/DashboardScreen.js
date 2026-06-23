@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   RefreshControl,
   ScrollView,
@@ -49,17 +48,28 @@ function money(value) {
 }
 
 export default function DashboardScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, logout, justLoggedIn, clearLoginFlag } = useAuth();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState('');
   const [now, setNow] = useState(() => new Date());
   const [flowOpen, setFlowOpen] = useState(false);
   const [flowAction, setFlowAction] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const timerRef = useRef(null);
+
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 3000); }
+
+  useEffect(() => {
+    if (justLoggedIn) {
+      const firstName = user?.full_name?.split(' ')[0] || 'there';
+      showToast(`Welcome back, ${firstName}! You are now logged in.`);
+      clearLoginFlag();
+    }
+  }, [justLoggedIn]);
 
   useEffect(() => {
     timerRef.current = setInterval(() => setNow(new Date()), 1000);
@@ -105,6 +115,8 @@ export default function DashboardScreen({ navigation }) {
       reconnectionAttempts: 5,
     });
     socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
+    socket.on('connect_error', () => {});
+    socket.on('error', () => {});
     return () => socket.disconnect();
   }, [user?.user_id]);
 
@@ -195,7 +207,7 @@ export default function DashboardScreen({ navigation }) {
       }
       await loadDashboard();
     } catch (err) {
-      Alert.alert('Error', getApiMessage(err, 'Unable to record time entry.'));
+      setMessage(getApiMessage(err, 'Unable to record time entry.'));
     } finally {
       setBusy(false);
     }
@@ -211,13 +223,6 @@ export default function DashboardScreen({ navigation }) {
     setFlowAction(null);
   }
 
-  function confirmLogout() {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: logout },
-    ]);
-  }
-
   const today = new Date().toLocaleDateString('en-PH', {
     weekday: 'long',
     month: 'long',
@@ -228,7 +233,7 @@ export default function DashboardScreen({ navigation }) {
   const BTN_ICONS = { time_in: 'log-in-outline', break_out: 'cafe-outline', break_in: 'return-down-back-outline', time_out: 'log-out-outline' };
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
     <AttendanceFlow
       visible={flowOpen}
       onClose={closeFlow}
@@ -251,14 +256,15 @@ export default function DashboardScreen({ navigation }) {
             <Text style={s.date}>{today}</Text>
           </View>
           <View style={s.headerIcons}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')}>
+            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')} accessibilityLabel="Notifications">
               <Ionicons name="notifications-outline" size={22} color="rgba(255,255,255,0.85)" />
               {unreadCount > 0 && (
                 <View style={s.badge}><Text style={s.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
               )}
             </TouchableOpacity>
             <TouchableOpacity style={s.avatarBtn}
-              onPress={() => navigation.navigate('Settings', { employee, profilePhotoUrl: data?.profilePhotoUrl })}>
+              onPress={() => navigation.navigate('Settings', { employee, profilePhotoUrl: data?.profilePhotoUrl })}
+              accessibilityLabel="Account settings">
               {profilePhotoUrl
                 ? <Image source={{ uri: profilePhotoUrl }} style={s.avatarBtnImg} />
                 : <Text style={s.avatarBtnText}>{String(employee.first_name || user?.full_name || 'U')[0].toUpperCase()}</Text>}
@@ -379,7 +385,13 @@ export default function DashboardScreen({ navigation }) {
         ) : null}
       </View>
     </ScrollView>
-    </>
+      {toast ? (
+        <View style={s.toast}>
+          <Ionicons name="checkmark-circle" size={16} color="#34d399" />
+          <Text style={s.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -448,6 +460,8 @@ const s = StyleSheet.create({
 
   errorWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', padding: 12 },
   errorText: { color: '#b91c1c', fontSize: 13, flex: 1 },
+  toast: { position: 'absolute', bottom: 80, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
+  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
 
   // Legacy stubs (kept to avoid missing style warnings)
   logoutBtn: { backgroundColor: '#fee2e2', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },

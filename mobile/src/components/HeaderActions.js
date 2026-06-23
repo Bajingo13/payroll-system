@@ -54,6 +54,8 @@ export default function HeaderActions({ navigation, photoUrl: photoUrlProp, empl
     socket.on('notification_count', (count) => {
       setUnreadCount(Number(count || 0));
     });
+    socket.on('connect_error', () => {});
+    socket.on('error', () => {});
 
     // ── Refresh on screen focus ───────────────────────────
     const unsub = navigation?.addListener('focus', () => {
@@ -75,7 +77,7 @@ export default function HeaderActions({ navigation, photoUrl: photoUrlProp, empl
       <TouchableOpacity style={s.btn} onPress={() => {
         setUnreadCount(0); // optimistic reset on open
         navigation.navigate('Notifications');
-      }}>
+      }} accessibilityLabel="Notifications">
         <Ionicons name="notifications-outline" size={22} color="rgba(255,255,255,0.85)" />
         {unreadCount > 0 && (
           <View style={s.badge}>
@@ -88,6 +90,7 @@ export default function HeaderActions({ navigation, photoUrl: photoUrlProp, empl
       <TouchableOpacity
         style={s.avatar}
         onPress={() => navigation.navigate('Settings', { employee: resolvedEmployee, profilePhotoUrl: resolvedPhotoUrl })}
+        accessibilityLabel="Account settings"
       >
         {resolvedPhotoUrl
           ? <Image source={{ uri: resolvedPhotoUrl }} style={s.avatarImg} />

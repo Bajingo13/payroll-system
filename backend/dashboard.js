@@ -1493,6 +1493,7 @@ module.exports = function (app, pool) {
             eu.emp_code,
             eu.employee_name,
             eu.department,
+            DATE_FORMAT(eu.date_hired, '%Y-%m-%d') AS date_hired,
             ls.time_in,
             ls.break_out,
             ls.break_in,
@@ -1555,7 +1556,8 @@ module.exports = function (app, pool) {
          LEFT JOIN log_summary ls
            ON ls.user_id = eu.user_id
           AND ls.attendance_date = sd.attendance_date
-         WHERE eu.date_hired IS NULL OR sd.attendance_date >= eu.date_hired
+         WHERE (eu.date_hired IS NOT NULL AND sd.attendance_date >= eu.date_hired)
+            OR (eu.date_hired IS NULL AND ls.time_in IS NOT NULL)
          ORDER BY sd.attendance_date DESC, eu.employee_name ASC`,
         [fromDate, toDate, filterUserId, filterUserId, fromDate, toDate]
       );

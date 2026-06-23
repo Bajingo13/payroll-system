@@ -112,7 +112,7 @@ export default function PayslipModal({ visible, payrollId, onClose }) {
         {/* Top bar */}
         <View style={s.topBar}>
           <Text style={s.topBarTitle}>Payslip Preview</Text>
-          <TouchableOpacity style={s.closeBtn} onPress={onClose}>
+          <TouchableOpacity style={s.closeBtn} onPress={onClose} accessibilityLabel="Close payslip">
             <Ionicons name="close" size={20} color="#475569" />
           </TouchableOpacity>
         </View>
