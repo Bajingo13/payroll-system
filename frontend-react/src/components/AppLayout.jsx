@@ -264,17 +264,8 @@ export default function AppLayout() {
       <aside className={`sidebar${drawerOpen ? ' mobile-open' : ''}`}>
         <div className="profile">
           <div className="logo">
-            <div className="logo-wordmark">
-              <div className="logo-icon-wrap">
-                <span className="logo-icon-star">✦</span>
-              </div>
-              <div className="logo-text-block">
-                <span className="logo-name">
-                  <span className="logo-astrea">Astrea</span><span className="logo-blue">Blue</span>
-                </span>
-                <span className="logo-tagline">HRIS · Payroll Platform</span>
-              </div>
-            </div>
+            <img src={astreaBlueLogo} alt="AstreaBlue" className="logo-img" />
+            <span className="logo-tagline">HRIS · Payroll Platform</span>
           </div>
           <button
             type="button"
