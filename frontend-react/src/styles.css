@@ -3244,12 +3244,18 @@ select:focus {
 }
 
 .em-contribution-table td:first-child,
-.em-contribution-table tr:last-child td:nth-child(3) {
+.em-contribution-table tr:last-child td:nth-child(3),
+.em-contribution-table tr:nth-child(6) td:nth-child(5) {
   width: 110px;
   padding-right: 8px;
   font-weight: 700;
   text-align: right;
   white-space: nowrap;
+}
+
+.em-contribution-table tr:nth-child(6) td:nth-child(5) label {
+  display: inline-flex;
+  align-items: center;
 }
 
 .em-contribution-label-col {
