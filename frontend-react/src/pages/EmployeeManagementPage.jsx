@@ -293,6 +293,7 @@ function createBlankEmployeeForm() {
       account_status: ''
     },
     contributions: [],
+    annualize: false,
     allowances: [],
     deductions: [],
     evaluations: [],
@@ -550,6 +551,25 @@ export default function EmployeeManagementPage() {
   }
 
   const [originalContributions, setOriginalContributions] = useState({});
+  const [originalPayrollComputation, setOriginalPayrollComputation] = useState({});
+
+  function createBlankPayrollComputation() {
+    return {
+      payroll_period: '',
+      payroll_rate: '',
+      ot_rate: '',
+      days_in_year: '',
+      days_in_week: '',
+      main_computation: '',
+      basis_absences: '',
+      basis_overtime: '',
+      hours_in_day: '',
+      week_in_year: '',
+      strict_no_overtime: false,
+      days_in_year_ot: '',
+      rate_basis_ot: ''
+    };
+  }
 
   async function loadEmployeeDetails(empCode) {
     if (!empCode) return;
@@ -612,6 +632,9 @@ export default function EmployeeManagementPage() {
           return acc;
         }, {})
       );
+      setOriginalPayrollComputation({
+        ...(employee.payrollComputation || {})
+      });
       setCreatedEmpCode(empCode);
       setAddActiveTab('basic');
       setDetailModalOpen(true);
@@ -714,7 +737,7 @@ export default function EmployeeManagementPage() {
         nextRow.computation_id = value;
 
         if (String(typeId) === '2') {
-          const preview = pagibigFormulaPreview(value, nextRow.mc); // use your MC field name here
+          const preview = pagibigFormulaPreview(value, current.main_computation);
 
           nextRow.ee_share = preview?.ee_share ?? '';
           nextRow.er_share = preview?.er_share ?? '';
@@ -1622,21 +1645,28 @@ export default function EmployeeManagementPage() {
           <div>
             <h4>Basis of Computation for Overtime</h4>
             <div className="legacy-checkbox-row">
-              <input type="checkbox" checked={!!comp.strict_no_overtime} onChange={(event) => {
-                const checked = event.target.checked;
+              <input
+                type="checkbox"
+                checked={!!comp.strict_no_overtime}
+                onChange={(event) => {
+                  const checked = event.target.checked;
 
-                updateNestedAddField(
-                  'payrollComputation',
-                  'strict_no_overtime',
-                  checked
-                );
+                  if (checked) {
+                    const original =
+                      originalPayrollComputation || createBlankPayrollComputation();
 
-                if (checked) {
-                  updateNestedAddField('payrollComputation', 'ot_rate', '');
-                  updateNestedAddField('payrollComputation', 'days_in_year_ot', '');
-                  updateNestedAddField('payrollComputation', 'rate_basis_ot', '');
-                }
-              }} />
+                    Object.entries(original).forEach(([field, value]) => {
+                      updateNestedAddField('payrollComputation', field, value);
+                    });
+                  } else {
+                    const empty = createBlankPayrollComputation();
+
+                    Object.entries(empty).forEach(([field, value]) => {
+                      updateNestedAddField('payrollComputation', field, value);
+                    });
+                  }
+                }}
+              />
               <label>STRICTLY NO OVERTIME</label>
             </div>
             {renderFormRow('OT Rate:', (
@@ -1916,15 +1946,31 @@ export default function EmployeeManagementPage() {
                     {CONTRIBUTION_COLUMNS.map((column) => {
                       const row = getContributionEntry(column.id);
                       const preview = getContributionPreview(column, row, comp.main_computation);
+
                       return (
                         <td key={column.id}>
-                          {column.id !== 4 && (
+                          {column.id === 4 ? (
+                            <label>
+                              Annualize
+                              <input
+                                type="checkbox"
+                                checked={getContributionEntry(4).annualize}
+                                onChange={(e) => updateContributionEntry(4, 'annualize', e.target.checked)}
+                              />
+                            </label>
+                          ) : (
                             <input
                               type="number"
                               value={preview.er ?? ''}
                               placeholder={preview.auto ? 'Auto' : undefined}
                               disabled={!row.enabled || preview.locked}
-                              onChange={(event) => updateContributionEntry(column.id, 'er_share', event.target.value)}
+                              onChange={(event) =>
+                                updateContributionEntry(
+                                  column.id,
+                                  'er_share',
+                                  event.target.value
+                                )
+                              }
                             />
                           )}
                         </td>
