@@ -1837,9 +1837,21 @@ export default function EmployeeManagementPage() {
                                 const original = originalContributions[column.id];
 
                                 if (original) {
-                                  Object.entries(original).forEach(([field, value]) => {
-                                    updateContributionEntry(column.id, field, value);
-                                  });
+                                  const shouldUseDefaults =
+                                    original.enabled === 0 &&
+                                    (original.period === null || original.period === '');
+
+                                  if (shouldUseDefaults) {
+                                    const defaults = createDefaultContributionEntry(column.id);
+
+                                    Object.entries(defaults).forEach(([field, value]) => {
+                                      updateContributionEntry(column.id, field, value);
+                                    });
+                                  } else {
+                                    Object.entries(original).forEach(([field, value]) => {
+                                      updateContributionEntry(column.id, field, value);
+                                    });
+                                  }
                                 } else {
                                   const defaults = createDefaultContributionEntry(column.id);
 
