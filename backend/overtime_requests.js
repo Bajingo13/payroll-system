@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { createNotification, createNotificationsForAdminHr } = require('./notificationHelper');
+const { buildEmail, statusBadge } = require('./emailTemplate');
 
 module.exports = function (app, pool) {
   let overtimeMailTransporter = null;
@@ -185,62 +186,60 @@ module.exports = function (app, pool) {
   }
 
   function buildOvertimeMail(request, status) {
-    const employeeName = request.employee_name || request.emp_code || 'Employee';
-    const statusText = String(status || request.status || 'Pending');
-    const displayStatus = statusText === 'Pending' ? 'For Review' : statusText;
+    const employeeName    = request.employee_name || request.emp_code || 'Employee';
+    const statusText      = String(status || request.status || 'Pending');
+    const displayStatus   = statusText === 'Pending' ? 'For Review' : statusText;
     const rejectionReason = request.rejection_reason || null;
+
     const templates = {
       Pending: {
-        subject: 'Overtime request for review',
-        intro: 'Your overtime request has been submitted and is now for review.',
-        closing: 'You will receive another email once HR/Admin approves or rejects your request.'
+        subject: 'Overtime Request Submitted — For Review',
+        intro:   'Your overtime request has been successfully submitted and is currently awaiting review by HR/Admin. You will be notified once a decision has been made.',
+        closing: 'Thank you for submitting your overtime request. Please monitor your notifications for updates.',
       },
       Approved: {
-        subject: 'Overtime request approved',
-        intro: 'Good news. Your overtime request has been approved.',
-        closing: 'Please coordinate with your supervisor or HR if you need payroll timing guidance.'
+        subject: 'Overtime Request Approved',
+        intro:   'Great news! Your overtime request has been reviewed and approved. The corresponding pay will be reflected in your next payroll run.',
+        closing: 'Please coordinate with your supervisor if you have any questions regarding overtime compensation.',
       },
       Rejected: {
-        subject: 'Overtime request rejected',
-        intro: 'Your overtime request has been reviewed and rejected.',
-        closing: 'Please contact HR or your supervisor if you need clarification about this decision.'
-      }
+        subject: 'Overtime Request Not Approved',
+        intro:   'Your overtime request has been reviewed and was not approved at this time.',
+        closing: 'For further clarification regarding this decision, please contact your supervisor or the Human Resources Department.',
+      },
     };
+
     const template = templates[statusText] || templates.Pending;
+
+    // Plain-text fallback
     const lines = [
-      `Hi ${employeeName},`,
-      '',
-      template.intro,
-      '',
-      `Date: ${formatDate(request.overtime_date)}`,
-      `Time: ${formatTime(request.start_time)} to ${formatTime(request.end_time)}`,
-      `Total Hours: ${Number(request.total_hours || 0).toFixed(2)}`,
-      `Reason: ${request.reason || 'N/A'}`,
-      `Status: ${displayStatus}`,
+      `Hi ${employeeName},`, '', template.intro, '',
+      `Date        : ${formatDate(request.overtime_date)}`,
+      `Time        : ${formatTime(request.start_time)} to ${formatTime(request.end_time)}`,
+      `Total Hours : ${Number(request.total_hours || 0).toFixed(2)}`,
+      `Reason      : ${request.reason || 'N/A'}`,
+      `Status      : ${displayStatus}`,
     ];
     if (statusText === 'Rejected' && rejectionReason) {
       lines.push(`Rejection Reason: ${rejectionReason}`);
     }
-    lines.push('', template.closing, '', 'Astreablue Intelligence Inc. HRIS & Payroll System');
+    lines.push('', template.closing, '', 'AstreaBlue Intelligence Inc. HRIS & Payroll System');
 
-    const rejectionRow = (statusText === 'Rejected' && rejectionReason)
-      ? `<tr><td style="padding:4px 12px 4px 0;"><strong>Rejection Reason</strong></td><td style="color:#dc2626;">${escapeHtml(rejectionReason)}</td></tr>`
-      : '';
-
-    const html = `
-      <p>Hi ${escapeHtml(employeeName)},</p>
-      <p>${escapeHtml(template.intro)}</p>
-      <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Date</strong></td><td>${escapeHtml(formatDate(request.overtime_date))}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Time</strong></td><td>${escapeHtml(formatTime(request.start_time))} to ${escapeHtml(formatTime(request.end_time))}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Total Hours</strong></td><td>${Number(request.total_hours || 0).toFixed(2)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${escapeHtml(request.reason || 'N/A')}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>${escapeHtml(displayStatus)}</td></tr>
-        ${rejectionRow}
-      </table>
-      <p>${escapeHtml(template.closing)}</p>
-      <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
-    `;
+    // Modern HTML
+    const html = buildEmail({
+      title:         `Overtime Request — ${displayStatus}`,
+      recipientName: employeeName,
+      intro:         template.intro,
+      rows: [
+        { label: 'Date',         value: formatDate(request.overtime_date) },
+        { label: 'Time',         value: `${formatTime(request.start_time)} to ${formatTime(request.end_time)}` },
+        { label: 'Total Hours',  value: `${Number(request.total_hours || 0).toFixed(2)} hr(s)` },
+        { label: 'Reason',       value: request.reason || 'N/A' },
+        { label: 'Status',       value: statusBadge(displayStatus), isStatus: true },
+      ],
+      rejectionReason: statusText === 'Rejected' ? rejectionReason : null,
+      closing: template.closing,
+    });
 
     return { subject: template.subject, text: lines.join('\n'), html };
   }
@@ -324,35 +323,36 @@ module.exports = function (app, pool) {
       const totalHours = Number(request.total_hours || 0).toFixed(2);
       const reason = request.reason || 'N/A';
 
-      const subject = `New Overtime Request: ${employeeName} — ${dateStr}`;
+      const subject = `Action Required: New Overtime Request — ${employeeName}`;
       const text = [
         'A new overtime request has been submitted and requires your review.',
         '',
-        `Employee: ${employeeName}`,
-        `Date: ${dateStr}`,
-        `Time: ${timeRange}`,
+        `Employee   : ${employeeName}`,
+        `Date       : ${dateStr}`,
+        `Time       : ${timeRange}`,
         `Total Hours: ${totalHours}`,
-        `Reason: ${reason}`,
-        `Status: Pending`,
+        `Reason     : ${reason}`,
+        `Status     : For Review`,
         '',
         'Please log in to the HRIS system to approve or reject this request.',
         '',
-        'Astreablue Intelligence Inc. HRIS & Payroll System'
+        'AstreaBlue Intelligence Inc. HRIS & Payroll System'
       ].join('\n');
 
-      const html = `
-        <p>A new overtime request has been submitted and requires your review.</p>
-        <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Employee</strong></td><td>${escapeHtml(employeeName)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Date</strong></td><td>${escapeHtml(dateStr)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Time</strong></td><td>${escapeHtml(timeRange)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Total Hours</strong></td><td>${escapeHtml(totalHours)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${escapeHtml(reason)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>Pending</td></tr>
-        </table>
-        <p>Please log in to the HRIS system to review and take action on this request.</p>
-        <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
-      `;
+      const html = buildEmail({
+        title:         'New Overtime Request — Action Required',
+        recipientName: 'HR / Admin',
+        intro:         `A new overtime request has been submitted by ${employeeName} and is awaiting your review and action.`,
+        rows: [
+          { label: 'Employee',    value: employeeName },
+          { label: 'Date',        value: dateStr      },
+          { label: 'Time',        value: timeRange    },
+          { label: 'Total Hours', value: `${totalHours} hr(s)` },
+          { label: 'Reason',      value: reason       },
+          { label: 'Status',      value: statusBadge('For Review'), isStatus: true },
+        ],
+        closing: 'Please log in to the HRIS system to approve or reject this request at your earliest convenience.',
+      });
 
       await transporter.sendMail({ from: config.from, to: adminEmails.join(', '), subject, text, html });
       console.log(`Overtime admin notification sent to: ${adminEmails.join(', ')}`);

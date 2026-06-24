@@ -26,6 +26,7 @@ import AuditingPage from './pages/AuditingPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import UtilitiesPage from './pages/UtilitiesPage.jsx';
 import AdvancedModulesPage from './pages/AdvancedModulesPage.jsx';
+import EmployeeDocumentsPage from './pages/EmployeeDocumentsPage.jsx';
 import YearEndPayrollPage from './pages/YearEndPayrollPage.jsx';
 import LoanDeductionPage from './pages/LoanDeductionPage.jsx';
 import SystemConfigPage from './pages/SystemConfigPage.jsx';
@@ -293,7 +294,7 @@ function AppRoutes() {
           path="employee-documents"
           element={
             <RoleRoute roles={['admin', 'hr']} feature="employee-documents">
-              <AdvancedModulesPage moduleKey="documents" />
+              <EmployeeDocumentsPage />
             </RoleRoute>
           }
         />

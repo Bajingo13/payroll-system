@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -82,6 +83,47 @@ export default function PayslipModal({ visible, payrollId, onClose }) {
   const p = payslip || {};
   const fullName = [p.first_name, p.middle_name ? p.middle_name[0] + '.' : '', p.last_name].filter(Boolean).join(' ');
 
+  async function sharePayslip() {
+    if (!payslip) return;
+    const lines = [
+      `PAYSLIP — ${p.payroll_range || '-'}`,
+      `${'─'.repeat(36)}`,
+      `Employee : ${fullName || '-'}`,
+      `ID       : ${p.emp_code || '-'}`,
+      `Position : ${p.position || '-'}`,
+      `Dept     : ${p.department || '-'}`,
+      `Period   : ${p.payroll_range || '-'}`,
+      `${'─'.repeat(36)}`,
+      `EARNINGS`,
+      ...(Number(p.basic_salary) > 0 ? [`  Basic Salary           ${money(p.basic_salary)}`] : []),
+      ...(Number(p.overtime) > 0 ? [`  Overtime Pay           ${money(p.overtime)}`] : []),
+      ...(Number(p.holiday_pay) > 0 ? [`  Holiday Pay            ${money(p.holiday_pay)}`] : []),
+      ...(p.allowances || []).filter(a => Number(a.amount) > 0).map(a => `  ${(a.allowance_name || 'Allowance').padEnd(22)} ${money(a.amount)}`),
+      `  Total Earnings         ${money(p.gross_pay)}`,
+      `${'─'.repeat(36)}`,
+      `DEDUCTIONS`,
+      ...(Number(p.absence_deduction) > 0 ? [`  Absences               ${money(p.absence_deduction)}`] : []),
+      ...(Number(p.late_deduction) > 0 ? [`  Tardiness              ${money(p.late_deduction)}`] : []),
+      ...(Number(p.sss_employee) > 0 ? [`  SSS Premium            ${money(p.sss_employee)}`] : []),
+      ...(Number(p.philhealth_employee) > 0 ? [`  PhilHealth             ${money(p.philhealth_employee)}`] : []),
+      ...(Number(p.pagibig_employee) > 0 ? [`  Pag-IBIG               ${money(p.pagibig_employee)}`] : []),
+      ...(Number(p.tax_withheld) > 0 ? [`  Tax Withheld           ${money(p.tax_withheld)}`] : []),
+      ...(Number(p.loans) > 0 ? [`  Loans                  ${money(p.loans)}`] : []),
+      `  Total Deductions       ${money(p.total_deductions)}`,
+      `${'─'.repeat(36)}`,
+      `NET PAY                  ${money(p.net_pay)}`,
+      `${'─'.repeat(36)}`,
+      `${numberToWords(p.net_pay)}`,
+      ``,
+      `AstreaBlue HRIS — System Generated`,
+    ];
+    try {
+      await Share.share({ message: lines.join('\n') });
+    } catch {
+      // user cancelled share sheet
+    }
+  }
+
   // Build earnings rows
   const earnings = [];
   if (Number(p.basic_salary) > 0) earnings.push({ label: 'Basic Salary', val: p.basic_salary });
@@ -112,9 +154,16 @@ export default function PayslipModal({ visible, payrollId, onClose }) {
         {/* Top bar */}
         <View style={s.topBar}>
           <Text style={s.topBarTitle}>Payslip Preview</Text>
-          <TouchableOpacity style={s.closeBtn} onPress={onClose} accessibilityLabel="Close payslip">
-            <Ionicons name="close" size={20} color="#475569" />
-          </TouchableOpacity>
+          <View style={s.topBarActions}>
+            {payslip && (
+              <TouchableOpacity style={s.shareBtn} onPress={sharePayslip} accessibilityLabel="Share payslip">
+                <Ionicons name="share-outline" size={20} color="#1e40af" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={s.closeBtn} onPress={onClose} accessibilityLabel="Close payslip">
+              <Ionicons name="close" size={20} color="#475569" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loading && (
@@ -223,6 +272,8 @@ const s = StyleSheet.create({
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
   },
   topBarTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  topBarActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  shareBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   loadingText: { fontSize: 14, color: '#64748b' },

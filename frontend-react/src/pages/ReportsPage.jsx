@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { getReportCompanyName, getReportMetadata } from '../utils/reportExport.js';
+import { exportReport, getReportCompanyName, getReportMetadata } from '../utils/reportExport.js';
 import PayrollSummaryReportPage from './PayrollSummaryReportPage.jsx';
 
 const ALLOWED_TYPES = ['payroll-journal', 'gross-pay', 'net-pay', 'payslip', 'reconciliation-details'];
@@ -287,66 +287,125 @@ function printHtml(title, bodyHtml) {
   printWindow.print();
 }
 
-function printPayslipDocument(title, payslipText) {
+function buildPayslipPrintHtml(p, cv, companyName) {
+  const esc = (v) => String(v ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const m = (v) => esc(money(v));
+  const dash = (v) => (Number(v) ? m(v) : '-');
+
+  return `
+<div class="ps">
+  <div class="rule"></div>
+  <div class="center heavy">${esc(companyName)}</div>
+  <div class="center ps-title">P A Y S L I P</div>
+  <div class="center">PAYROLL PERIOD COVERED : ${esc(p?.payroll_range || '-')}</div>
+
+  <table class="info-tbl">
+    <tr><td class="il">EMPLOYEE</td><td class="ic">:</td><td>${esc(cv.employeeName)}</td></tr>
+    <tr><td class="il">ID.</td><td class="ic">:</td><td>${esc(p?.emp_code || p?.employee_id)}</td></tr>
+    <tr><td class="il">DEPARTMENT</td><td class="ic">:</td><td>${esc(p?.department)}</td></tr>
+  </table>
+  <div class="rule"></div>
+
+  <table class="field-tbl">
+    <tr><td class="fl">MONTHLY/DAILY [Basic + De Minimis]</td><td class="fv">${m(cv.monthlyRate)}</td></tr>
+    <tr><td class="fl">TAX STATUS</td><td class="fv">${esc(p?.tax_status)}</td></tr>
+  </table>
+
+  <table class="cols-tbl">
+    <thead><tr class="ch"><td>EARNINGS</td><td class="cc">Current</td><td class="cc">Adj.</td><td class="cr">Amount</td></tr></thead>
+    <tbody>
+      <tr><td class="ind">BASIC SALARY PAY</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${m(cv.grossPay)}</td></tr>
+    </tbody>
+  </table>
+
+  <table class="box-tbl">
+    <tr><td class="bl">GROSS PAY</td><td class="bv">${m(cv.grossPay)}</td></tr>
+  </table>
+
+  <div class="sh">DEDUCTIONS</div>
+  <table class="cols-tbl">
+    <tbody>
+      <tr><td class="ind">Absences</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(cv.absences)}</td></tr>
+      <tr><td class="ind">Tardiness</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(cv.tardiness)}</td></tr>
+      <tr><td class="ind">Undertime</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(cv.undertime)}</td></tr>
+      <tr><td class="ind">SSS Premium</td><td class="cc">${m(cv.sss)}</td><td class="cc">-</td><td class="cr">${m(cv.sss)}</td></tr>
+      <tr><td class="ind">Philhealth</td><td class="cc">${m(cv.philhealth)}</td><td class="cc">-</td><td class="cr">${m(cv.philhealth)}</td></tr>
+      <tr><td class="ind">Pag-Ibig</td><td class="cc">${m(cv.pagibig)}</td><td class="cc">-</td><td class="cr">${m(cv.pagibig)}</td></tr>
+      <tr><td class="ind">TAX WITHHELD</td><td class="cc">${m(cv.tax)}</td><td class="cc">-</td><td class="cr">${m(cv.tax)}</td></tr>
+      <tr><td class="ind">Loan Deductions</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(cv.loanDeductions)}</td></tr>
+    </tbody>
+  </table>
+
+  <table class="box-tbl">
+    <tr><td class="bl">TOTAL DEDUCTIONS</td><td class="bv">${m(cv.totalDeductions)}</td></tr>
+    <tr class="net"><td class="bl">NET PAY</td><td class="bv">${m(cv.netPay)}</td></tr>
+  </table>
+
+  <table class="box-tbl mt">
+    <tr><td class="bl">TAXABLE GROSS INCOME TO-DATE</td><td class="bv">${m(cv.taxableGrossToDate)}</td></tr>
+    <tr><td class="bl">WITHHOLDING TAX TO-DATE</td><td class="bv">${m(cv.withholdingTaxToDate)}</td></tr>
+  </table>
+  <div class="rule"></div>
+</div>`;
+}
+
+function printPayslipDocument(title, payslip, computed, companyName) {
   const meta = { ...getReportMetadata(title), signatories: ['Employee Signature:'] };
-  const printWindow = window.open('', '_blank', 'width=760,height=760');
+  const printWindow = window.open('', '_blank', 'width=760,height=820');
   if (!printWindow) {
     window.alert('Popup blocked. Please allow popups to print the payslip.');
     return;
   }
 
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>${escapeHtml(title)}</title>
-        <style>
-          @page { size: auto; margin: 8mm; }
-          html,
-          body {
-            margin: 0;
-            padding: 0;
-            background: #ffffff;
-            color: #000000;
-          }
-          .payslip-print-sheet {
-            width: 560px;
-            margin: 0;
-            padding: 0 0 34px;
-            background: #ffffff;
-            color: #000000;
-          }
-          pre {
-            margin: 0;
-            padding: 0;
-            white-space: pre;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 11px;
-            font-weight: 700;
-            line-height: 1.12;
-            color: #000000;
-            background: #ffffff;
-          }
-          .signatories {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            margin-top: 28px;
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            width: 260px;
-          }
-          .signatories div { display: flex; flex-direction: column; gap: 2px; }
-          .signatories span { display: block; border-bottom: 1px solid #000; height: 28px; }
-        </style>
-      </head>
-      <body>
-        <div class="payslip-print-sheet">
-          <pre>${escapeHtml(payslipText)}</pre>
-          ${signatoryHtml(meta)}
-        </div>
-      </body>
-    </html>
-  `);
+  printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    @page { size: A5 portrait; margin: 14mm 14mm 14mm 14mm; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 10px; }
+
+    .rule  { border-top: 1.5px solid #000; margin: 4px 0; }
+    .center { text-align: center; }
+    .heavy  { font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ps-title { font-size: 14px; font-weight: 900; letter-spacing: 4px; margin: 2px 0; }
+
+    .info-tbl { width: 100%; border-collapse: collapse; margin: 4px 0 0; }
+    .info-tbl td { padding: 1px 2px; font-size: 10px; }
+    .il { font-weight: 700; min-width: 90px; white-space: nowrap; }
+    .ic { padding: 0 6px; }
+
+    .field-tbl { width: 100%; border-collapse: collapse; margin: 3px 0; }
+    .field-tbl td { padding: 1px 2px; font-size: 10px; }
+    .fl { }
+    .fv { text-align: right; font-weight: 700; }
+
+    .cols-tbl { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 10px; }
+    .cols-tbl td { padding: 1px 3px; }
+    .ch   { font-weight: 700; }
+    .cc   { text-align: center; width: 54px; }
+    .cr   { text-align: right;  width: 72px; }
+    .ind  { padding-left: 14px !important; }
+    .sh   { font-weight: 700; font-size: 10px; margin: 3px 0 1px; }
+
+    .box-tbl { width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin: 3px 0; font-size: 10px; }
+    .box-tbl td { padding: 3px 6px; font-weight: 700; }
+    .bl  { }
+    .bv  { text-align: right; width: 90px; border-left: 1px solid #666; }
+    .net td { border-top: 1px solid #000; }
+    .mt  { margin-top: 5px; }
+
+    .signatories { display: flex; flex-direction: column; gap: 4px; margin-top: 22px; font-size: 11px; width: 240px; }
+    .signatories div { display: flex; flex-direction: column; gap: 2px; }
+    .signatories span { display: block; border-bottom: 1px solid #000; height: 26px; }
+  </style>
+</head>
+<body>
+  ${buildPayslipPrintHtml(payslip, computed, companyName || DEFAULT_COMPANY_NAME)}
+  ${signatoryHtml(meta)}
+</body>
+</html>`);
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
@@ -937,6 +996,7 @@ function PayslipReportSection({ roleSettings }) {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [exportFormat, setExportFormat] = useState('pdf');
+  const [emailSending, setEmailSending] = useState(false);
 
   useEffect(() => {
     api.get('/employees')
@@ -978,7 +1038,30 @@ function PayslipReportSection({ roleSettings }) {
   function printPayslip() {
     if (!payslip) return;
     const employeeId = payslip.emp_code || payslip.employee_id || 'employee';
-    printPayslipDocument(`Payslip ${employeeId}`, payslipText);
+    printPayslipDocument(`Payslip ${employeeId}`, payslip, {
+      employeeName, monthlyRate, grossPay, totalDeductions, netPay,
+      absences, tardiness, undertime, sss, philhealth, pagibig, tax, loanDeductions,
+      taxableGrossToDate, withholdingTaxToDate
+    }, companyName);
+  }
+
+  async function sendPayslipEmail() {
+    if (!payslip) {
+      setMessage('Load a payslip before sending.');
+      return;
+    }
+    setEmailSending(true);
+    setMessage('');
+    try {
+      const { data } = await api.post('/payslip/send-email', {
+        emp_code: payslip.emp_code || payslip.employee_id
+      });
+      setMessage(data.message || 'Payslip sent successfully.');
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Failed to send payslip email.'));
+    } finally {
+      setEmailSending(false);
+    }
   }
 
   const employeeName = payslip
@@ -1098,7 +1181,7 @@ ${'-'.repeat(PAYSLIP_WIDTH)}`;
       return;
     }
 
-    printPayslip();
+    exportReport('pdf', filenameBase, 'Payslip', payslipHeaders, payslipRows);
   }
 
   return (
@@ -1157,6 +1240,15 @@ ${'-'.repeat(PAYSLIP_WIDTH)}`;
             disabled={!payslip || !roleSettings.canExport}
           >
             Export
+          </button>
+
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={sendPayslipEmail}
+            disabled={!payslip || emailSending}
+          >
+            {emailSending ? 'Sending…' : 'Send to Email'}
           </button>
         </div>
 

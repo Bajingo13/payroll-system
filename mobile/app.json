@@ -5,16 +5,16 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/astreablue-logo.png",
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/astreablue-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1e40af"
+      "backgroundColor": "#000000"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/astreablue-logo.png",
+        "backgroundColor": "#000000"
       },
       "package": "com.astreablue.employee",
       "config": {

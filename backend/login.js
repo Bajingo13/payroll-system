@@ -2,6 +2,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { buildEmail, esc } = require('./emailTemplate');
 
 module.exports = function (app, pool) {
   console.log('AUTH ROUTES LOADED: login.js (password-route-v3)');
@@ -182,32 +183,35 @@ module.exports = function (app, pool) {
     }
 
     const baseUrl = getPasswordResetBaseUrl(req);
-    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
-    const escapedResetUrl = escapeMailHtml(resetUrl);
+    const resetUrl  = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
     const recipient = String(user.email || '').trim();
-    const displayName = escapeMailHtml(user.full_name || user.username || 'there');
 
     await transporter.sendMail({
       from: config.from,
       to: recipient,
-      subject: 'Password reset request',
+      subject: 'Password Reset Request — AstreaBlue HRIS',
       text: [
         `Hi ${user.full_name || user.username || 'there'},`,
         '',
-        'We received a request to reset your Astreablue Intelligence Inc. HRIS & Payroll System password.',
-        `Open this link to set a new password: ${resetUrl}`,
+        'We received a request to reset your AstreaBlue HRIS & Payroll System password.',
+        `Click the link below to set a new password: ${resetUrl}`,
         '',
-        'This link expires in 30 minutes. If you did not request this, you can ignore this email.',
+        'This link expires in 30 minutes.',
+        'If you did not request this, you can safely ignore this email.',
         '',
-        'Astreablue Intelligence Inc. HRIS & Payroll System'
+        'AstreaBlue Intelligence Inc. HRIS & Payroll System'
       ].join('\n'),
-      html: `
-        <p>Hi ${displayName},</p>
-        <p>We received a request to reset your Astreablue Intelligence Inc. HRIS & Payroll System password.</p>
-        <p><a href="${escapedResetUrl}">Set a new password</a></p>
-        <p>This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>
-        <p>Astreablue Intelligence Inc. HRIS & Payroll System</p>
-      `
+      html: buildEmail({
+        title:         'Password Reset Request',
+        recipientName: user.full_name || user.username || 'there',
+        intro:         'We received a request to reset your AstreaBlue HRIS & Payroll System password. Click the button below to set a new password.',
+        rows: [
+          { label: 'Requested For', value: user.full_name || user.username || recipient },
+          { label: 'Link Expires',  value: '30 minutes from the time this email was sent' },
+        ],
+        cta: { label: 'Reset My Password', url: resetUrl },
+        closing: 'If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.',
+      }),
     });
 
     return true;

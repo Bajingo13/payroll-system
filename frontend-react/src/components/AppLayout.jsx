@@ -226,14 +226,12 @@ export default function AppLayout() {
   ];
 
   const hrToolsNav = [
-    { to: '/auditing', label: 'Auditing', feature: 'auditing' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' }
   ];
 
   const adminToolsNav = [
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
-    { to: '/company-settings', label: 'Company Settings', feature: 'company-settings' },
     { to: '/security-backup', label: 'Security & Backup', feature: 'security-backup' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' },
     { to: '/system-config', label: 'System Configuration', feature: 'system-config' }
@@ -266,8 +264,17 @@ export default function AppLayout() {
       <aside className={`sidebar${drawerOpen ? ' mobile-open' : ''}`}>
         <div className="profile">
           <div className="logo">
-            <img src={astreaBlueLogo} alt="AstreaBlue" />
-            <span className="logo-tagline">Intelligence Inc.</span>
+            <div className="logo-wordmark">
+              <div className="logo-icon-wrap">
+                <span className="logo-icon-star">✦</span>
+              </div>
+              <div className="logo-text-block">
+                <span className="logo-name">
+                  <span className="logo-astrea">Astrea</span><span className="logo-blue">Blue</span>
+                </span>
+                <span className="logo-tagline">HRIS · Payroll Platform</span>
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -374,7 +381,6 @@ export default function AppLayout() {
                 ) : null}
 
                 <li className="nav-section-label">System Tools</li>
-                <li><NavLink to="/auditing">Auditing</NavLink></li>
                 {visibleAdminToolsNav.map((item) => (
                   <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
                 ))}

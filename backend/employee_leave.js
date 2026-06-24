@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { createNotification, createNotificationsForAdminHr } = require('./notificationHelper');
+const { buildEmail, statusBadge } = require('./emailTemplate');
 
 module.exports = function (app, pool) {
   let leaveMailTransporter = null;
@@ -60,76 +61,66 @@ module.exports = function (app, pool) {
   }
 
   function buildLeaveMailContent(request, status) {
-    const employeeName = request.employee_name || request.emp_code || 'Employee';
-    const leaveName = request.leave_name || 'Leave';
-    const dateRange = `${formatLeaveDate(request.start_date)} to ${formatLeaveDate(request.end_date)}`;
-    const totalDays = Number(request.total_days || 0).toFixed(2);
-    const reason = request.reason || 'N/A';
+    const employeeName    = request.employee_name || request.emp_code || 'Employee';
+    const leaveName       = request.leave_name || 'Leave';
+    const dateRange       = `${formatLeaveDate(request.start_date)} to ${formatLeaveDate(request.end_date)}`;
+    const totalDays       = Number(request.total_days || 0).toFixed(2);
+    const reason          = request.reason || 'N/A';
     const rejectionReason = request.rejection_reason || null;
-    const statusText = String(status || request.status || 'Pending');
+    const statusText      = String(status || request.status || 'Pending');
+    const displayStatus   = statusText === 'Pending' ? 'For Review' : statusText;
 
     const templates = {
       Pending: {
-        subject: `Leave request for review: ${leaveName}`,
-        intro: 'Your leave request has been successfully submitted and is currently awaiting review by the designated approver. We have received your application and it is now under evaluation. You will be notified once a decision has been made regarding your request.',
-        closing: 'Thank you for your patience. Please monitor your notifications for updates on the status of your leave request.'
+        subject: `Leave Request Submitted — ${leaveName}`,
+        intro:   'Your leave request has been successfully submitted and is currently awaiting review by the designated approver. You will be notified once a decision has been made.',
+        closing: 'Thank you for your patience. Please monitor your notifications for updates on the status of your leave request.',
       },
       Approved: {
-        subject: `Leave request approved: ${leaveName}`,
-        intro: 'We are pleased to inform you that your leave request has been reviewed and approved by the authorized approver. Please ensure that all necessary work handovers and responsibilities are properly coordinated before your leave date.',
-        closing: 'We wish you a pleasant and productive leave period. If you have any questions, please contact your supervisor or the Human Resources Department.'
+        subject: `Leave Request Approved — ${leaveName}`,
+        intro:   'We are pleased to inform you that your leave request has been reviewed and approved. Please ensure that all necessary work handovers and responsibilities are properly coordinated before your leave date.',
+        closing: 'We wish you a pleasant and restful leave period. If you have any questions, please contact your supervisor or the Human Resources Department.',
       },
       Rejected: {
-        subject: `Leave request rejected: ${leaveName}`,
-        intro: 'We regret to inform you that your leave request has been reviewed and was not approved.',
-        closing: 'For further clarification regarding this decision, please contact your supervisor or the Human Resources Department.'
-      }
+        subject: `Leave Request Not Approved — ${leaveName}`,
+        intro:   'We regret to inform you that your leave request has been reviewed and was not approved at this time.',
+        closing: 'For further clarification regarding this decision, please contact your supervisor or the Human Resources Department.',
+      },
     };
 
     const template = templates[statusText] || templates.Pending;
+
+    // Plain-text fallback
     const textLines = [
-      `Hi ${employeeName},`,
-      '',
-      template.intro,
-      '',
-      `Leave Type: ${leaveName}`,
-      `Date Range: ${dateRange}`,
-      `Total Days: ${totalDays}`,
-      `Reason: ${reason}`,
-      `Status: ${statusText === 'Pending' ? 'For Review' : statusText}`,
+      `Hi ${employeeName},`, '', template.intro, '',
+      `Leave Type : ${leaveName}`,
+      `Date Range : ${dateRange}`,
+      `Total Days : ${totalDays}`,
+      `Reason     : ${reason}`,
+      `Status     : ${displayStatus}`,
     ];
     if (statusText === 'Rejected' && rejectionReason) {
       textLines.push(`Rejection Reason: ${rejectionReason}`);
     }
-    textLines.push('', template.closing, '', 'Astreablue Intelligence Inc. HRIS & Payroll System');
-    const text = textLines.join('\n');
+    textLines.push('', template.closing, '', 'AstreaBlue Intelligence Inc. HRIS & Payroll System');
 
-    const htmlEmployeeName = escapeMailHtml(employeeName);
-    const htmlLeaveName = escapeMailHtml(leaveName);
-    const htmlDateRange = escapeMailHtml(dateRange);
-    const htmlTotalDays = escapeMailHtml(totalDays);
-    const htmlReason = escapeMailHtml(reason);
-    const htmlStatus = escapeMailHtml(statusText === 'Pending' ? 'For Review' : statusText);
-    const rejectionRow = (statusText === 'Rejected' && rejectionReason)
-      ? `<tr><td style="padding:4px 12px 4px 0;"><strong>Rejection Reason</strong></td><td style="color:#dc2626;">${escapeMailHtml(rejectionReason)}</td></tr>`
-      : '';
+    // Modern HTML
+    const html = buildEmail({
+      title:         `Leave Request — ${displayStatus}`,
+      recipientName: employeeName,
+      intro:         template.intro,
+      rows: [
+        { label: 'Leave Type',  value: leaveName   },
+        { label: 'Date Range',  value: dateRange   },
+        { label: 'Total Days',  value: `${totalDays} day(s)` },
+        { label: 'Reason',      value: reason      },
+        { label: 'Status',      value: statusBadge(displayStatus), isStatus: true },
+      ],
+      rejectionReason: statusText === 'Rejected' ? rejectionReason : null,
+      closing: template.closing,
+    });
 
-    const html = `
-      <p>Hi ${htmlEmployeeName},</p>
-      <p>${escapeMailHtml(template.intro)}</p>
-      <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Leave Type</strong></td><td>${htmlLeaveName}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Date Range</strong></td><td>${htmlDateRange}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Total Days</strong></td><td>${htmlTotalDays}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${htmlReason}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>${htmlStatus}</td></tr>
-        ${rejectionRow}
-      </table>
-      <p>${escapeMailHtml(template.closing)}</p>
-      <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
-    `;
-
-    return { subject: template.subject, text, html };
+    return { subject: template.subject, text: textLines.join('\n'), html };
   }
 
   async function getLeaveRequestForNotification(conn, requestId) {
@@ -243,35 +234,36 @@ module.exports = function (app, pool) {
       const totalDays = Number(request.total_days || 0).toFixed(2);
       const reason = request.reason || 'N/A';
 
-      const subject = `New Leave Request: ${employeeName} — ${leaveName}`;
+      const subject = `Action Required: New Leave Request — ${employeeName}`;
       const text = [
         'A new leave request has been submitted and requires your review.',
         '',
-        `Employee: ${employeeName}`,
+        `Employee  : ${employeeName}`,
         `Leave Type: ${leaveName}`,
         `Date Range: ${dateRange}`,
         `Total Days: ${totalDays}`,
-        `Reason: ${reason}`,
-        `Status: Pending`,
+        `Reason    : ${reason}`,
+        `Status    : For Review`,
         '',
         'Please log in to the HRIS system to approve or reject this request.',
         '',
-        'Astreablue Intelligence Inc. HRIS & Payroll System'
+        'AstreaBlue Intelligence Inc. HRIS & Payroll System'
       ].join('\n');
 
-      const html = `
-        <p>A new leave request has been submitted and requires your review.</p>
-        <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Employee</strong></td><td>${escapeMailHtml(employeeName)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Leave Type</strong></td><td>${escapeMailHtml(leaveName)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Date Range</strong></td><td>${escapeMailHtml(dateRange)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Total Days</strong></td><td>${escapeMailHtml(totalDays)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Reason</strong></td><td>${escapeMailHtml(reason)}</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;"><strong>Status</strong></td><td>Pending</td></tr>
-        </table>
-        <p>Please log in to the HRIS system to review and take action on this request.</p>
-        <p>Astreablue Intelligence Inc. HRIS &amp; Payroll System</p>
-      `;
+      const html = buildEmail({
+        title:         'New Leave Request — Action Required',
+        recipientName: 'HR / Admin',
+        intro:         `A new leave request has been submitted by ${employeeName} and is awaiting your review and action.`,
+        rows: [
+          { label: 'Employee',   value: employeeName },
+          { label: 'Leave Type', value: leaveName    },
+          { label: 'Date Range', value: dateRange    },
+          { label: 'Total Days', value: `${totalDays} day(s)` },
+          { label: 'Reason',     value: reason       },
+          { label: 'Status',     value: statusBadge('For Review'), isStatus: true },
+        ],
+        closing: 'Please log in to the HRIS system to approve or reject this request at your earliest convenience.',
+      });
 
       await transporter.sendMail({ from: config.from, to: adminEmails.join(', '), subject, text, html });
       console.log(`Leave admin notification sent to: ${adminEmails.join(', ')}`);
