@@ -959,7 +959,8 @@ module.exports = function (app, pool) {
         const [settingsRows] = await conn.execute(
           `SELECT
               setting_id,
-              hours_in_day
+              hours_in_day,
+              COALESCE(time_in, '08:00') AS time_in
            FROM employee_payroll_settings
            WHERE employee_id = ?
            ORDER BY setting_id DESC
@@ -1925,28 +1926,34 @@ module.exports = function (app, pool) {
 
       const [settingsRows] = await conn.execute(
         `SELECT
-            setting_id,
-            payroll_period,
-            payroll_rate,
-            ot_rate,
-            days_in_year,
-            days_in_week,
-            hours_in_day,
-            week_in_year,
-            strict_no_overtime,
-            days_in_year_ot,
-            rate_basis_ot,
-            main_computation,
-            basis_absences,
-            basis_overtime,
-            COALESCE(time_in, '08:00') AS time_in,
-            COALESCE(time_out, '17:00') AS time_out,
-            COALESCE(break_minutes, 60) AS break_minutes,
-            COALESCE(working_days, '1,2,3,4,5') AS working_days,
-            schedule_template_id
-         FROM employee_payroll_settings
-         WHERE employee_id = ?
-         ORDER BY setting_id DESC
+            eps.setting_id,
+            eps.payroll_period,
+            eps.payroll_rate,
+            eps.ot_rate,
+            eps.days_in_year,
+            eps.days_in_week,
+            eps.hours_in_day,
+            eps.week_in_year,
+            eps.strict_no_overtime,
+            eps.days_in_year_ot,
+            eps.rate_basis_ot,
+            eps.main_computation,
+            eps.basis_absences,
+            eps.basis_overtime,
+            COALESCE(eps.time_in, '08:00')        AS time_in,
+            COALESCE(eps.time_out, '17:00')       AS time_out,
+            COALESCE(eps.break_minutes, 60)       AS break_minutes,
+            COALESCE(eps.working_days, '1,2,3,4,5') AS working_days,
+            eps.schedule_template_id,
+            st.name                               AS template_name,
+            st.night_diff,
+            st.night_diff_start,
+            st.night_diff_end,
+            st.night_diff_rate
+         FROM employee_payroll_settings eps
+         LEFT JOIN schedule_templates st ON st.id = eps.schedule_template_id
+         WHERE eps.employee_id = ?
+         ORDER BY eps.setting_id DESC
          LIMIT 1`,
         [employee.employee_id]
       );

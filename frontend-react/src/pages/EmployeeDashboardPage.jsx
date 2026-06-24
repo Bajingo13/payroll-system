@@ -136,8 +136,9 @@ export default function EmployeeDashboardPage() {
     if (!todayState.timeIn) return 0;
     const timeIn = parseDateTime(todayState.timeIn);
     if (!timeIn) return 0;
+    const [schedH, schedM] = String(payrollSettings.time_in || '08:00').split(':').map(Number);
     const shiftStart = new Date(timeIn);
-    shiftStart.setHours(8, 0, 0, 0);
+    shiftStart.setHours(schedH, schedM, 0, 0);
     return Math.max(0, Math.floor((timeIn - shiftStart) / 60000));
   })();
 
@@ -267,8 +268,13 @@ export default function EmployeeDashboardPage() {
             </strong>
           </div>
           <div className="card">
-            <span>Shift Start (Standard)</span>
-            <strong>08:00 AM</strong>
+            <span>Shift Start</span>
+            <strong>{(() => {
+              const raw = payrollSettings.time_in || '08:00';
+              const [h, m] = raw.split(':').map(Number);
+              const period = h >= 12 ? 'PM' : 'AM';
+              return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${period}`;
+            })()}</strong>
           </div>
           <div className="card">
             <span>Required Hours</span>
