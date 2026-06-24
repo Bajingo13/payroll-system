@@ -236,26 +236,29 @@ function OrganizationSetup() {
 
   // Designation Management
   const [designations, setDesignations] = useState([]);
+  const [desgLoading, setDesgLoading] = useState(false);
+  const [desgSaving,  setDesgSaving]  = useState(false);
   const [desgForm, setDesgForm] = useState({ title: '', description: '', salary_grade: '', department: '' });
   const [desgSearch, setDesgSearch] = useState('');
-  const [editDesgIdx, setEditDesgIdx] = useState(null);
+  const [editDesgId, setEditDesgId] = useState(null); // DB id of row being edited
+
+  async function loadDesignations() {
+    try {
+      const { data } = await api.get('/designations');
+      setDesignations(data.data || []);
+    } catch {
+      // non-fatal
+    }
+  }
 
   useEffect(() => {
-    api.get('/employees')
-      .then(({ data }) => {
-        const emps = data.employees || [];
-        setEmployees(emps);
-        // Seed designations from existing positions (deduplicated)
-        setDesignations((prev) => {
-          if (prev.length > 0) return prev;
-          const seen = new Set();
-          return emps
-            .filter((e) => e.position && !seen.has(e.position) && seen.add(e.position))
-            .map((e) => ({ title: e.position, description: '', salary_grade: '', department: e.department || '' }));
-        });
-      })
-      .catch((err) => setError(getApiMessage(err, 'Failed to load employees.')))
-      .finally(() => setLoading(false));
+    setDesgLoading(true);
+    Promise.all([
+      api.get('/employees')
+        .then(({ data }) => setEmployees(data.employees || []))
+        .catch((err) => setError(getApiMessage(err, 'Failed to load employees.'))),
+      loadDesignations()
+    ]).finally(() => { setLoading(false); setDesgLoading(false); });
   }, []);
 
   const totalEmployees  = employees.length;
@@ -486,24 +489,33 @@ function OrganizationSetup() {
             <button
               type="button"
               className="btn"
-              onClick={() => {
+              disabled={desgSaving}
+              onClick={async () => {
                 if (!desgForm.title.trim()) return;
-                if (editDesgIdx !== null) {
-                  setDesignations((prev) => prev.map((d, i) => i === editDesgIdx ? { ...desgForm } : d));
-                  setEditDesgIdx(null);
-                } else {
-                  setDesignations((prev) => [...prev, { ...desgForm }]);
+                setDesgSaving(true);
+                try {
+                  if (editDesgId !== null) {
+                    await api.put(`/designations/${editDesgId}`, desgForm);
+                    setEditDesgId(null);
+                  } else {
+                    await api.post('/designations', desgForm);
+                  }
+                  setDesgForm({ title: '', description: '', salary_grade: '', department: '' });
+                  await loadDesignations();
+                } catch {
+                  // errors are silent here; non-critical
+                } finally {
+                  setDesgSaving(false);
                 }
-                setDesgForm({ title: '', description: '', salary_grade: '', department: '' });
               }}
             >
-              {editDesgIdx !== null ? 'Update' : 'Add Designation'}
+              {desgSaving ? 'Saving…' : editDesgId !== null ? 'Update' : 'Add Designation'}
             </button>
-            {editDesgIdx !== null && (
+            {editDesgId !== null && (
               <button
                 type="button"
                 className="btn secondary"
-                onClick={() => { setEditDesgIdx(null); setDesgForm({ title: '', description: '', salary_grade: '', department: '' }); }}
+                onClick={() => { setEditDesgId(null); setDesgForm({ title: '', description: '', salary_grade: '', department: '' }); }}
               >
                 Cancel
               </button>
@@ -512,6 +524,7 @@ function OrganizationSetup() {
         </div>
 
         {/* Designations table */}
+        {desgLoading ? <p style={{ color: '#64748b' }}>Loading…</p> : (
         <table>
           <thead>
             <tr>
@@ -526,10 +539,10 @@ function OrganizationSetup() {
           <tbody>
             {designations
               .filter((d) => !desgSearch || d.title.toLowerCase().includes(desgSearch.toLowerCase()) || (d.department || '').toLowerCase().includes(desgSearch.toLowerCase()))
-              .map((d, i) => {
+              .map((d) => {
                 const headcount = employees.filter((e) => (e.position || '').toLowerCase() === d.title.toLowerCase()).length;
                 return (
-                  <tr key={i}>
+                  <tr key={d.id}>
                     <td><strong>{d.title}</strong></td>
                     <td>{d.department || '-'}</td>
                     <td style={{ color: d.description ? '#0f172a' : '#94a3b8' }}>{d.description || 'No description set'}</td>
@@ -541,7 +554,7 @@ function OrganizationSetup() {
                           type="button"
                           className="btn secondary"
                           style={{ padding: '3px 10px', fontSize: 12 }}
-                          onClick={() => { setDesgForm({ ...d }); setEditDesgIdx(i); }}
+                          onClick={() => { setDesgForm({ title: d.title, description: d.description || '', salary_grade: d.salary_grade || '', department: d.department || '' }); setEditDesgId(d.id); }}
                         >
                           Edit
                         </button>
@@ -549,7 +562,14 @@ function OrganizationSetup() {
                           type="button"
                           className="btn secondary"
                           style={{ padding: '3px 10px', fontSize: 12, color: '#dc2626' }}
-                          onClick={() => setDesignations((prev) => prev.filter((_, idx) => idx !== i))}
+                          onClick={async () => {
+                            try {
+                              await api.delete(`/designations/${d.id}`);
+                              await loadDesignations();
+                            } catch {
+                              // silent
+                            }
+                          }}
                         >
                           Remove
                         </button>
@@ -563,6 +583,7 @@ function OrganizationSetup() {
             )}
           </tbody>
         </table>
+        )}
       </section>
     </>
   );

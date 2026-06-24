@@ -557,6 +557,107 @@ module.exports = function (app, pool) {
     };
   }
 
+  // ── Schedule init ──────────────────────────────────────────────────────
+  async function safeAddCol(conn, table, column, def) {
+    try { await conn.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`); }
+    catch (e) { if (e.errno !== 1060) throw e; }
+  }
+
+  const scheduleInitReady = (async () => {
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS schedule_templates (
+          id              INT AUTO_INCREMENT PRIMARY KEY,
+          name            VARCHAR(255) NOT NULL,
+          description     TEXT,
+          time_in         VARCHAR(5)  NOT NULL DEFAULT '08:00',
+          time_out        VARCHAR(5)  NOT NULL DEFAULT '17:00',
+          break_minutes   INT         NOT NULL DEFAULT 60,
+          hours_in_day    DECIMAL(5,2) NOT NULL DEFAULT 8,
+          days_in_week    INT         NOT NULL DEFAULT 5,
+          working_days    VARCHAR(20) NOT NULL DEFAULT '1,2,3,4,5',
+          night_diff      TINYINT(1)  NOT NULL DEFAULT 0,
+          night_diff_start VARCHAR(5) NOT NULL DEFAULT '22:00',
+          night_diff_end   VARCHAR(5) NOT NULL DEFAULT '06:00',
+          night_diff_rate  DECIMAL(5,4) NOT NULL DEFAULT 0.1000,
+          created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      await safeAddCol(conn, 'employee_payroll_settings', 'time_in',              "VARCHAR(5)  DEFAULT '08:00'");
+      await safeAddCol(conn, 'employee_payroll_settings', 'time_out',             "VARCHAR(5)  DEFAULT '17:00'");
+      await safeAddCol(conn, 'employee_payroll_settings', 'break_minutes',        'INT         DEFAULT 60');
+      await safeAddCol(conn, 'employee_payroll_settings', 'working_days',         "VARCHAR(20) DEFAULT '1,2,3,4,5'");
+      await safeAddCol(conn, 'employee_payroll_settings', 'schedule_template_id', 'INT         DEFAULT NULL');
+
+      // Seed default templates only when the table is empty
+      const [[{ cnt }]] = await conn.query('SELECT COUNT(*) AS cnt FROM schedule_templates');
+      if (cnt === 0) {
+        const defaults = [
+          // name, description, time_in, time_out, break_min, hrs/day, days/wk, working_days, night_diff, nd_start, nd_end, nd_rate
+          ['Regular Day Shift',
+           'Standard office hours, Monday to Friday.',
+           '08:00','17:00', 60, 8.00, 5, '1,2,3,4,5',   0,'22:00','06:00',0.10],
+
+          ['Regular Day Shift – 6 Days',
+           'Standard office hours, Monday to Saturday.',
+           '08:00','17:00', 60, 8.00, 6, '1,2,3,4,5,6', 0,'22:00','06:00',0.10],
+
+          ['Early Morning Shift',
+           'Starts at 6 AM, ends at 3 PM. Common in manufacturing and BPO morning coverage.',
+           '06:00','15:00', 60, 8.00, 5, '1,2,3,4,5',   0,'22:00','06:00',0.10],
+
+          ['Mid Shift',
+           'Afternoon to late-evening shift. Last hour (10 PM–11 PM) qualifies for night differential.',
+           '14:00','23:00', 60, 8.00, 5, '1,2,3,4,5',   1,'22:00','06:00',0.10],
+
+          ['Night Shift',
+           'Full overnight shift. Entire shift qualifies for 10% night differential (DOLE, 10 PM–6 AM).',
+           '22:00','06:00', 60, 8.00, 5, '1,2,3,4,5',   1,'22:00','06:00',0.10],
+
+          ['Graveyard Shift',
+           'Late overnight shift starting at 11 PM. Full night differential applies.',
+           '23:00','07:00', 60, 8.00, 5, '1,2,3,4,5',   1,'22:00','06:00',0.10],
+
+          ['Compressed Workweek – 4×10',
+           '4-day workweek, 10 hours per day (Mon–Thu). DOLE-compliant compressed arrangement.',
+           '07:00','18:00',120,10.00, 4, '1,2,3,4',     0,'22:00','06:00',0.10],
+
+          ['Retail / 6-Day Shifting (Sun–Fri)',
+           'Six-day rotating schedule, Sunday to Friday. Common in retail and service industries.',
+           '08:00','17:00', 60, 8.00, 6, '0,1,2,3,4,5', 0,'22:00','06:00',0.10],
+
+          ['Split Shift',
+           '4-hour AM block + 4-hour PM block with extended break in between.',
+           '07:00','19:00',240, 8.00, 5, '1,2,3,4,5',   0,'22:00','06:00',0.10],
+
+          ['Half Day (AM)',
+           'Morning-only shift, 4 hours. Used for part-time or half-day arrangements.',
+           '08:00','12:00',  0, 4.00, 5, '1,2,3,4,5',   0,'22:00','06:00',0.10],
+        ];
+
+        for (const row of defaults) {
+          await conn.query(
+            `INSERT INTO schedule_templates
+               (name, description, time_in, time_out, break_minutes, hours_in_day,
+                days_in_week, working_days, night_diff, night_diff_start, night_diff_end, night_diff_rate)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            row
+          );
+        }
+        console.log(`OK > seeded ${defaults.length} default schedule templates`);
+      }
+
+      console.log('OK > schedule_templates table ready');
+    } catch (err) {
+      console.error('WARN > schedule init failed:', err.message);
+    } finally {
+      if (conn) conn.release();
+    }
+  })();
+
   async function ensureEmployeeScheduleSettings(conn, employeeId) {
     const [existing] = await conn.execute(
       `SELECT setting_id
@@ -586,8 +687,12 @@ module.exports = function (app, pool) {
           rate_basis_ot,
           main_computation,
           basis_absences,
-          basis_overtime
-       ) VALUES (?, 'Semi-Monthly', 'Monthly Rate', 'STANDARD OT RATE', 313, 5, 8, 52, 0, 313, 0.00, NULL, NULL, NULL)`,
+          basis_overtime,
+          time_in,
+          time_out,
+          break_minutes,
+          working_days
+       ) VALUES (?, 'Semi-Monthly', 'Monthly Rate', 'STANDARD OT RATE', 313, 5, 8, 52, 0, 313, 0.00, NULL, NULL, NULL, '08:00', '17:00', 60, '1,2,3,4,5')`,
       [employeeId]
     );
   }
@@ -1441,7 +1546,9 @@ module.exports = function (app, pool) {
               COALESCE(e_code.emp_code, e_name.emp_code, 'N/A') AS emp_code,
               COALESCE(CONCAT(e_code.first_name, ' ', e_code.last_name), CONCAT(e_name.first_name, ' ', e_name.last_name), u.full_name) AS employee_name,
               COALESCE(ee.department, 'N/A') AS department,
-              ee.date_hired
+              ee.date_hired,
+              COALESCE(eps.time_in, '08:00')    AS sched_time_in,
+              COALESCE(eps.hours_in_day, 8)     AS sched_hours_in_day
            FROM users u
            LEFT JOIN employees e_code
              ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
@@ -1456,6 +1563,8 @@ module.exports = function (app, pool) {
                ORDER BY em.employment_id DESC
                LIMIT 1
              )
+           LEFT JOIN employee_payroll_settings eps
+             ON eps.employee_id = COALESCE(e_code.employee_id, e_name.employee_id)
            WHERE LOWER(TRIM(u.role)) = 'employee'
              AND (? IS NULL OR u.user_id = ?)
          ),
@@ -1527,7 +1636,7 @@ module.exports = function (app, pool) {
                     THEN TIMESTAMPDIFF(SECOND, ls.break_out, ls.break_in)
                     ELSE 0
                   END
-                )) / 3600 - 8,
+                )) / 3600 - eu.sched_hours_in_day,
                 0
               ),
               2
@@ -1535,13 +1644,13 @@ module.exports = function (app, pool) {
             CASE
               WHEN ls.time_in IS NOT NULL
               THEN GREATEST(0, TIMESTAMPDIFF(MINUTE,
-                   CONCAT(DATE_FORMAT(sd.attendance_date, '%Y-%m-%d'), ' 08:00:00'),
+                   CONCAT(DATE_FORMAT(sd.attendance_date, '%Y-%m-%d'), ' ', eu.sched_time_in, ':00'),
                    ls.time_in))
               ELSE 0
             END AS late_minutes,
             CASE
               WHEN ls.time_in IS NOT NULL AND ls.time_out IS NOT NULL
-              THEN GREATEST(0, 480 - (
+              THEN GREATEST(0, (eu.sched_hours_in_day * 60) - (
                 TIMESTAMPDIFF(MINUTE, ls.time_in, ls.time_out) -
                 CASE
                   WHEN ls.break_out IS NOT NULL AND ls.break_in IS NOT NULL AND ls.break_in > ls.break_out
@@ -1718,8 +1827,19 @@ module.exports = function (app, pool) {
         [employeeUserId]
       );
       if (empRecordForHris) {
-        // Compute late, undertime, OT from the edited attendance times
-        const shiftStartMin = 8 * 60; // 08:00 = 480 min
+        // Load the employee's schedule settings to compute late/undertime correctly
+        const [[empSchedule]] = await conn.execute(
+          `SELECT COALESCE(time_in, '08:00') AS time_in,
+                  COALESCE(hours_in_day, 8)  AS hours_in_day
+           FROM employee_payroll_settings
+           WHERE employee_id = ? LIMIT 1`,
+          [empRecordForHris.employee_id]
+        ).catch(() => [[null]]);
+
+        const [schedH, schedM]   = (empSchedule?.time_in || '08:00').split(':').map(Number);
+        const shiftStartMin      = schedH * 60 + schedM;
+        const scheduledWorkMin   = Math.round(Number(empSchedule?.hours_in_day || 8) * 60);
+
         let hrisLateMin = 0, hrisUndertimeMin = 0, hrisOtHours = 0;
         const hrisStatus = normalizedTimes.time_in ? (normalizedTimes.time_out ? 'Present' : 'Incomplete') : 'Absent';
 
@@ -1738,8 +1858,8 @@ module.exports = function (app, pool) {
             const [biH, biM] = normalizedTimes.break_in.split(':').map(Number);
             workedMin -= (biH * 60 + biM) - (boH * 60 + boM);
           }
-          if (workedMin < 480) hrisUndertimeMin = 480 - workedMin;
-          else if (workedMin > 480) hrisOtHours = Math.round((workedMin - 480) / 60 * 100) / 100;
+          if (workedMin < scheduledWorkMin) hrisUndertimeMin = scheduledWorkMin - workedMin;
+          else if (workedMin > scheduledWorkMin) hrisOtHours = Math.round((workedMin - scheduledWorkMin) / 60 * 100) / 100;
         }
 
         try {
@@ -1818,7 +1938,12 @@ module.exports = function (app, pool) {
             rate_basis_ot,
             main_computation,
             basis_absences,
-            basis_overtime
+            basis_overtime,
+            COALESCE(time_in, '08:00') AS time_in,
+            COALESCE(time_out, '17:00') AS time_out,
+            COALESCE(break_minutes, 60) AS break_minutes,
+            COALESCE(working_days, '1,2,3,4,5') AS working_days,
+            schedule_template_id
          FROM employee_payroll_settings
          WHERE employee_id = ?
          ORDER BY setting_id DESC
@@ -1942,7 +2067,12 @@ module.exports = function (app, pool) {
             rate_basis_ot,
             main_computation,
             basis_absences,
-            basis_overtime
+            basis_overtime,
+            COALESCE(time_in, '08:00') AS time_in,
+            COALESCE(time_out, '17:00') AS time_out,
+            COALESCE(break_minutes, 60) AS break_minutes,
+            COALESCE(working_days, '1,2,3,4,5') AS working_days,
+            schedule_template_id
          FROM employee_payroll_settings
          WHERE employee_id = ?
          ORDER BY setting_id DESC
@@ -2009,7 +2139,12 @@ module.exports = function (app, pool) {
              days_in_year_ot = ?,
              rate_basis_ot = ?,
              basis_absences = ?,
-             basis_overtime = ?
+             basis_overtime = ?,
+             time_in = ?,
+             time_out = ?,
+             break_minutes = ?,
+             working_days = ?,
+             schedule_template_id = ?
          WHERE employee_id = ?`,
         [
           cleanText(payload.payroll_period),
@@ -2025,6 +2160,11 @@ module.exports = function (app, pool) {
           cleanNumber(payload.rate_basis_ot),
           cleanText(payload.basis_absences),
           cleanText(payload.basis_overtime),
+          cleanText(payload.time_in) || '08:00',
+          cleanText(payload.time_out) || '17:00',
+          cleanNumber(payload.break_minutes) ?? 60,
+          cleanText(payload.working_days) || '1,2,3,4,5',
+          payload.schedule_template_id ? Number(payload.schedule_template_id) : null,
           employeeId
         ]
       );
@@ -2033,6 +2173,162 @@ module.exports = function (app, pool) {
     } catch (err) {
       console.error('Admin schedule update error:', err);
       return res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  // ========== SCHEDULE TEMPLATES ==========
+
+  app.get('/api/schedule_templates', async (req, res) => {
+    await scheduleInitReady;
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      const [rows] = await conn.query('SELECT * FROM schedule_templates ORDER BY name ASC');
+      res.json({ success: true, data: rows });
+    } catch (err) {
+      console.error('GET schedule_templates error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.post('/api/schedule_templates', async (req, res) => {
+    await scheduleInitReady;
+    const b = req.body || {};
+    if (!String(b.name || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Template name is required' });
+    }
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      const [result] = await conn.query(
+        `INSERT INTO schedule_templates
+           (name, description, time_in, time_out, break_minutes, hours_in_day,
+            days_in_week, working_days, night_diff, night_diff_start, night_diff_end, night_diff_rate)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          String(b.name).trim(),
+          b.description || '',
+          b.time_in || '08:00',
+          b.time_out || '17:00',
+          Number(b.break_minutes) || 60,
+          Number(b.hours_in_day) || 8,
+          Number(b.days_in_week) || 5,
+          b.working_days || '1,2,3,4,5',
+          b.night_diff ? 1 : 0,
+          b.night_diff_start || '22:00',
+          b.night_diff_end || '06:00',
+          Number(b.night_diff_rate) || 0.10
+        ]
+      );
+      const [rows] = await conn.query('SELECT * FROM schedule_templates WHERE id = ?', [result.insertId]);
+      res.json({ success: true, data: rows[0] });
+    } catch (err) {
+      console.error('POST schedule_templates error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.put('/api/schedule_templates/:id', async (req, res) => {
+    await scheduleInitReady;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'Invalid id' });
+    const b = req.body || {};
+    if (!String(b.name || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Template name is required' });
+    }
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await conn.query(
+        `UPDATE schedule_templates
+         SET name=?, description=?, time_in=?, time_out=?, break_minutes=?, hours_in_day=?,
+             days_in_week=?, working_days=?, night_diff=?, night_diff_start=?, night_diff_end=?, night_diff_rate=?
+         WHERE id=?`,
+        [
+          String(b.name).trim(),
+          b.description || '',
+          b.time_in || '08:00',
+          b.time_out || '17:00',
+          Number(b.break_minutes) || 60,
+          Number(b.hours_in_day) || 8,
+          Number(b.days_in_week) || 5,
+          b.working_days || '1,2,3,4,5',
+          b.night_diff ? 1 : 0,
+          b.night_diff_start || '22:00',
+          b.night_diff_end || '06:00',
+          Number(b.night_diff_rate) || 0.10,
+          id
+        ]
+      );
+      const [rows] = await conn.query('SELECT * FROM schedule_templates WHERE id = ?', [id]);
+      if (!rows.length) return res.status(404).json({ success: false, message: 'Not found' });
+      res.json({ success: true, data: rows[0] });
+    } catch (err) {
+      console.error('PUT schedule_templates error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  app.delete('/api/schedule_templates/:id', async (req, res) => {
+    await scheduleInitReady;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'Invalid id' });
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await conn.query('DELETE FROM schedule_templates WHERE id = ?', [id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('DELETE schedule_templates error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  // Bulk-assign a template to selected employees
+  app.post('/api/schedule_templates/:id/assign', async (req, res) => {
+    await scheduleInitReady;
+    const templateId = Number(req.params.id);
+    if (!templateId) return res.status(400).json({ success: false, message: 'Invalid template id' });
+    const { employee_ids } = req.body || {};
+    if (!Array.isArray(employee_ids) || employee_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'employee_ids array is required' });
+    }
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      const [tplRows] = await conn.query('SELECT * FROM schedule_templates WHERE id = ?', [templateId]);
+      if (!tplRows.length) return res.status(404).json({ success: false, message: 'Template not found' });
+      const tpl = tplRows[0];
+
+      let updated = 0;
+      for (const empId of employee_ids) {
+        const id = Number(empId);
+        if (!id) continue;
+        await ensureEmployeeScheduleSettings(conn, id);
+        await conn.query(
+          `UPDATE employee_payroll_settings
+           SET time_in=?, time_out=?, break_minutes=?, hours_in_day=?,
+               days_in_week=?, working_days=?, schedule_template_id=?
+           WHERE employee_id=?`,
+          [tpl.time_in, tpl.time_out, tpl.break_minutes, tpl.hours_in_day,
+           tpl.days_in_week, tpl.working_days, templateId, id]
+        );
+        updated++;
+      }
+      res.json({ success: true, message: `Template assigned to ${updated} employee(s).`, updated });
+    } catch (err) {
+      console.error('POST schedule_templates assign error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
     } finally {
       if (conn) conn.release();
     }

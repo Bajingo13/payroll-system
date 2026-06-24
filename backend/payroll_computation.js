@@ -162,7 +162,15 @@ module.exports = function (app, pool) {
         return 'MONTHLY';
     }
 
-    function getWorkingDaySet(daysInWeek) {
+    function getWorkingDaySet(daysInWeek, workingDaysStr) {
+        // Prefer the explicit comma-separated day list (e.g. '2,3,4,5,6' for Tue–Sat).
+        if (workingDaysStr && String(workingDaysStr).trim()) {
+            const parsed = String(workingDaysStr).split(',')
+                .map(s => Number(s.trim()))
+                .filter(n => n >= 0 && n <= 6 && Number.isInteger(n));
+            if (parsed.length > 0) return new Set(parsed);
+        }
+        // Fallback: derive from the count using Mon-first order.
         const normalized = Math.max(0, Math.min(7, Math.trunc(Number(daysInWeek) || 5)));
         const weeklyOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon-Fri, then Sat, then Sun.
         return new Set(weeklyOrder.slice(0, normalized));
@@ -584,7 +592,9 @@ module.exports = function (app, pool) {
                 `SELECT main_computation, payroll_period, payroll_rate,
                         days_in_year, days_in_week, hours_in_day, week_in_year,
                         strict_no_overtime, ot_rate, days_in_year_ot, rate_basis_ot,
-                        basis_absences, basis_overtime
+                        basis_absences, basis_overtime,
+                        COALESCE(time_in, '08:00')       AS time_in,
+                        COALESCE(working_days, '')        AS working_days
                  FROM employee_payroll_settings
                  WHERE employee_id = ? LIMIT 1`,
                 [employeeId]
@@ -693,7 +703,7 @@ module.exports = function (app, pool) {
 
             let totalOtHours = Math.round(otRows.reduce((s, r) => s + Number(r.total_hours || 0), 0) * 100) / 100;
 
-            const workingDays = getWorkingDaySet(settings?.days_in_week);
+            const workingDays = getWorkingDaySet(settings?.days_in_week, settings?.working_days);
             const nonWorkingHolidayDates = await getNonWorkingHolidayDates(conn, startDate, endDate);
             const holidayTypeMap = await getClassifiedHolidayDates(conn, startDate, endDate);
 
@@ -935,12 +945,16 @@ module.exports = function (app, pool) {
                         totalAbsentDays = absentCount;
                         attendanceSource = 'computed_from_attendance';
 
+                        // Parse scheduled shift start from settings (e.g. '08:00', '22:00').
+                        const [schedHH, schedMM] = String(settings?.time_in || '08:00').split(':').map(Number);
+                        const scheduledMinutesPerDay = Math.round(toMoney(settings?.hours_in_day || 8) * 60);
+
                         let totalLateMin = 0, totalUndertimeMin = 0;
                         for (const day of attLogs) {
                             if (day.time_in) {
                                 const timeIn = new Date(String(day.time_in).replace(' ', 'T'));
                                 const shiftStart = new Date(timeIn);
-                                shiftStart.setHours(8, 0, 0, 0);
+                                shiftStart.setHours(schedHH, schedMM, 0, 0);
                                 if (timeIn > shiftStart) {
                                     totalLateMin += Math.floor((timeIn - shiftStart) / 60000);
                                 }
@@ -954,7 +968,7 @@ module.exports = function (app, pool) {
                                     const brkIn  = new Date(String(day.break_in).replace(' ', 'T'));
                                     if (brkIn > brkOut) workedMin -= Math.floor((brkIn - brkOut) / 60000);
                                 }
-                                totalUndertimeMin += Math.max(0, 480 - workedMin);
+                                totalUndertimeMin += Math.max(0, scheduledMinutesPerDay - workedMin);
                             }
                         }
 

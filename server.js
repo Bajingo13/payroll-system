@@ -454,6 +454,7 @@ if (useReactFrontend) {
     require('./backend/thirteenth_month')(app, pool);
     require('./backend/year_end_payroll')(app, pool);
     require('./backend/system_config')(app, pool);
+    require('./backend/organization_setup')(app, pool);
     require('./backend/payslip_email')(app, pool);
 
     app.get('/api/db-test', async (req, res) => {
