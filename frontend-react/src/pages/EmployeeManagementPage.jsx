@@ -552,24 +552,10 @@ export default function EmployeeManagementPage() {
 
   const [originalContributions, setOriginalContributions] = useState({});
   const [originalPayrollComputation, setOriginalPayrollComputation] = useState({});
-
-  function createBlankPayrollComputation() {
-    return {
-      payroll_period: '',
-      payroll_rate: '',
-      ot_rate: '',
-      days_in_year: '',
-      days_in_week: '',
-      main_computation: '',
-      basis_absences: '',
-      basis_overtime: '',
-      hours_in_day: '',
-      week_in_year: '',
-      strict_no_overtime: false,
-      days_in_year_ot: '',
-      rate_basis_ot: ''
-    };
-  }
+  const [originalRehired, setOriginalRehired] = useState({
+    rehired: false,
+    rehired_date: ''
+  });
 
   async function loadEmployeeDetails(empCode) {
     if (!empCode) return;
@@ -634,6 +620,10 @@ export default function EmployeeManagementPage() {
       );
       setOriginalPayrollComputation({
         ...(employee.payrollComputation || {})
+      });
+      setOriginalRehired({
+        rehired: !!employee.rehired,
+        rehired_date: employee.rehired_date || ''
       });
       setCreatedEmpCode(empCode);
       setAddActiveTab('basic');
@@ -713,6 +703,7 @@ export default function EmployeeManagementPage() {
         [field]: value
       }
     }));
+    console.log('setting strict_no_overtime to', value);
   }
 
   function getContributionEntry(typeId) {
@@ -965,7 +956,9 @@ export default function EmployeeManagementPage() {
       if (comp.days_in_week === '' || comp.days_in_week === null || comp.days_in_week === undefined) return 'Days in a Week is required in Payroll Computation.';
       if (comp.hours_in_day === '' || comp.hours_in_day === null || comp.hours_in_day === undefined) return 'Hours in a Day is required in Payroll Computation.';
       if (comp.week_in_year === '' || comp.week_in_year === null || comp.week_in_year === undefined) return 'Week in a Year is required in Payroll Computation.';
-      if (!comp.ot_rate) return 'OT Rate is required in Payroll Computation.';
+      if (!comp.strict_no_overtime && !comp.ot_rate) {
+        return 'OT Rate is required in Payroll Computation.';
+      }
       if (!taxInsurance.tax_status) return 'Tax Status is required in Payroll Computation.';
       if (taxInsurance.tax_exemption === '' || taxInsurance.tax_exemption === null || taxInsurance.tax_exemption === undefined) return 'Tax Exemption is required in Payroll Computation.';
     }
@@ -1373,10 +1366,35 @@ export default function EmployeeManagementPage() {
             {renderFormRow('Date Terminated:', <input type="date" value={addForm.date_terminated} onChange={(event) => updateAddField('date_terminated', event.target.value)} />)}
             {renderFormRow('End of Contract:', <input type="date" value={addForm.end_of_contract} onChange={(event) => updateAddField('end_of_contract', event.target.value)} />)}
             <div className="legacy-checkbox-row">
-              <input type="checkbox" checked={addForm.rehired} onChange={(event) => updateAddField('rehired', event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={addForm.rehired}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+
+                  if (enabled) {
+                    updateAddField('rehired', true);
+                    updateAddField('rehired_date', originalRehired.rehired_date || '');
+                  } else {
+                    updateAddField('rehired', false);
+                    updateAddField('rehired_date', '');
+                  }
+                }}
+              />
               <label>Rehired</label>
             </div>
-            {renderFormRow('Rehired Date:', <input type="date" value={addForm.rehired_date} onChange={(event) => updateAddField('rehired_date', event.target.value)} disabled={!addForm.rehired} />)}
+
+            {renderFormRow(
+              'Rehired Date:',
+              <input
+                type="date"
+                value={addForm.rehired_date}
+                onChange={(event) =>
+                  updateAddField('rehired_date', event.target.value)
+                }
+                disabled={!addForm.rehired}
+              />
+            )}
             <hr className="divider" />
             {renderFormRow('Machine ID:', <input value={addForm.machine_id} onChange={(event) => updateAddField('machine_id', event.target.value)} />)}
             {renderFormRow('SSS:', <input value={addForm.sss_no} onChange={(event) => updateAddField('sss_no', event.target.value)} />)}
@@ -1650,18 +1668,32 @@ export default function EmployeeManagementPage() {
                 checked={!!comp.strict_no_overtime}
                 onChange={(event) => {
                   const checked = event.target.checked;
+                  console.log('Strict No Overtime changed:', checked);
+
+                  updateNestedAddField(
+                    'payrollComputation',
+                    'strict_no_overtime',
+                    checked
+                  );
+                  console.log('before update', comp.strict_no_overtime);
 
                   if (checked) {
-                    const original =
-                      originalPayrollComputation || createBlankPayrollComputation();
-
-                    Object.entries(original).forEach(([field, value]) => {
-                      updateNestedAddField('payrollComputation', field, value);
-                    });
+                    // USER ENABLED STRICT MODE → generate clean values for saving
+                    updateNestedAddField('payrollComputation', 'ot_rate', '');
+                    updateNestedAddField('payrollComputation', 'days_in_year_ot', '');
+                    updateNestedAddField('payrollComputation', 'rate_basis_ot', '');
                   } else {
-                    const empty = createBlankPayrollComputation();
+                    // USER DISABLED STRICT MODE → restore original snapshot
+                    const original = originalPayrollComputation;
 
-                    Object.entries(empty).forEach(([field, value]) => {
+                    const source =
+                      original && Object.keys(original).length > 0
+                        ? original
+                        : createBlankEmployeeForm().payrollComputation;
+                        console.log('restoring original payroll computation:', source);
+
+                    Object.entries(source).forEach(([field, value]) => {
+                      if (field === 'strict_no_overtime') return; // 🔥 critical fix
                       updateNestedAddField('payrollComputation', field, value);
                     });
                   }
@@ -1669,27 +1701,29 @@ export default function EmployeeManagementPage() {
               />
               <label>STRICTLY NO OVERTIME</label>
             </div>
-            {renderFormRow('OT Rate:', (
-              <select
-                required={!comp.strict_no_overtime}
-                disabled={comp.strict_no_overtime}
-                value={comp.ot_rate || ''}
-                onChange={(event) =>
-                  updateNestedAddField(
-                    'payrollComputation',
-                    'ot_rate',
-                    event.target.value
-                  )
-                }
-              >
-              <option value="" disabled>-- Select --</option>
-              {OT_RATE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-              </select>
-            ), { required: true })}
+            {renderFormRow(
+              'OT Rate:',
+              (
+                <select
+                  required={!comp.strict_no_overtime}
+                  disabled={comp.strict_no_overtime}
+                  value={comp.ot_rate || ''}
+                  onChange={(event) =>
+                    updateNestedAddField('payrollComputation', 'ot_rate', event.target.value)
+                  }
+                >
+                  <option value="" disabled>-- Select --</option>
+                  {OT_RATE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ),
+              {
+                required: !comp.strict_no_overtime // 🔥 FIX HERE
+              }
+            )}
             {renderFormRow('Days in a Year (O.T.):', <input
               type="number"
               disabled={comp.strict_no_overtime}
