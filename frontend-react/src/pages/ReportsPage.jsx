@@ -349,21 +349,15 @@ function buildPayslipPrintHtml(p, cv, companyName) {
 </div>`;
 }
 
-function printPayslipDocument(title, payslip, computed, companyName) {
+function buildPayslipFullPage(title, payslip, computed, companyName) {
   const meta = { ...getReportMetadata(title), signatories: ['Employee Signature:'] };
-  const printWindow = window.open('', '_blank', 'width=760,height=820');
-  if (!printWindow) {
-    window.alert('Popup blocked. Please allow popups to print the payslip.');
-    return;
-  }
-
-  printWindow.document.write(`<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
   <style>
-    @page { size: A5 portrait; margin: 14mm 14mm 14mm 14mm; }
+    @page { size: A5 portrait; margin: 14mm; }
     html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 10px; }
 
     .rule  { border-top: 1.5px solid #000; margin: 4px 0; }
@@ -378,20 +372,18 @@ function printPayslipDocument(title, payslip, computed, companyName) {
 
     .field-tbl { width: 100%; border-collapse: collapse; margin: 3px 0; }
     .field-tbl td { padding: 1px 2px; font-size: 10px; }
-    .fl { }
     .fv { text-align: right; font-weight: 700; }
 
     .cols-tbl { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 10px; }
     .cols-tbl td { padding: 1px 3px; }
-    .ch   { font-weight: 700; }
-    .cc   { text-align: center; width: 54px; }
-    .cr   { text-align: right;  width: 72px; }
-    .ind  { padding-left: 14px !important; }
-    .sh   { font-weight: 700; font-size: 10px; margin: 3px 0 1px; }
+    .ch  { font-weight: 700; }
+    .cc  { text-align: center; width: 54px; }
+    .cr  { text-align: right;  width: 72px; }
+    .ind { padding-left: 14px !important; }
+    .sh  { font-weight: 700; font-size: 10px; margin: 3px 0 1px; }
 
     .box-tbl { width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin: 3px 0; font-size: 10px; }
     .box-tbl td { padding: 3px 6px; font-weight: 700; }
-    .bl  { }
     .bv  { text-align: right; width: 90px; border-left: 1px solid #666; }
     .net td { border-top: 1px solid #000; }
     .mt  { margin-top: 5px; }
@@ -405,10 +397,32 @@ function printPayslipDocument(title, payslip, computed, companyName) {
   ${buildPayslipPrintHtml(payslip, computed, companyName || DEFAULT_COMPANY_NAME)}
   ${signatoryHtml(meta)}
 </body>
-</html>`);
+</html>`;
+}
+
+function printPayslipDocument(title, payslip, computed, companyName) {
+  const printWindow = window.open('', '_blank', 'width=760,height=820');
+  if (!printWindow) {
+    window.alert('Popup blocked. Please allow popups to print the payslip.');
+    return;
+  }
+  printWindow.document.write(buildPayslipFullPage(title, payslip, computed, companyName));
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
+}
+
+function downloadPayslipDocument(title, payslip, computed, companyName, filename) {
+  const html = buildPayslipFullPage(title, payslip, computed, companyName);
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function getReportExportRows(type, rows) {
@@ -1035,14 +1049,31 @@ function PayslipReportSection({ roleSettings }) {
     }
   }
 
-  function printPayslip() {
-    if (!payslip) return;
-    const employeeId = payslip.emp_code || payslip.employee_id || 'employee';
-    printPayslipDocument(`Payslip ${employeeId}`, payslip, {
+  function getPayslipComputed() {
+    return {
       employeeName, monthlyRate, grossPay, totalDeductions, netPay,
       absences, tardiness, undertime, sss, philhealth, pagibig, tax, loanDeductions,
       taxableGrossToDate, withholdingTaxToDate
-    }, companyName);
+    };
+  }
+
+  function printPayslip() {
+    if (!payslip) return;
+    const employeeId = payslip.emp_code || payslip.employee_id || 'employee';
+    printPayslipDocument(`Payslip ${employeeId}`, payslip, getPayslipComputed(), companyName);
+  }
+
+  function downloadPayslip() {
+    if (!payslip) return;
+    const employeeId = payslip.emp_code || payslip.employee_id || 'employee';
+    const date = new Date().toISOString().slice(0, 10);
+    downloadPayslipDocument(
+      `Payslip ${employeeId}`,
+      payslip,
+      getPayslipComputed(),
+      companyName,
+      `payslip-${employeeId}-${date}.html`
+    );
   }
 
   async function sendPayslipEmail() {
@@ -1181,7 +1212,7 @@ ${'-'.repeat(PAYSLIP_WIDTH)}`;
       return;
     }
 
-    exportReport('pdf', filenameBase, 'Payslip', payslipHeaders, payslipRows);
+    downloadPayslip();
   }
 
   return (
@@ -1240,6 +1271,15 @@ ${'-'.repeat(PAYSLIP_WIDTH)}`;
             disabled={!payslip || !roleSettings.canExport}
           >
             Export
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            onClick={downloadPayslip}
+            disabled={!payslip}
+          >
+            Download Payslip
           </button>
 
           <button

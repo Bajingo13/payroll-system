@@ -90,7 +90,7 @@ export default function EmployeeSchedulePage() {
       <header className="employee-hero compact">
         <div>
           <span>Schedule</span>
-        <h2>Schedule</h2>
+        <h2>My Work Schedule</h2>
         <p>View your assigned shift and payroll schedule settings.</p>
         </div>
       </header>

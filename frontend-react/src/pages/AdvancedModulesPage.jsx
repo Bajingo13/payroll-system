@@ -227,31 +227,344 @@ function DocumentManagement() {
 }
 
 function OrganizationSetup() {
-  const [rows, setRows] = useState([
-    ['Administration', 'HR Manager', 'Human Resources Officer', 'SG-08', 'Active'],
-    ['Finance', 'Payroll Manager', 'Payroll Specialist', 'SG-10', 'Active']
-  ]);
-  const [form, setForm] = useState({ department: '', manager: '', designation: '', grade: '', status: 'Active' });
+  const [employees, setEmployees] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
+  const [search,    setSearch]    = useState('');
+  const [view,      setView]      = useState('department');
+  const [selected,  setSelected]  = useState(null);
 
-  function addRow() {
-    if (!form.department.trim() || !form.designation.trim()) return;
-    setRows((current) => [...current, [form.department, form.manager || '-', form.designation, form.grade || '-', form.status]]);
-    setForm({ department: '', manager: '', designation: '', grade: '', status: 'Active' });
+  // Designation Management
+  const [designations, setDesignations] = useState([]);
+  const [desgForm, setDesgForm] = useState({ title: '', description: '', salary_grade: '', department: '' });
+  const [desgSearch, setDesgSearch] = useState('');
+  const [editDesgIdx, setEditDesgIdx] = useState(null);
+
+  useEffect(() => {
+    api.get('/employees')
+      .then(({ data }) => {
+        const emps = data.employees || [];
+        setEmployees(emps);
+        // Seed designations from existing positions (deduplicated)
+        setDesignations((prev) => {
+          if (prev.length > 0) return prev;
+          const seen = new Set();
+          return emps
+            .filter((e) => e.position && !seen.has(e.position) && seen.add(e.position))
+            .map((e) => ({ title: e.position, description: '', salary_grade: '', department: e.department || '' }));
+        });
+      })
+      .catch((err) => setError(getApiMessage(err, 'Failed to load employees.')))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalEmployees  = employees.length;
+  const activeEmployees = useMemo(() => employees.filter((e) => (e.status || '').toLowerCase() === 'active').length, [employees]);
+  const totalDepts      = useMemo(() => new Set(employees.map((e) => e.department).filter(Boolean)).size, [employees]);
+  const totalPositions  = useMemo(() => new Set(employees.map((e) => e.position).filter(Boolean)).size, [employees]);
+
+  // Build org-unit summary rows for the current view
+  const orgUnits = useMemo(() => {
+    const grouped = employees.reduce((acc, emp) => {
+      const key = emp[view] || 'Unassigned';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(emp);
+      return acc;
+    }, {});
+    return Object.entries(grouped)
+      .map(([name, members]) => ({
+        name,
+        total:     members.length,
+        active:    members.filter((e) => (e.status || '').toLowerCase() === 'active').length,
+        positions: new Set(members.map((e) => e.position).filter(Boolean)).size,
+        members,
+      }))
+      .sort((a, b) => {
+        if (a.name === 'Unassigned') return 1;
+        if (b.name === 'Unassigned') return -1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [employees, view]);
+
+  const q = search.toLowerCase().trim();
+  const filteredUnits = q
+    ? orgUnits.filter((u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.members.some((e) =>
+          `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+          (e.emp_code || '').toLowerCase().includes(q)
+        )
+      )
+    : orgUnits;
+
+  const selectedUnit = orgUnits.find((u) => u.name === selected) || null;
+
+  function switchView(field) {
+    setView(field);
+    setSelected(null);
+    setSearch('');
   }
 
+  const VIEWS = [
+    { key: 'department', label: 'Department' },
+    { key: 'division',   label: 'Division'   },
+    { key: 'company',    label: 'Company'    },
+  ];
+
+  const unitLabel = view === 'department' ? 'Department' : view === 'division' ? 'Division' : 'Company';
+
   return (
-    <section className="table-section">
-      <h3>Department, Designation, and Salary Grade Setup</h3>
-      <div className="report-filter-grid">
-        <label>Department<input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} /></label>
-        <label>Manager<input value={form.manager} onChange={(event) => setForm((current) => ({ ...current, manager: event.target.value }))} /></label>
-        <label>Designation<input value={form.designation} onChange={(event) => setForm((current) => ({ ...current, designation: event.target.value }))} /></label>
-        <label>Salary Grade<input value={form.grade} onChange={(event) => setForm((current) => ({ ...current, grade: event.target.value }))} /></label>
-        <label>Status<select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}><option>Active</option><option>Inactive</option></select></label>
-        <div className="toolbar"><button type="button" className="btn" onClick={addRow}>Add Setup</button></div>
-      </div>
-      <SimpleTable headers={['Department', 'Manager', 'Designation', 'Salary Grade', 'Status']} rows={rows} />
-    </section>
+    <>
+      {/* ── Summary cards ── */}
+      <section className="summary react-summary">
+        <div className="card"><span>Total Employees</span><strong>{totalEmployees}</strong></div>
+        <div className="card"><span>Active</span><strong>{activeEmployees}</strong></div>
+        <div className="card"><span>Departments</span><strong>{totalDepts}</strong></div>
+        <div className="card"><span>Unique Positions</span><strong>{totalPositions}</strong></div>
+      </section>
+
+      {/* ── Org unit table ── */}
+      <section className="table-section">
+        <div className="table-header">
+          <div>
+            <h3>Organization Structure</h3>
+            <p>Select a {unitLabel.toLowerCase()} to view its employees.</p>
+          </div>
+          <div className="toolbar">
+            {VIEWS.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                className={view === v.key ? 'btn' : 'btn secondary'}
+                onClick={() => switchView(v.key)}
+              >
+                {v.label}
+              </button>
+            ))}
+            <input
+              type="text"
+              placeholder={`Search ${unitLabel.toLowerCase()}…`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', minWidth: '160px' }}
+            />
+          </div>
+        </div>
+
+        {loading && <p style={{ color: '#64748b', padding: '16px 0' }}>Loading…</p>}
+        {error   && <p className="message">{error}</p>}
+
+        {!loading && !error && (
+          <table>
+            <thead>
+              <tr>
+                <th>{unitLabel}</th>
+                <th>Total</th>
+                <th>Active</th>
+                <th>Inactive</th>
+                <th>Unique Positions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUnits.map((unit) => (
+                <tr
+                  key={unit.name}
+                  onClick={() => setSelected(selected === unit.name ? null : unit.name)}
+                  style={{ cursor: 'pointer', background: selected === unit.name ? '#eff6ff' : undefined, fontWeight: selected === unit.name ? 600 : undefined }}
+                >
+                  <td>{unit.name}</td>
+                  <td>{unit.total}</td>
+                  <td><span className="status active">{unit.active}</span></td>
+                  <td>{unit.total - unit.active}</td>
+                  <td>{unit.positions}</td>
+                </tr>
+              ))}
+              {filteredUnits.length === 0 && (
+                <tr><td colSpan={5} style={{ textAlign: 'center', color: '#94a3b8' }}>No results found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* ── Employee detail for selected unit ── */}
+      {selectedUnit && (
+        <section className="table-section">
+          <div className="table-header">
+            <div>
+              <h3>{selectedUnit.name}</h3>
+              <p>{selectedUnit.total} employees &middot; {selectedUnit.active} active</p>
+            </div>
+            <div className="toolbar">
+              <button type="button" className="btn secondary" onClick={() => setSelected(null)}>Close</button>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>ID</th>
+                {view === 'company'   && <th>Division</th>}
+                {view !== 'department' && <th>Department</th>}
+                <th>Position</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedUnit.members.map((emp) => (
+                <tr key={emp.employee_id || emp.emp_code}>
+                  <td>{emp.first_name} {emp.last_name}</td>
+                  <td>{emp.emp_code || '-'}</td>
+                  {view === 'company'    && <td>{emp.division   || '-'}</td>}
+                  {view !== 'department' && <td>{emp.department || '-'}</td>}
+                  <td>{emp.position || '-'}</td>
+                  <td><span className={`status ${(emp.status || 'active').toLowerCase()}`}>{emp.status || 'Active'}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {/* ── Designation Management ── */}
+      <section className="table-section">
+        <div className="table-header">
+          <div>
+            <h3>Designation Management</h3>
+            <p>Manage job titles, define responsibilities, and link to salary grade structures.</p>
+          </div>
+          <div className="toolbar">
+            <input
+              type="text"
+              placeholder="Search designation…"
+              value={desgSearch}
+              onChange={(e) => setDesgSearch(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', minWidth: '160px' }}
+            />
+          </div>
+        </div>
+
+        {/* Form — add or edit */}
+        <div className="report-filter-grid" style={{ marginBottom: 12 }}>
+          <label>
+            Job Title
+            <input
+              placeholder="e.g. Payroll Specialist"
+              value={desgForm.title}
+              onChange={(e) => setDesgForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </label>
+          <label>
+            Department
+            <select
+              value={desgForm.department}
+              onChange={(e) => setDesgForm((f) => ({ ...f, department: e.target.value }))}
+            >
+              <option value="">— Select department —</option>
+              {[...new Set(employees.map((e) => e.department).filter(Boolean))].sort().map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Salary Grade
+            <input
+              placeholder="e.g. SG-10"
+              value={desgForm.salary_grade}
+              onChange={(e) => setDesgForm((f) => ({ ...f, salary_grade: e.target.value }))}
+            />
+          </label>
+          <label>
+            Job Description / Responsibilities
+            <input
+              placeholder="Brief description of responsibilities"
+              value={desgForm.description}
+              onChange={(e) => setDesgForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </label>
+          <div className="toolbar">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                if (!desgForm.title.trim()) return;
+                if (editDesgIdx !== null) {
+                  setDesignations((prev) => prev.map((d, i) => i === editDesgIdx ? { ...desgForm } : d));
+                  setEditDesgIdx(null);
+                } else {
+                  setDesignations((prev) => [...prev, { ...desgForm }]);
+                }
+                setDesgForm({ title: '', description: '', salary_grade: '', department: '' });
+              }}
+            >
+              {editDesgIdx !== null ? 'Update' : 'Add Designation'}
+            </button>
+            {editDesgIdx !== null && (
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => { setEditDesgIdx(null); setDesgForm({ title: '', description: '', salary_grade: '', department: '' }); }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Designations table */}
+        <table>
+          <thead>
+            <tr>
+              <th>Job Title</th>
+              <th>Department</th>
+              <th>Job Description / Responsibilities</th>
+              <th>Salary Grade</th>
+              <th>Headcount</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {designations
+              .filter((d) => !desgSearch || d.title.toLowerCase().includes(desgSearch.toLowerCase()) || (d.department || '').toLowerCase().includes(desgSearch.toLowerCase()))
+              .map((d, i) => {
+                const headcount = employees.filter((e) => (e.position || '').toLowerCase() === d.title.toLowerCase()).length;
+                return (
+                  <tr key={i}>
+                    <td><strong>{d.title}</strong></td>
+                    <td>{d.department || '-'}</td>
+                    <td style={{ color: d.description ? '#0f172a' : '#94a3b8' }}>{d.description || 'No description set'}</td>
+                    <td>{d.salary_grade ? <span className="status approved">{d.salary_grade}</span> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                    <td>{headcount}</td>
+                    <td>
+                      <div className="toolbar" style={{ gap: 6 }}>
+                        <button
+                          type="button"
+                          className="btn secondary"
+                          style={{ padding: '3px 10px', fontSize: 12 }}
+                          onClick={() => { setDesgForm({ ...d }); setEditDesgIdx(i); }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn secondary"
+                          style={{ padding: '3px 10px', fontSize: 12, color: '#dc2626' }}
+                          onClick={() => setDesignations((prev) => prev.filter((_, idx) => idx !== i))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            {designations.length === 0 && (
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>No designations added yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+    </>
   );
 }
 

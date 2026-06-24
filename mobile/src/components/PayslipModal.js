@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
+  Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
 import { api } from '../api/client';
 
 // ── Helpers ──────────────────────────────────────────────
@@ -83,44 +85,140 @@ export default function PayslipModal({ visible, payrollId, onClose }) {
   const p = payslip || {};
   const fullName = [p.first_name, p.middle_name ? p.middle_name[0] + '.' : '', p.last_name].filter(Boolean).join(' ');
 
-  async function sharePayslip() {
+  function buildPayslipHtml() {
+    const m = (v) => Number(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (v) => String(v ?? '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const dash = (v) => Number(v) ? m(v) : '-';
+    const fmtDate = (v) => {
+      if (!v) return '-';
+      const d = new Date(String(v).replace(' ', 'T'));
+      return isNaN(d.getTime()) ? String(v)
+        : d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
+    };
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payslip - ${esc(fullName)}</title>
+  <style>
+    @page { size: A5 portrait; margin: 14mm; }
+    html, body { margin: 0; padding: 16px; background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 12px; }
+    .rule { border-top: 1.5px solid #000; margin: 6px 0; }
+    .center { text-align: center; }
+    .heavy { font-weight: 900; font-size: 14px; text-transform: uppercase; }
+    .ps-title { font-size: 18px; font-weight: 900; letter-spacing: 4px; margin: 4px 0; }
+    .info-tbl { width: 100%; border-collapse: collapse; margin: 6px 0; }
+    .info-tbl td { padding: 2px 3px; font-size: 11px; }
+    .il { font-weight: 700; min-width: 100px; white-space: nowrap; }
+    .ic { padding: 0 6px; }
+    .field-tbl { width: 100%; border-collapse: collapse; margin: 4px 0; }
+    .field-tbl td { padding: 2px 3px; font-size: 11px; }
+    .fv { text-align: right; font-weight: 700; }
+    .cols-tbl { width: 100%; border-collapse: collapse; margin: 3px 0; font-size: 11px; }
+    .cols-tbl td { padding: 2px 4px; }
+    .ch { font-weight: 700; }
+    .cc { text-align: center; width: 60px; }
+    .cr { text-align: right; width: 80px; }
+    .ind { padding-left: 16px !important; }
+    .sh { font-weight: 700; font-size: 11px; margin: 4px 0 2px; }
+    .box-tbl { width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin: 4px 0; font-size: 11px; }
+    .box-tbl td { padding: 4px 8px; font-weight: 700; }
+    .bv { text-align: right; width: 100px; border-left: 1px solid #666; }
+    .net td { border-top: 1px solid #000; }
+    .mt { margin-top: 8px; }
+    .sig-row { display: flex; gap: 30px; margin-top: 30px; }
+    .sig-box { flex: 1; text-align: center; font-size: 11px; }
+    .sig-lbl { margin-bottom: 30px; }
+    .sig-line { border-bottom: 1px solid #000; }
+    .footer { text-align: center; font-size: 9px; color: #888; font-style: italic; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="rule"></div>
+  <div class="center heavy">${esc(p.company || 'AstreaBlue Intelligence Inc.')}</div>
+  <div class="center ps-title">P A Y S L I P</div>
+  <div class="center">PAYROLL PERIOD COVERED : ${esc(p.payroll_range || '-')}</div>
+
+  <table class="info-tbl">
+    <tr><td class="il">EMPLOYEE</td><td class="ic">:</td><td>${esc(fullName)}</td></tr>
+    <tr><td class="il">ID.</td><td class="ic">:</td><td>${esc(p.emp_code || '-')}</td></tr>
+    <tr><td class="il">DEPARTMENT</td><td class="ic">:</td><td>${esc(p.department || '-')}</td></tr>
+  </table>
+  <div class="rule"></div>
+
+  <table class="field-tbl">
+    <tr><td>MONTHLY/DAILY [Basic + De Minimis]</td><td class="fv">${m(p.basic_salary)}</td></tr>
+    <tr><td>TAX STATUS</td><td class="fv">${esc(p.tax_status || '-')}</td></tr>
+  </table>
+
+  <table class="cols-tbl">
+    <thead><tr class="ch"><td>EARNINGS</td><td class="cc">Current</td><td class="cc">Adj.</td><td class="cr">Amount</td></tr></thead>
+    <tbody>
+      <tr><td class="ind">BASIC SALARY PAY</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${m(p.gross_pay)}</td></tr>
+    </tbody>
+  </table>
+  <table class="box-tbl">
+    <tr><td>GROSS PAY</td><td class="bv">${m(p.gross_pay)}</td></tr>
+  </table>
+
+  <div class="sh">DEDUCTIONS</div>
+  <table class="cols-tbl">
+    <tbody>
+      <tr><td class="ind">Absences</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(p.absence_deduction)}</td></tr>
+      <tr><td class="ind">Tardiness</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(p.late_deduction)}</td></tr>
+      <tr><td class="ind">Undertime</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(p.undertime_deduction)}</td></tr>
+      <tr><td class="ind">SSS Premium</td><td class="cc">${m(p.sss_employee)}</td><td class="cc">-</td><td class="cr">${m(p.sss_employee)}</td></tr>
+      <tr><td class="ind">Philhealth</td><td class="cc">${m(p.philhealth_employee)}</td><td class="cc">-</td><td class="cr">${m(p.philhealth_employee)}</td></tr>
+      <tr><td class="ind">Pag-Ibig</td><td class="cc">${m(p.pagibig_employee)}</td><td class="cc">-</td><td class="cr">${m(p.pagibig_employee)}</td></tr>
+      <tr><td class="ind">TAX WITHHELD</td><td class="cc">${m(p.tax_withheld)}</td><td class="cc">-</td><td class="cr">${m(p.tax_withheld)}</td></tr>
+      <tr><td class="ind">Loan Deductions</td><td class="cc">-</td><td class="cc">-</td><td class="cr">${dash(p.loans)}</td></tr>
+    </tbody>
+  </table>
+  <table class="box-tbl">
+    <tr><td>TOTAL DEDUCTIONS</td><td class="bv">${m(p.total_deductions)}</td></tr>
+    <tr class="net"><td>NET PAY</td><td class="bv">${m(p.net_pay)}</td></tr>
+  </table>
+
+  <table class="box-tbl mt">
+    <tr><td>TAXABLE GROSS INCOME TO-DATE</td><td class="bv">${m(p.taxable_gross_income_to_date || p.gross_pay)}</td></tr>
+    <tr><td>WITHHOLDING TAX TO-DATE</td><td class="bv">${m(p.withholding_tax_to_date || p.tax_withheld)}</td></tr>
+  </table>
+  <div class="rule"></div>
+
+  <div class="sig-row">
+    <div class="sig-box"><div class="sig-lbl">Employer Signature</div><div class="sig-line"></div></div>
+    <div class="sig-box"><div class="sig-lbl">Employee Signature</div><div class="sig-line"></div></div>
+  </div>
+  <div class="footer">This is a system generated payslip</div>
+</body>
+</html>`;
+  }
+
+  async function downloadPayslip() {
     if (!payslip) return;
-    const lines = [
-      `PAYSLIP — ${p.payroll_range || '-'}`,
-      `${'─'.repeat(36)}`,
-      `Employee : ${fullName || '-'}`,
-      `ID       : ${p.emp_code || '-'}`,
-      `Position : ${p.position || '-'}`,
-      `Dept     : ${p.department || '-'}`,
-      `Period   : ${p.payroll_range || '-'}`,
-      `${'─'.repeat(36)}`,
-      `EARNINGS`,
-      ...(Number(p.basic_salary) > 0 ? [`  Basic Salary           ${money(p.basic_salary)}`] : []),
-      ...(Number(p.overtime) > 0 ? [`  Overtime Pay           ${money(p.overtime)}`] : []),
-      ...(Number(p.holiday_pay) > 0 ? [`  Holiday Pay            ${money(p.holiday_pay)}`] : []),
-      ...(p.allowances || []).filter(a => Number(a.amount) > 0).map(a => `  ${(a.allowance_name || 'Allowance').padEnd(22)} ${money(a.amount)}`),
-      `  Total Earnings         ${money(p.gross_pay)}`,
-      `${'─'.repeat(36)}`,
-      `DEDUCTIONS`,
-      ...(Number(p.absence_deduction) > 0 ? [`  Absences               ${money(p.absence_deduction)}`] : []),
-      ...(Number(p.late_deduction) > 0 ? [`  Tardiness              ${money(p.late_deduction)}`] : []),
-      ...(Number(p.sss_employee) > 0 ? [`  SSS Premium            ${money(p.sss_employee)}`] : []),
-      ...(Number(p.philhealth_employee) > 0 ? [`  PhilHealth             ${money(p.philhealth_employee)}`] : []),
-      ...(Number(p.pagibig_employee) > 0 ? [`  Pag-IBIG               ${money(p.pagibig_employee)}`] : []),
-      ...(Number(p.tax_withheld) > 0 ? [`  Tax Withheld           ${money(p.tax_withheld)}`] : []),
-      ...(Number(p.loans) > 0 ? [`  Loans                  ${money(p.loans)}`] : []),
-      `  Total Deductions       ${money(p.total_deductions)}`,
-      `${'─'.repeat(36)}`,
-      `NET PAY                  ${money(p.net_pay)}`,
-      `${'─'.repeat(36)}`,
-      `${numberToWords(p.net_pay)}`,
-      ``,
-      `AstreaBlue HRIS — System Generated`,
-    ];
+    const empCode = p.emp_code || 'employee';
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `payslip-${empCode}-${date}.html`;
+    const html = buildPayslipHtml();
+
     try {
-      await Share.share({ message: lines.join('\n') });
+      if (Platform.OS === 'android') {
+        const perms = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!perms.granted) return;
+        const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+          perms.directoryUri, filename, 'text/html'
+        );
+        await FileSystem.writeAsStringAsync(uri, html, { encoding: FileSystem.EncodingType.UTF8 });
+        Alert.alert('Downloaded', `Payslip saved as "${filename}".`);
+      } else {
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, html, { encoding: FileSystem.EncodingType.UTF8 });
+        Alert.alert('Downloaded', `Payslip saved as "${filename}".\nFind it in the Files app under this app's folder.`);
+      }
     } catch {
-      // user cancelled share sheet
+      Alert.alert('Error', 'Could not save the payslip. Please try again.');
     }
   }
 
@@ -156,8 +254,8 @@ export default function PayslipModal({ visible, payrollId, onClose }) {
           <Text style={s.topBarTitle}>Payslip Preview</Text>
           <View style={s.topBarActions}>
             {payslip && (
-              <TouchableOpacity style={s.shareBtn} onPress={sharePayslip} accessibilityLabel="Share payslip">
-                <Ionicons name="share-outline" size={20} color="#1e40af" />
+              <TouchableOpacity style={s.downloadBtn} onPress={downloadPayslip} accessibilityLabel="Download payslip">
+                <Ionicons name="download-outline" size={20} color="#1e40af" />
               </TouchableOpacity>
             )}
             <TouchableOpacity style={s.closeBtn} onPress={onClose} accessibilityLabel="Close payslip">
@@ -273,7 +371,7 @@ const s = StyleSheet.create({
   },
   topBarTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   topBarActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  shareBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
+  downloadBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   loadingText: { fontSize: 14, color: '#64748b' },
