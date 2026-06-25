@@ -87,7 +87,7 @@ function getAttendancePhotoUrl(value, assetBase) {
     raw;
   const filename = photoPart.includes(':') ? photoPart.split(':').slice(1).join(':') : photoPart;
   if (!filename) return null;
-  return `${assetBase}/uploads/attendance/${encodeURIComponent(filename)}`;
+  return `${assetBase}/api/attendance/photo/${encodeURIComponent(filename)}`;
 }
 
 function fmtDist(m) {

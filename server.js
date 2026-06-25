@@ -296,6 +296,9 @@ if (fs.existsSync(reactDistPath)) {
 }
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', (_req, res) => {
+  res.status(404).send('Uploaded file not found.');
+});
 
 if (useReactFrontend) {
   app.use((req, res, next) => {
