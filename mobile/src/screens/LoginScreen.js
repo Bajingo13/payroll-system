@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 
 const { width: SW } = Dimensions.get('window');
+const OTP_EXPIRY_MINUTES = 5;
 
 function normalizeRole(raw) {
   const role = String(raw || '').trim().toLowerCase();
@@ -31,13 +32,20 @@ function normalizeRole(raw) {
 }
 
 export default function LoginScreen() {
-  const { login, commitLogin, logout, justLoggedOut, clearLogoutFlag } = useAuth();
+  const { login, finishLogin, commitLogin, logout, justLoggedOut, clearLogoutFlag } = useAuth();
   const insets = useSafeAreaInsets();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState('credentials');
+  const [attemptsLeft, setAttemptsLeft] = useState(null);
+  const [otpUserId, setOtpUserId] = useState(null);
+  const [otp, setOtp] = useState('');
+  const [otpInfo, setOtpInfo] = useState({ maskedEmail: null, maskedPhone: null });
+  const [otpAttemptsLeft, setOtpAttemptsLeft] = useState(null);
+  const [resending, setResending] = useState(false);
   const [uFocus, setUFocus] = useState(false);
   const [pFocus, setPFocus] = useState(false);
 
@@ -61,25 +69,84 @@ export default function LoginScreen() {
   const [resetMessage, setResetMessage] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
 
+  async function completeMobileLogin(user) {
+    if (normalizeRole(user.role) === 'admin') {
+      await logout();
+      setError('Admin accounts are not supported on the mobile app. Please use the web system. Only HR and Employee accounts can log in here.');
+      return;
+    }
+
+    setToast('Logged in successfully!');
+    loginTimerRef.current = setTimeout(() => commitLogin(user), 500);
+  }
+
   async function handleLogin() {
     if (!username.trim() || !password) { setError('Please enter your username and password.'); return; }
-    setError(''); setLoading(true);
+    setError('');
+    setAttemptsLeft(null);
+    setLoading(true);
     try {
-      const user = await login(username.trim(), password);
-      if (normalizeRole(user.role) === 'admin') {
-        await logout();
-        setError('Admin accounts are not supported on the mobile app. Please use the web system. Only HR and Employee accounts can log in here.');
+      const result = await login(username.trim(), password);
+
+      if (result.requiresOtp) {
+        setOtpUserId(result.userId);
+        setOtpInfo({ maskedEmail: result.maskedEmail, maskedPhone: result.maskedPhone });
+        setOtp('');
+        setOtpAttemptsLeft(null);
+        setStep('otp');
+        setToast(result.message || 'Verification code sent.');
+        setTimeout(() => setToast(''), 2500);
         setLoading(false);
         return;
       }
-      // Show toast then navigate
-      setToast('Logged in successfully!');
-      setLoading(false);
-      loginTimerRef.current = setTimeout(() => commitLogin(user), 1200);
+
+      await completeMobileLogin(result);
     } catch (err) {
+      const resp = err?.response?.data;
       setError(getApiMessage(err, 'Invalid username or password.'));
-      setLoading(false);
+      if (resp?.attemptsLeft !== undefined) setAttemptsLeft(resp.attemptsLeft);
     }
+    setLoading(false);
+  }
+
+  async function handleOtpVerify() {
+    if (otp.length < 6) { setError('Please enter the complete 6-digit verification code.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await api.post('/login/verify-otp', { userId: otpUserId, otp });
+      const user = await finishLogin(data);
+      await completeMobileLogin(user);
+    } catch (err) {
+      const resp = err?.response?.data;
+      setError(getApiMessage(err, 'Incorrect verification code.'));
+      if (resp?.attemptsLeft !== undefined) setOtpAttemptsLeft(resp.attemptsLeft);
+      if (resp?.expired) {
+        setStep('credentials');
+        setOtp('');
+        setOtpUserId(null);
+        setError('');
+        setToast('Verification expired. Please log in again.');
+        setTimeout(() => setToast(''), 2500);
+      }
+    }
+    setLoading(false);
+  }
+
+  async function handleResendOtp() {
+    if (resending || !otpUserId) return;
+    setError('');
+    setResending(true);
+    try {
+      const { data } = await api.post('/login/resend-otp', { userId: otpUserId });
+      setOtp('');
+      setOtpAttemptsLeft(null);
+      setToast(data.message || 'New verification code sent.');
+      setTimeout(() => setToast(''), 2500);
+    } catch (err) {
+      setError(getApiMessage(err, 'Could not resend verification code.'));
+    }
+    setResending(false);
   }
 
   async function handlePasswordResetRequest() {
@@ -163,92 +230,164 @@ export default function LoginScreen() {
               style={s.accentLine}
             />
 
-            <Text style={s.title}>Welcome back 👋</Text>
+            <Text style={s.title}>Welcome back</Text>
             <Text style={s.subtitle}>Sign in to continue to HRIS</Text>
 
-            {/* Username */}
-            <View style={s.fieldWrap}>
-              <Text style={s.label}>Username</Text>
-              <View style={[s.field, uFocus && s.fieldOn]}>
-                <View style={[s.iconBox, uFocus && s.iconBoxOn]}>
-                  <Ionicons name="person" size={15} color={uFocus ? '#fff' : '#94a3b8'} />
+            {step === 'credentials' ? (
+              <>
+                <View style={s.fieldWrap}>
+                  <Text style={s.label}>Username</Text>
+                  <View style={[s.field, uFocus && s.fieldOn]}>
+                    <View style={[s.iconBox, uFocus && s.iconBoxOn]}>
+                      <Ionicons name="person" size={15} color={uFocus ? '#fff' : '#94a3b8'} />
+                    </View>
+                    <TextInput
+                      style={s.input}
+                      placeholder="Enter your username"
+                      placeholderTextColor="#cbd5e1"
+                      value={username}
+                      onChangeText={v => { setUsername(v); setError(''); setAttemptsLeft(null); }}
+                      autoCapitalize="none" autoCorrect={false}
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => passwordRef.current?.focus()}
+                      onFocus={() => setUFocus(true)}
+                      onBlur={() => setUFocus(false)}
+                    />
+                  </View>
                 </View>
-                <TextInput
-                  style={s.input}
-                  placeholder="Enter your username"
-                  placeholderTextColor="#cbd5e1"
-                  value={username}
-                  onChangeText={v => { setUsername(v); setError(''); }}
-                  autoCapitalize="none" autoCorrect={false}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  onFocus={() => setUFocus(true)}
-                  onBlur={() => setUFocus(false)}
-                />
-              </View>
-            </View>
 
-            {/* Password */}
-            <View style={s.fieldWrap}>
-              <Text style={s.label}>Password</Text>
-              <View style={[s.field, pFocus && s.fieldOn]}>
-                <View style={[s.iconBox, pFocus && s.iconBoxOn]}>
-                  <Ionicons name="lock-closed" size={15} color={pFocus ? '#fff' : '#94a3b8'} />
+                <View style={s.fieldWrap}>
+                  <Text style={s.label}>Password</Text>
+                  <View style={[s.field, pFocus && s.fieldOn]}>
+                    <View style={[s.iconBox, pFocus && s.iconBoxOn]}>
+                      <Ionicons name="lock-closed" size={15} color={pFocus ? '#fff' : '#94a3b8'} />
+                    </View>
+                    <TextInput
+                      ref={passwordRef}
+                      style={[s.input, { flex: 1 }]}
+                      placeholder="Enter your password"
+                      placeholderTextColor="#cbd5e1"
+                      value={password}
+                      onChangeText={v => { setPassword(v); setError(''); setAttemptsLeft(null); }}
+                      secureTextEntry={!showPassword}
+                      returnKeyType="done"
+                      onFocus={() => setPFocus(true)}
+                      onBlur={() => setPFocus(false)}
+                      onSubmitEditing={handleLogin}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(v => !v)}
+                      style={s.eye}
+                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <TextInput
-                  ref={passwordRef}
-                  style={[s.input, { flex: 1 }]}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#cbd5e1"
-                  value={password}
-                  onChangeText={v => { setPassword(v); setError(''); }}
-                  secureTextEntry={!showPassword}
-                  returnKeyType="done"
-                  onFocus={() => setPFocus(true)}
-                  onBlur={() => setPFocus(false)}
-                  onSubmitEditing={handleLogin}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(v => !v)}
-                  style={s.eye}
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
+
+                {attemptsLeft !== null ? (
+                  <View style={s.warnBox}>
+                    <Ionicons name="warning-outline" size={14} color="#f59e0b" />
+                    <Text style={s.warnText}>{attemptsLeft} attempt{attemptsLeft !== 1 ? 's' : ''} remaining before this account is locked.</Text>
+                  </View>
+                ) : null}
+
+                {error ? (
+                  <View style={s.errBox}>
+                    <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+                    <Text style={s.errText}>{error}</Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.87} style={s.btnWrap}>
+                  <LinearGradient
+                    colors={loading ? ['#94a3b8', '#94a3b8'] : ['#1d4ed8', '#3b82f6']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={s.btn}
+                  >
+                    {loading
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <>
+                          <Text style={s.btnText}>Sign In</Text>
+                          <View style={s.btnArrow}>
+                            <Ionicons name="arrow-forward" size={16} color="#1d4ed8" />
+                          </View>
+                        </>}
+                  </LinearGradient>
                 </TouchableOpacity>
-              </View>
-            </View>
 
-            {/* Error */}
-            {error ? (
-              <View style={s.errBox}>
-                <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
-                <Text style={s.errText}>{error}</Text>
-              </View>
-            ) : null}
+                <TouchableOpacity onPress={openResetModal} style={s.forgotBtn}>
+                  <Text style={s.forgotText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={s.verifyHeader}>
+                  <View style={s.verifyIcon}>
+                    <Ionicons name="shield-checkmark-outline" size={24} color="#3b82f6" />
+                  </View>
+                  <Text style={s.verifyTitle}>Verification Required</Text>
+                  <Text style={s.verifyCopy}>
+                    Enter the 6-digit code sent to {[otpInfo.maskedEmail, otpInfo.maskedPhone].filter(Boolean).join(' and ')}.
+                    {'\n'}Expires in {OTP_EXPIRY_MINUTES} minutes.
+                  </Text>
+                </View>
 
-            {/* Sign In button */}
-            <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.87} style={s.btnWrap}>
-              <LinearGradient
-                colors={loading ? ['#94a3b8', '#94a3b8'] : ['#1d4ed8', '#3b82f6']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={s.btn}
-              >
-                {loading
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <>
-                      <Text style={s.btnText}>Sign In</Text>
-                      <View style={s.btnArrow}>
-                        <Ionicons name="arrow-forward" size={16} color="#1d4ed8" />
-                      </View>
-                    </>}
-              </LinearGradient>
-            </TouchableOpacity>
+                <View style={s.fieldWrap}>
+                  <Text style={s.label}>Verification Code</Text>
+                  <View style={s.field}>
+                    <View style={s.iconBox}>
+                      <Ionicons name="keypad-outline" size={15} color="#94a3b8" />
+                    </View>
+                    <TextInput
+                      style={[s.input, s.otpInput]}
+                      placeholder="000000"
+                      placeholderTextColor="#64748b"
+                      value={otp}
+                      onChangeText={v => { setOtp(v.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      returnKeyType="done"
+                      onSubmitEditing={handleOtpVerify}
+                    />
+                  </View>
+                </View>
 
-            {/* Forgot Password */}
-            <TouchableOpacity onPress={openResetModal} style={s.forgotBtn}>
-              <Text style={s.forgotText}>Forgot password?</Text>
-            </TouchableOpacity>
+                {otpAttemptsLeft !== null ? (
+                  <View style={s.warnBox}>
+                    <Ionicons name="warning-outline" size={14} color="#f59e0b" />
+                    <Text style={s.warnText}>{otpAttemptsLeft} verification attempt{otpAttemptsLeft !== 1 ? 's' : ''} remaining.</Text>
+                  </View>
+                ) : null}
+
+                {error ? (
+                  <View style={s.errBox}>
+                    <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+                    <Text style={s.errText}>{error}</Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity onPress={handleOtpVerify} disabled={loading || otp.length < 6} activeOpacity={0.87} style={s.btnWrap}>
+                  <LinearGradient
+                    colors={(loading || otp.length < 6) ? ['#94a3b8', '#94a3b8'] : ['#1d4ed8', '#3b82f6']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={s.btn}
+                  >
+                    {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Verify Code</Text>}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <View style={s.verifyActions}>
+                  <TouchableOpacity onPress={() => { setStep('credentials'); setOtp(''); setError(''); setOtpAttemptsLeft(null); }}>
+                    <Text style={s.forgotText}>Back to login</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleResendOtp} disabled={resending}>
+                    <Text style={[s.forgotText, resending && s.disabledLink]}>{resending ? 'Sending...' : 'Resend code'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
             {/* Footer */}
             <View style={s.footerRow}>
@@ -427,6 +566,27 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10, marginBottom: 18,
   },
   errText: { color: '#f87171', fontSize: 13, flex: 1 },
+  warnBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(245,158,11,0.28)',
+    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 18,
+  },
+  warnText: { color: '#fbbf24', fontSize: 13, flex: 1 },
+  verifyHeader: { alignItems: 'center', marginBottom: 22 },
+  verifyIcon: {
+    width: 48, height: 48, borderRadius: 14,
+    backgroundColor: '#0f2248', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#1e3a5f', marginBottom: 12,
+  },
+  verifyTitle: { color: '#f1f5f9', fontSize: 18, fontWeight: '900', marginBottom: 8 },
+  verifyCopy: { color: '#94a3b8', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  otpInput: { textAlign: 'center', letterSpacing: 8, fontSize: 18, fontWeight: '900' },
+  verifyActions: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: -10, marginBottom: 20,
+  },
+  disabledLink: { color: '#64748b' },
 
   // Button
   btnWrap: { borderRadius: 16, overflow: 'hidden', marginBottom: 28, marginTop: 4 },

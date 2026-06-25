@@ -65,29 +65,29 @@ function generateInsights(as) {
   const otForecast    = Number(as.nextWeekOtForecast || 0);
   const out = [];
   if (tardinessRate > 15)
-    out.push({ type: 'danger',  icon: '⏰', title: 'High Tardiness Alert',   desc: `${tardinessRate.toFixed(1)}% — well above 10% threshold.` });
+    out.push({ type: 'danger',  icon: 'time-outline', title: 'High Tardiness Alert',   desc: `${tardinessRate.toFixed(1)}% - well above 10% threshold.` });
   else if (tardinessRate > 8)
-    out.push({ type: 'warning', icon: '⏰', title: 'Tardiness Rising',        desc: `${tardinessRate.toFixed(1)}% — monitor and act early.` });
+    out.push({ type: 'warning', icon: 'time-outline', title: 'Tardiness Rising',        desc: `${tardinessRate.toFixed(1)}% - monitor and act early.` });
   else
-    out.push({ type: 'success', icon: '⏰', title: 'Punctuality On Track',    desc: `${tardinessRate.toFixed(1)}% within normal range.` });
+    out.push({ type: 'success', icon: 'time-outline', title: 'Punctuality On Track',    desc: `${tardinessRate.toFixed(1)}% within normal range.` });
   if (absenceRate > 10)
-    out.push({ type: 'danger',  icon: '🏥', title: 'Absence Rate Critical',   desc: `${absenceRate.toFixed(1)}% — immediate review needed.` });
+    out.push({ type: 'danger',  icon: 'alert-circle-outline', title: 'Absence Rate Critical',   desc: `${absenceRate.toFixed(1)}% - immediate review needed.` });
   else if (absenceRate > 5)
-    out.push({ type: 'warning', icon: '🏥', title: 'Absence Rate Elevated',   desc: `${absenceRate.toFixed(1)}% — review department patterns.` });
+    out.push({ type: 'warning', icon: 'alert-circle-outline', title: 'Absence Rate Elevated',   desc: `${absenceRate.toFixed(1)}% - review department patterns.` });
   else
-    out.push({ type: 'success', icon: '🏥', title: 'Absence Under Control',   desc: `${absenceRate.toFixed(1)}% within healthy range.` });
+    out.push({ type: 'success', icon: 'checkmark-circle-outline', title: 'Absence Under Control',   desc: `${absenceRate.toFixed(1)}% within healthy range.` });
   if (highRisks >= 3)
-    out.push({ type: 'danger',  icon: '🚨', title: `${highRisks} High-Risk Flags`, desc: 'Multiple employees at risk. Retention action required.' });
+    out.push({ type: 'danger',  icon: 'alert-circle-outline', title: `${highRisks} High-Risk Flags`, desc: 'Multiple employees at risk. Retention action required.' });
   else if (highRisks >= 1)
-    out.push({ type: 'warning', icon: '⚠️', title: `${highRisks} Turnover Risk${highRisks > 1 ? 's' : ''}`, desc: 'Engage proactively with flagged employees.' });
+    out.push({ type: 'warning', icon: 'warning-outline', title: `${highRisks} Turnover Risk${highRisks > 1 ? 's' : ''}`, desc: 'Engage proactively with flagged employees.' });
   else
-    out.push({ type: 'success', icon: '🎯', title: 'Retention Stable',        desc: 'No high-risk turnover flags this period.' });
+    out.push({ type: 'success', icon: 'radio-button-on-outline', title: 'Retention Stable',        desc: 'No high-risk turnover flags this period.' });
   if (otForecast > 80)
-    out.push({ type: 'warning', icon: '⏱️', title: 'Heavy OT Projected',      desc: `${otForecast.toFixed(1)} hrs next week — consider redistribution.` });
+    out.push({ type: 'warning', icon: 'timer-outline', title: 'Heavy OT Projected',      desc: `${otForecast.toFixed(1)} hrs next week - consider redistribution.` });
   else if (otForecast > 40)
-    out.push({ type: 'info',    icon: '⏱️', title: 'Moderate OT Expected',    desc: `${otForecast.toFixed(1)} hrs — monitor workload.` });
+    out.push({ type: 'info',    icon: 'timer-outline', title: 'Moderate OT Expected',    desc: `${otForecast.toFixed(1)} hrs - monitor workload.` });
   else
-    out.push({ type: 'success', icon: '⏱️', title: 'OT Workload Balanced',    desc: `${otForecast.toFixed(1)} hrs within normal range.` });
+    out.push({ type: 'success', icon: 'timer-outline', title: 'OT Workload Balanced',    desc: `${otForecast.toFixed(1)} hrs within normal range.` });
   return out;
 }
 
@@ -543,7 +543,7 @@ export default function HRDashboardScreen({ navigation }) {
         <Card accent="#2563eb">
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>Workforce Intelligence</Text>
-            <View style={s.aiBadge}><Text style={s.aiBadgeText}>✦ AI</Text></View>
+            <View style={s.aiBadge}><Text style={s.aiBadgeText}>AI</Text></View>
           </View>
 
           {aiError ? (
@@ -583,7 +583,7 @@ export default function HRDashboardScreen({ navigation }) {
                   return (
                     <View key={ins.title} style={[s.insightItem, { backgroundColor: ic.bg, borderLeftColor: ic.fg }]}>
                       <View style={[s.insightIconWrap, { backgroundColor: ic.iconBg }]}>
-                        <Text style={s.insightEmoji}>{ins.icon}</Text>
+                        <Ionicons name={ins.icon} size={15} color={ic.fg} />
                       </View>
                       <View style={s.insightBody}>
                         <Text style={[s.insightTitle, { color: ic.fg }]}>{ins.title}</Text>

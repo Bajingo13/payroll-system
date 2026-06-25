@@ -349,12 +349,12 @@ function LoanModal({ mode, form, employees, message, saving, onChange, onSave, o
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 540, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
+      <div className="loan-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="loan-dialog-header">
           <h3>{mode === 'add' ? 'Add Loan' : 'Edit Loan'}</h3>
-          <button type="button" className="btn secondary" onClick={onClose}>✕</button>
+          <button type="button" className="btn secondary" onClick={onClose}>Close</button>
         </div>
-        <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
+        <div className="loan-dialog-body loan-form-grid">
 
           {mode === 'add' ? (
             <label style={{ gridColumn: '1 / -1' }}>
@@ -434,7 +434,7 @@ function LoanModal({ mode, form, employees, message, saving, onChange, onSave, o
 
           {message ? <p className="message" style={{ gridColumn: '1 / -1', margin: 0 }}>{message}</p> : null}
         </div>
-        <div className="modal-footer">
+        <div className="loan-dialog-footer">
           <button type="button" className="btn secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="button" className="btn" onClick={onSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
         </div>
@@ -446,12 +446,12 @@ function LoanModal({ mode, form, employees, message, saving, onChange, onSave, o
 function ForceCloseModal({ loan, reason, onReasonChange, saving, onConfirm, onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 480, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
+      <div className="loan-dialog loan-dialog-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="loan-dialog-header">
           <h3>Force Close Loan</h3>
-          <button type="button" className="btn secondary" onClick={onClose}>✕</button>
+          <button type="button" className="btn secondary" onClick={onClose}>Close</button>
         </div>
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="loan-dialog-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <p style={{ margin: 0 }}>
             Force closing the <strong>{loan.loan_category}</strong> loan for <strong>{loan.employee_name}</strong>.
           </p>
@@ -469,7 +469,7 @@ function ForceCloseModal({ loan, reason, onReasonChange, saving, onConfirm, onCl
             />
           </label>
         </div>
-        <div className="modal-footer">
+        <div className="loan-dialog-footer">
           <button type="button" className="btn secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="button" className="btn" style={{ background: '#b45309', borderColor: '#b45309' }} onClick={onConfirm} disabled={saving}>
             {saving ? 'Closing...' : 'Force Close'}
@@ -493,18 +493,18 @@ function PaymentHistoryModal({ loan, payments, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 700, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
+      <div className="loan-dialog loan-dialog-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="loan-dialog-header">
           <div>
             <h3>Payment History</h3>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
               {loan.employee_name} — {loan.loan_category}{loan.loan_reference ? ` (${loan.loan_reference})` : ''}
             </p>
           </div>
-          <button type="button" className="btn secondary" onClick={onClose}>✕</button>
+          <button type="button" className="btn secondary" onClick={onClose}>Close</button>
         </div>
 
-        <div className="modal-body" style={{ padding: 0 }}>
+        <div className="loan-dialog-body" style={{ padding: 0 }}>
           <div style={{ display: 'flex', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
             <span className="muted" style={{ fontSize: 12 }}>Principal: <strong>PHP {money(loan.principal_amount)}</strong></span>
             <span className="muted" style={{ fontSize: 12, marginLeft: 12 }}>Balance: <strong>PHP {money(loan.balance_amount)}</strong></span>
@@ -553,7 +553,7 @@ function PaymentHistoryModal({ loan, payments, onClose }) {
           </div>
         </div>
 
-        <div className="modal-footer">
+        <div className="loan-dialog-footer">
           <button type="button" className="btn secondary" onClick={onClose}>Close</button>
         </div>
       </div>

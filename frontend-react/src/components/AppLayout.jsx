@@ -167,7 +167,7 @@ export default function AppLayout() {
   const isEmployee = normalizeRole(user?.role) === 'employee';
   const isHr = normalizeRole(user?.role) === 'hr';
   const hasFeature = (featureKey) => canAccessFeature(user?.role, featureKey);
-  const accountSettingsPath = '/user-settings';
+  const accountSettingsPath = '/account-settings';
   const accountInitials = String(user?.full_name || 'User')
     .split(/\s+/)
     .filter(Boolean)
@@ -191,7 +191,8 @@ export default function AppLayout() {
     '/security-backup',
     '/leave-calendar',
     '/company-settings',
-    '/system-config'
+    '/system-config',
+    '/user-settings'
   ].includes(location.pathname);
 
   const employeeNav = [
@@ -234,6 +235,7 @@ export default function AppLayout() {
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
     { to: '/security-backup', label: 'Security & Backup', feature: 'security-backup' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' },
+    { to: '/user-settings', label: 'User Account Settings', feature: 'user-settings' },
     { to: '/system-config', label: 'System Configuration', feature: 'system-config' }
   ];
 

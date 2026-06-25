@@ -2,7 +2,7 @@ module.exports = function (app, pool) {
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
-            console.error("🚫 logAudit aborted: Missing user_id or admin_name");
+            console.error("logAudit aborted: Missing user_id or admin_name");
             return; // Don’t try to insert invalid data
         }
 
@@ -13,9 +13,9 @@ module.exports = function (app, pool) {
             "INSERT INTO audit_logs (user_id, admin_name, action, status) VALUES (?, ?, ?, ?)",
             [user_id, admin_name, action, status]
             );
-            console.log(`✅ Audit logged: ${admin_name} → ${action}`);
+            console.log(`Audit logged: ${admin_name} → ${action}`);
         } catch (err) {
-            console.error("❌ Failed to log audit:", err.message);
+            console.error("Failed to log audit:", err.message);
         } finally {
             if (conn) conn.release();
         }

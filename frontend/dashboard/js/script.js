@@ -624,7 +624,7 @@ async function loadProfile() {
     if (window.location.pathname === '/dashboard/dashboard.html') {
       const welcomeMessage = document.querySelector(".section .header");
       if (welcomeMessage) {
-        welcomeMessage.querySelector("h2").textContent += user.full_name + " 👋";
+        welcomeMessage.querySelector("h2").textContent += user.full_name + "";
       }
     }
   } catch (err) {
@@ -1280,9 +1280,9 @@ if (window.location.pathname.includes('employee_management.html')) {
     const target = document.getElementById(sectionId);
     if (target) {
       target.classList.remove('hidden');
-      console.log("✅ Showing section:", sectionId);
+      console.log("Showing section:", sectionId);
     } else {
-      console.warn("⚠️ Section not found:", sectionId);
+      console.warn("Section not found:", sectionId);
     }
   }
 
@@ -1301,10 +1301,10 @@ if (window.location.pathname.includes('employee_management.html')) {
         document.querySelector(".summary .card:nth-child(3) strong").textContent = data.inactiveEmployees || 0;
         document.querySelector(".summary .card:nth-child(4) strong").textContent = data.newHires || 0;
       } else {
-        console.warn("⚠️ No summary section found or invalid data");
+        console.warn("No summary section found or invalid data");
       }
     } catch (error) {
-      console.error("❌ Error loading employee summary:", error);
+      console.error("Error loading employee summary:", error);
     }
   }
 
@@ -3130,7 +3130,7 @@ if (window.location.pathname.includes('employee_management.html')) {
         // Build toast message
         let toastMessage = "";
         if (missingFields.length > 0) {
-          toastMessage += "⚠️ Please fill out or select the following required fields:\n- " + missingFields.join("\n- ");
+          toastMessage += "Please fill out or select the following required fields:\n- " + missingFields.join("\n- ");
         }
         
         const activeTab = document.querySelector(".tab-btn.active")?.dataset.tab;
@@ -3144,7 +3144,7 @@ if (window.location.pathname.includes('employee_management.html')) {
         // If NOT in Basic Information tab, show toast instead
         if (!isBasicInformationActive && invalidFields.length > 0) {
           if (toastMessage) toastMessage += "\n\n"; // spacing if both exist
-          toastMessage += "⚠️ Please correct the following fields (invalid format):\n- " + invalidFields.join("\n- ");
+          toastMessage += "Please correct the following fields (invalid format):\n- " + invalidFields.join("\n- ");
         }
 
         if (toastMessage) {
@@ -3316,12 +3316,12 @@ if (window.location.pathname.includes('employee_management.html')) {
           const result = await res.json();
 
           if (!res.ok || !result.success) {
-            showToast(`⚠️ Failed to add employee: ${result.message || "Unknown error"}`, "warning");
+            showToast(`Failed to add employee: ${result.message || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Employee ${result.emp_code || data.emp_code} added successfully!`);
+          showToast(`Employee ${result.emp_code || data.emp_code} added successfully!`);
 
           saveModal.classList.add("hidden");
           await loadEmployeeSummary();
@@ -3329,7 +3329,7 @@ if (window.location.pathname.includes('employee_management.html')) {
           showSection("employeeFile");
         } catch (err) {
           console.error("Error saving employee:", err);
-          showToast("❌ Server error while saving employee.", "error");
+          showToast("Server error while saving employee.", "error");
         }
       }
 
@@ -3347,15 +3347,15 @@ if (window.location.pathname.includes('employee_management.html')) {
   // ===============================
   // === Function to handle viewing an employee details ===
   async function viewEmployee(empCode) {
-    console.log(`🟢 Viewing employee ${empCode}...`);
-    if (!empCode) return showToast("⚠️ No employee selected for viewing!", "warning");
+    console.log(`Viewing employee ${empCode}...`);
+    if (!empCode) return showToast("No employee selected for viewing!", "warning");
 
     try {
       const res = await fetch(`/api/employee/${empCode}`);
       const data = await res.json();
 
       if (!data.success || !data.employee) {
-        showToast("⚠️ Employee data not found!", "warning");
+        showToast("Employee data not found!", "warning");
         return;
       }
 
@@ -3401,7 +3401,7 @@ if (window.location.pathname.includes('employee_management.html')) {
           const empCode = document.getElementById("empIdDetail").textContent.trim();
           
           if (!empCode) {
-            showToast("⚠️ No employee selected!", "warning");
+            showToast("No employee selected!", "warning");
             return;
           }
 
@@ -3422,17 +3422,17 @@ if (window.location.pathname.includes('employee_management.html')) {
             // Handle result
             if (data.success) {
               deleteModal.classList.add("hidden");
-              showToast(`🗑️ Employee ${empCode} deleted successfully!`);
+              showToast(` Employee ${empCode} deleted successfully!`);
               
               await loadEmployeeSummary();
               await loadEmployeeList();
               showSection("employeeFile");
             } else {
-              showToast("❌ Failed to delete employee: " + (data.message || "Unknown error", "error"));
+              showToast("Failed to delete employee: " + (data.message || "Unknown error", "error"));
             }
           } catch (error) {
             console.error("Error deleting employee:", error);
-            showToast("⚠️ Server error while deleting employee.", "error");
+            showToast("Server error while deleting employee.", "error");
           }
         }
 
@@ -3445,7 +3445,7 @@ if (window.location.pathname.includes('employee_management.html')) {
       // Show section
       showSection("employeeDetails");
     } catch (err) {
-      console.error("❌ Error loading employee data:", err);
+      console.error("Error loading employee data:", err);
       showToast("Server error while fetching employee data.", "error");
     }
   }
@@ -3455,15 +3455,15 @@ if (window.location.pathname.includes('employee_management.html')) {
   // ===============================
   // === Function to handle editing an employee details ===
   async function editEmployee(empCode) {
-    console.log(`🟢 Editing employee ${empCode}...`);
-    if (!empCode) return showToast("⚠️ No employee selected for editing!", "warning");
+    console.log(`Editing employee ${empCode}...`);
+    if (!empCode) return showToast("No employee selected for editing!", "warning");
 
     try {
       const res = await fetch(`/api/employee/${empCode}`);
       const data = await res.json();
 
       if (!data.success || !data.employee) {
-        showToast("⚠️ Employee data not found!", "warning");
+        showToast("Employee data not found!", "warning");
         return;
       }
 
@@ -3579,7 +3579,7 @@ if (window.location.pathname.includes('employee_management.html')) {
           // Build toast message
           let toastMessage = "";
           if (missingFields.length > 0) {
-            toastMessage += "⚠️ Please fill out or select the following required fields:\n- " + missingFields.join("\n- ");
+            toastMessage += "Please fill out or select the following required fields:\n- " + missingFields.join("\n- ");
           }
           
           const activeTab = document.querySelector(".tab-btn.active")?.dataset.tab;
@@ -3593,7 +3593,7 @@ if (window.location.pathname.includes('employee_management.html')) {
           // If NOT in Basic Information tab, show toast instead
           if (!isBasicInformationActive && invalidFields.length > 0) {
             if (toastMessage) toastMessage += "\n\n"; // spacing if both exist
-            toastMessage += "⚠️ Please correct the following fields (invalid format):\n- " + invalidFields.join("\n- ");
+            toastMessage += "Please correct the following fields (invalid format):\n- " + invalidFields.join("\n- ");
           }
 
           if (toastMessage) {
@@ -3610,7 +3610,7 @@ if (window.location.pathname.includes('employee_management.html')) {
           e.preventDefault();
 
           const empCode = document.querySelector("#employeeDetails #empIdDetail").textContent.trim();
-          if (!empCode) return showToast("⚠️ Employee ID missing — cannot save changes!", "warning");
+          if (!empCode) return showToast("Employee ID missing — cannot save changes!", "warning");
 
           // Collect data
           const empData = {
@@ -3800,16 +3800,16 @@ if (window.location.pathname.includes('employee_management.html')) {
 
             const result = await res.json();
             if (!res.ok || !result.success)
-                return showToast("⚠️ Failed to update employee: " + (result.message || "Unknown error."), "warning");
+                return showToast("Failed to update employee: " + (result.message || "Unknown error."), "warning");
 
-            showToast(`✅ Employee ${result.emp_code || empCode} updated successfully!`);
+            showToast(`Employee ${result.emp_code || empCode} updated successfully!`);
             saveModal.classList.add("hidden");
             await loadEmployeeSummary();
             await loadEmployeeList();
             showSection("employeeFile");
           } catch (error) {
           console.error("Error updating employee:", error);
-          showToast("⚠️ Server error while saving changes.", "error");
+          showToast("Server error while saving changes.", "error");
           }
         }
 
@@ -3822,7 +3822,7 @@ if (window.location.pathname.includes('employee_management.html')) {
       // Show section
       showSection("employeeDetails");
     } catch (err) {
-      console.error("❌ Error loading employee data:", err);
+      console.error("Error loading employee data:", err);
       showToast("Server error while editing employee data.", "error");
     }
   }
@@ -3845,9 +3845,9 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
     const target = document.getElementById(sectionId);
     if (target) {
       target.classList.remove("hidden");
-      console.log("✅ Showing section:", sectionId);
+      console.log("Showing section:", sectionId);
     } else {
-      console.warn("⚠️ Section not found:", sectionId);
+      console.warn("Section not found:", sectionId);
     }
   }
 
@@ -4234,7 +4234,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
     return;
   }
 
-  // 🔥 THIS IS THE IMPORTANT PART (AUTO-FILL)
+  // THIS IS THE IMPORTANT PART (AUTO-FILL)
   await renderEmployeePayroll(employeeId, "employee");
   });
 
@@ -5159,7 +5159,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
       console.log("Payroll data response:", data);
       if (!data.success) {
         if (triggerSource === "employee") {
-          showToast("⚠️ No payroll data found for this employee.", "warning");
+          showToast("No payroll data found for this employee.", "warning");
         }
         
         resetPayrollFields();
@@ -5412,7 +5412,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
       const currentGross = grossValue;
       ytdGrossField.value = (ytdGross + currentGross).toFixed(2);
 
-      console.log(`✅ Loaded payroll for employee ID ${employeeId}`);
+      console.log(`Loaded payroll for employee ID ${employeeId}`);
       return payroll;
     } catch (err) {
       console.error("Error loading employee payroll:", err);
@@ -6489,7 +6489,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
     }
 
     if (e.target && e.target.id === "editPayrollBtn") {
-      console.log("🟢 Edit clicked!");
+      console.log("Edit clicked!");
       console.log("Editing employee:", selectedEmployeeId);
 
       // Enable all editable fields
@@ -6528,7 +6528,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
       const confirmCancelBtn = document.getElementById("confirmCancelBtn");
       const cancelCancelBtn = document.getElementById("cancelCancelBtn");
 
-      console.log("🟡 Cancel clicked!");
+      console.log("Cancel clicked!");
       cancelModal.classList.remove("hidden");
       
       confirmCancelBtn.addEventListener("click", async () => {
@@ -6565,7 +6565,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
 
     // --- SAVE ---
     if (e.target && e.target.id === "savePayrollBtn") {
-      console.log("💾 Save clicked!");
+      console.log("Save clicked!");
 
       if (!selectedEmployeeId) {
         showToast("No employee selected!", "warning");
@@ -6693,7 +6693,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
 
     // --- DELETE ---
     if (e.target && e.target.id === "deletePayrollBtn") {
-      console.log("🟢 Delete clicked!");
+      console.log("Delete clicked!");
       if (!selectedEmployeeId) return;
 
       // Show custom delete confirmation modal
@@ -6713,7 +6713,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
 
       const empCode = document.querySelector("#empIdDetail")?.textContent.trim();
       if (!empCode) {
-        showToast("⚠️ Employee ID missing — cannot save changes!", "warning");
+        showToast("Employee ID missing — cannot save changes!", "warning");
         return;
       }
 
@@ -6722,10 +6722,10 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
         deleteModal.classList.add("hidden");
 
         try {
-          // ✅ Use the currentPayrollRunId from your frontend
+          // Use the currentPayrollRunId from your frontend
           const runId = window.currentPayrollRunId;
           if (!runId) {
-            showToast("⚠️ Payroll run ID missing!", "warning");
+            showToast("Payroll run ID missing!", "warning");
             return;
           }
 
@@ -6762,11 +6762,11 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
               resetPayrollFields();
             }
           } else {
-            showToast(`❌ Failed to delete employee: ${result.message || "Unknown error"}`, "error");
+            showToast(`Failed to delete employee: ${result.message || "Unknown error"}`, "error");
             console.error("Delete failed:", result);
           }
         } catch (error) {
-          showToast("❌ Error deleting employee — check console for details.", "error");
+          showToast("Error deleting employee — check console for details.", "error");
           console.error("Delete error:", error);
         }
       };
@@ -6774,7 +6774,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
       // Handle cancel delete
       cancelDeleteBtn.onclick = () => {
         deleteModal.classList.add("hidden");
-        console.log("❎ Delete canceled");
+        console.log("Delete canceled");
       };
     }
   });
@@ -6977,7 +6977,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
 
       if (missingFields.length > 0) {
         showToast(
-          "⚠️ Please fill out or select the following required fields:\n- " +
+          "Please fill out or select the following required fields:\n- " +
           missingFields.join("\n- "),
           "missingFields"
         );
@@ -7042,7 +7042,7 @@ if (window.location.pathname.includes('/dashboard/payroll_computation.html')) {
         const employees = await loadEmployeesByRun(runId);
 
         if (!employees.length) {
-          showToast("⚠️ No employees found for this payroll run", "warning");
+          showToast("No employees found for this payroll run", "warning");
           return;
         }
         
@@ -7179,9 +7179,9 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
     const target = document.getElementById(sectionId);
     if (target) {
       target.classList.remove("hidden");
-      console.log("✅ Showing section:", sectionId);
+      console.log("Showing section:", sectionId);
     } else {
-      console.warn("⚠️ Section not found:", sectionId);
+      console.warn("Section not found:", sectionId);
     }
   }
   
@@ -7197,9 +7197,9 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
     const target = document.getElementById(sectionId);
     if (target) {
       target.classList.remove("hidden");
-      console.log("✅ Showing covered date:", sectionId);
+      console.log("Showing covered date:", sectionId);
     } else {
-      console.warn("⚠️ Covered date not found:", sectionId);
+      console.warn("Covered date not found:", sectionId);
     }
   }
   
@@ -8776,7 +8776,7 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
         cfg.groups.forEach((g, level) => {
           if (emp[g] !== lastGroupValues[g]) {
 
-            // 🔻 CLOSE deeper groups first
+            // CLOSE deeper groups first
             for (let i = cfg.groups.length - 1; i >= level; i--) {
               const grp = cfg.groups[i];
               if (lastGroupValues[grp] !== null) {
@@ -8794,7 +8794,7 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
               }
             }
 
-            // 🔺 OPEN new group
+            // OPEN new group
             lastGroupValues[g] = emp[g];
 
             // Create the group row for the current group
@@ -9272,7 +9272,7 @@ if (window.location.pathname === '/dashboard/payroll_journal.html') {
 
     if (messageParts.length > 0) {
       showToast(
-        "⚠️ Please fill out or select the following required fields:\n" +
+        "Please fill out or select the following required fields:\n" +
         messageParts.join("\n"),
         "missingFields"
       );
@@ -10393,7 +10393,7 @@ if (window.location.pathname.includes('payroll_computation.html')) {
 
     if (!employeeInput) return;
 
-    // 🔹 Typing
+    // Typing
     employeeInput.addEventListener("input", async () => {
       await loadEmployeeAutocomplete(
         "employee",
@@ -10407,7 +10407,7 @@ if (window.location.pathname.includes('payroll_computation.html')) {
       }
     });
 
-    // 🔹 Selecting
+    // Selecting
     employeeInput.addEventListener("change", () => {
       const selected = findSelectedEmployee("employee");
 
@@ -10418,9 +10418,9 @@ if (window.location.pathname.includes('payroll_computation.html')) {
           employeeName.value = selected.full_name;
         }
 
-        console.log("✅ Selected Employee ID:", selectedEmployeeId);
+        console.log("Selected Employee ID:", selectedEmployeeId);
 
-        // 👉 THIS IS IMPORTANT FOR NEXT STEP
+        // THIS IS IMPORTANT FOR NEXT STEP
         // you will use selectedEmployeeId to:
         // - load payroll details
         // - compute salary

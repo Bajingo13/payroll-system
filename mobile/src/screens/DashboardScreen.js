@@ -252,7 +252,7 @@ export default function DashboardScreen({ navigation }) {
       <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <View style={s.headerTop}>
           <View style={s.headerLeft}>
-            <Text style={s.greeting}>Good day, {employee.first_name || user?.full_name || 'there'} 👋</Text>
+            <Text style={s.greeting}>Good day, {employee.first_name || user?.full_name || 'there'}</Text>
             <Text style={s.date}>{today}</Text>
           </View>
           <View style={s.headerIcons}>

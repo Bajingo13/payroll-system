@@ -884,7 +884,7 @@ function HolidayCalendar() {
                       {ev.event_type}
                     </span>
                   </td>
-                  <td>{ev.is_paid_holiday ? '✓ Paid' : '—'}</td>
+                  <td>{ev.is_paid_holiday ? 'Paid' : '-'}</td>
                   <td style={{ color: 'var(--muted,#6b7280)', fontSize: '0.82rem' }}>{ev.description || '—'}</td>
                   <td>
                     <div className="row-actions">

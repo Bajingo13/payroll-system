@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import AppIcon from './AppIcon.jsx';
 
 // Configure your office GPS coordinates here
 const OFFICE_LAT = 14.5995;
@@ -356,12 +357,12 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
               )}
 
               {locationError && (
-                <div className="mat-loc-warn">⚠ {locationError}</div>
+                <div className="mat-loc-warn"><AppIcon name="alert" size={15} /> {locationError}</div>
               )}
 
               {distance !== null && (
                 <div className={`mat-loc-dist${withinRange ? ' mat-loc-dist--ok' : ' mat-loc-dist--far'}`}>
-                  <span>{withinRange ? '✓' : '!'}</span>
+                  <span>{withinRange ? <AppIcon name="check" size={14} /> : '!'}</span>
                   <span>{Math.round(distance)}m from office {withinRange ? '— within range' : `— over ${ADVISORY_DISTANCE_M}m limit`}</span>
                 </div>
               )}

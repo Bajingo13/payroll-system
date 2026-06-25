@@ -215,6 +215,7 @@ export default function UtilitiesPage() {
           <p>Ensure the system database is updated and synced with the latest employee and payroll information.</p>
           <button type="button" className="btn" onClick={syncDatabase}>Sync Database</button>
         </article>
+
       </section>
 
       <section className="table-section" id="listManagerSection">
@@ -352,6 +353,7 @@ export default function UtilitiesPage() {
       </section>
 
       <p className="message">{message}</p>
+
     </>
   );
 }

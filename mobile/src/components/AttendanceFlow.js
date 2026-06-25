@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { api } from '../api/client';
 
@@ -231,7 +232,8 @@ function SelfieCapture({ capturedPhoto, onPhotoCaptured, onRetake, onSave, busy,
           resizeMode="cover"
         />
         <View style={sc.previewBadge}>
-          <Text style={sc.previewBadgeText}>📷 Photo captured</Text>
+          <Ionicons name="camera-outline" size={13} color="#166534" />
+          <Text style={sc.previewBadgeText}>Photo captured</Text>
         </View>
         <View style={sc.topActions}>
           <TouchableOpacity style={sc.topActionBtn} onPress={onRetake} disabled={busy} accessibilityLabel="Retake photo">
@@ -633,7 +635,7 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
               </Text>
 
               <TouchableOpacity style={c.navBtn} onPress={onClose} accessibilityLabel="Close">
-                <Text style={c.navBtnText}>✕</Text>
+                <Ionicons name="close" size={20} color="#475569" />
               </TouchableOpacity>
             </View>
 
@@ -755,7 +757,7 @@ export default function AttendanceFlow({ visible, onClose, employee, todayState,
               {/* GPS result — always shown as info, no error */}
               {!locating && distance !== null && (
                 <View style={[c.locDist, c.locDistOk]}>
-                  <Text style={[c.locDistIcon, c.locDistIconOk]}>✓</Text>
+                  <Ionicons name="checkmark-circle" size={16} color="#15803d" />
                   <View style={{ flex: 1 }}>
                     <Text style={[c.locDistText, { color: '#15803d' }]}>
                       {distance >= 1000
