@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "5b658722-e3c1-4509-b16f-fd01fb3ac377"
+      }
+    },
+    "android": {
+      "package": "com.astreablue.payrollsystem"
+    }
+  }
+}
