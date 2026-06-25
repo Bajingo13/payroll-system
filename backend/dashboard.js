@@ -21,6 +21,19 @@ module.exports = function (app, pool) {
     fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
   });
 
+  app.get('/api/attendance/photo/:filename', (req, res) => {
+    const filename = path.basename(String(req.params.filename || ''));
+    if (!filename) return res.status(404).send('Attendance photo not found.');
+
+    const filePath = path.join(attendanceUploadDir, filename);
+    if (!filePath.startsWith(attendanceUploadDir) || !fs.existsSync(filePath)) {
+      return res.status(404).send('Attendance photo not found.');
+    }
+
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.sendFile(filePath);
+  });
+
   function getOfficeLocationConfig() {
     const latitude = Number(process.env.OFFICE_LAT || 14.5512);
     const longitude = Number(process.env.OFFICE_LNG || 121.0188);

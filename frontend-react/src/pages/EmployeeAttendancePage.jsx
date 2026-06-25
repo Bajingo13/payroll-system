@@ -94,7 +94,7 @@ function attendancePhotoUrl(value) {
     || raw;
 
   const filename = photoPart.includes(':') ? photoPart.split(':').slice(1).join(':') : photoPart;
-  return filename ? `/uploads/attendance/${encodeURIComponent(filename)}` : '';
+  return filename ? `/api/attendance/photo/${encodeURIComponent(filename)}` : '';
 }
 
 export default function EmployeeAttendancePage() {
