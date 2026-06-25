@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import Modal from '../components/Modal.jsx';
+import AppIcon from '../components/AppIcon.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { exportReport } from '../utils/reportExport.js';
 
@@ -384,7 +385,7 @@ export default function EmployeeAttendancePage() {
                           rel="noreferrer"
                           style={{ color: '#0a66d9', textDecoration: 'none', fontSize: '12px' }}
                         >
-                          📍 {Number(record.time_in_lat).toFixed(4)}, {Number(record.time_in_lng).toFixed(4)}
+                          <AppIcon name="mapPin" size={13} /> {Number(record.time_in_lat).toFixed(4)}, {Number(record.time_in_lng).toFixed(4)}
                           {record.time_in_dist != null && (
                             <span style={{
                               display: 'block',
@@ -422,7 +423,7 @@ export default function EmployeeAttendancePage() {
               <div style={{ position: 'absolute', width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', right: -30, top: -40, pointerEvents: 'none' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }}>👤</div>
+                  <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }}><AppIcon name="user" size={22} /></div>
                   <div>
                     <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', lineHeight: 1.2 }}>
                       {editRecord.employee_name || editRecord.full_name || 'Employee'}
@@ -432,12 +433,12 @@ export default function EmployeeAttendancePage() {
                     </div>
                   </div>
                 </div>
-                <button onClick={closeEditAttendance} style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, color: '#fff', fontSize: 18, width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+                <button onClick={closeEditAttendance} aria-label="Close" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, color: '#fff', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><AppIcon name="close" size={18} /></button>
               </div>
 
               {/* Date field inside header */}
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 6 }}>📅 Attendance Date</div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}><AppIcon name="calendar" size={13} /> Attendance Date</div>
                 <input
                   type="date"
                   value={editForm.attendance_date}
@@ -480,7 +481,7 @@ export default function EmployeeAttendancePage() {
                   disabled={saving}
                   style={{ flex: 2, background: saving ? '#94a3b8' : 'linear-gradient(135deg,#1d4ed8,#3b82f6)', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: saving ? 'none' : '0 4px 14px rgba(29,78,216,0.4)', letterSpacing: 0.3 }}
                 >
-                  {saving ? 'Saving…' : '✓  Save Attendance'}
+                  {saving ? 'Saving...' : 'Save Attendance'}
                 </button>
                 <button
                   type="button"

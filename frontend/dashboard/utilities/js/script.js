@@ -261,14 +261,14 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
           row.innerHTML = `
             <td>${item.value}</td>
             <td>
-              <button class="btn" onclick="deleteListItem(${item.id}, '${category}')">🗑️ Delete</button>
+              <button class="btn" onclick="deleteListItem(${item.id}, '${category}')"> Delete</button>
             </td>`;
           listBody.appendChild(row);
         });
       }
     } catch (err) {
       console.error("Error loading list:", err);
-      alert("❌ Error loading list items.");
+      alert("Error loading list items.");
     }
   };
 
@@ -279,8 +279,8 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
     const category = listType.value;
     const value = newItemInput.value.trim();
 
-    if (!category) showToast("⚠️ Please select a list type first.", "warning");
-    if (!value) showToast("⚠️ Please enter a value to add.", "warning");
+    if (!category) showToast("Please select a list type first.", "warning");
+    if (!value) showToast("Please enter a value to add.", "warning");
 
     try {
       const res = await fetch("/api/system_lists", {
@@ -291,15 +291,15 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
       const result = await res.json();
 
       if (result.success) {
-        alert("✅ Item added successfully!");
+        alert("Item added successfully!");
         newItemInput.value = "";
         loadListItems();
       } else {
-        alert("⚠️ Failed to add item.");
+        alert("Failed to add item.");
       }
     } catch (err) {
       console.error("Error adding list item:", err);
-      alert("❌ Server error while adding item.");
+      alert("Server error while adding item.");
     }
   };
 
@@ -307,21 +307,21 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
   // DELETE ITEM
   // ===============================
   window.deleteListItem = async function (id, category) {
-    if (!confirm("🗑️ Are you sure you want to delete this item?")) return;
+    if (!confirm(" Are you sure you want to delete this item?")) return;
 
     try {
       const res = await fetch(`/api/system_lists/${id}`, { method: "DELETE" });
       const result = await res.json();
 
       if (result.success) {
-        alert("✅ Item deleted successfully!");
+        alert("Item deleted successfully!");
         loadListItems();
       } else {
-        alert("⚠️ Failed to delete item.");
+        alert("Failed to delete item.");
       }
     } catch (err) {
       console.error("Error deleting list item:", err);
-      alert("❌ Server error while deleting item.");
+      alert("Server error while deleting item.");
     }
   };
 
@@ -527,11 +527,11 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
         const taxable = document.getElementById("allowanceTaxable").value === "1";
 
         if (!name || amount === "")
-          showToast("⚠️ Please complete all allowance fields.", "warning");
+          showToast("Please complete all allowance fields.", "warning");
 
         amount = parseFloat(amount);
         if (isNaN(amount) || amount < 0)
-          showToast("⚠️ Amount must be a valid non-negative number.", "warning");
+          showToast("Amount must be a valid non-negative number.", "warning");
 
         try {
           await fetch("/api/allowances", {
@@ -540,12 +540,12 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
             body: JSON.stringify({ name, taxable, amount }),
           });
 
-          showToast(`✅ Allowance type added successfully!`);
+          showToast(`Allowance type added successfully!`);
           loadAllowances();
           return;
         } catch (err) {
           console.error("Error adding allowance type:", err);
-          showToast("❌ Failed to add allowance type. Check console for details.", "error");
+          showToast("Failed to add allowance type. Check console for details.", "error");
         }
       }
 
@@ -554,11 +554,11 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
         let amount = document.getElementById("deductionAmount").value.trim();
 
         if (!name || amount === "")
-          showToast("⚠️ Please complete all deduction fields.", "warning");
+          showToast("Please complete all deduction fields.", "warning");
 
         amount = parseFloat(amount);
         if (isNaN(amount) || amount < 0)
-          showToast("⚠️ Amount must be a valid non-negative number.", "warning");
+          showToast("Amount must be a valid non-negative number.", "warning");
 
         try {
           await fetch("/api/deductions", {
@@ -567,12 +567,12 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
             body: JSON.stringify({ name, amount }),
           });
 
-          showToast(`✅ Deduction type added successfully!`);
+          showToast(`Deduction type added successfully!`);
           loadDeductions();
           return;
         } catch (err) {
           console.error("Error adding deduction type:", err);
-          showToast("❌ Failed to add deduction type. Check console for details.", "error");
+          showToast("Failed to add deduction type. Check console for details.", "error");
         }
       }
     }
@@ -583,7 +583,7 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
     if (e.target && e.target.id === "editButton") {
       const showButtons = ["saveButton", "cancelButton"];
       const selectedRow = document.querySelector(".selected-row");
-      if (!selectedRow) showToast("⚠️ Please select a row to edit.", "warning");
+      if (!selectedRow) showToast("Please select a row to edit.", "warning");
 
       allButtons.forEach(button => button.classList.add('hidden'));
       addSection.forEach(container => container.classList.add('hidden'));
@@ -662,14 +662,14 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
       saveModal.classList.add("hidden");
 
       if (type === "allowances") {
-        if (!selectedId) showToast("⚠️ No allowance selected.", "warning");
+        if (!selectedId) showToast("No allowance selected.", "warning");
         
         const name = document.getElementById("editAllowanceName").value.trim();
         const taxable = document.getElementById("editAllowanceTaxable").value === "1";
         let amount = parseFloat(document.getElementById("editAllowanceAmount").value.trim());
 
         if (!name || isNaN(amount))
-          showToast("⚠️ Please complete all fields properly.", "warning");
+          showToast("Please complete all fields properly.", "warning");
 
         await fetch(`/api/allowances/${selectedId}`, {
           method: "PUT",
@@ -677,19 +677,19 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
           body: JSON.stringify({ name, taxable, amount }),
         });
 
-        showToast(`✅ Allowance type updated successfully!`);
+        showToast(`Allowance type updated successfully!`);
         loadAllowances();
         return;
       }
 
       if (type === "deductions") {
-        if (!selectedId) showToast("⚠️ No deduction selected.", "warning");
+        if (!selectedId) showToast("No deduction selected.", "warning");
 
         const name = document.getElementById("editDeductionName").value.trim();
         let amount = parseFloat(document.getElementById("editDeductionAmount").value.trim());
 
         if (!name || isNaN(amount))
-          rshowToast("⚠️ Please complete all fields properly.", "warning");
+          rshowToast("Please complete all fields properly.", "warning");
 
         await fetch(`/api/deductions/${selectedId}`, {
           method: "PUT",
@@ -697,7 +697,7 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
           body: JSON.stringify({ name, amount }),
         });
 
-        showToast(`✅ Deduction type updated successfully!`);
+        showToast(`Deduction type updated successfully!`);
         loadDeductions();
         return;
       }
@@ -724,10 +724,10 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
 
       deleteModal.classList.add("hidden");
       
-      if (!selectedRow) showToast("⚠️ Please select a row to delete.", "warning");
+      if (!selectedRow) showToast("Please select a row to delete.", "warning");
 
       if (type === "allowances") {
-        if (!selectedId) showToast("⚠️ No allowance selected.", "warning");
+        if (!selectedId) showToast("No allowance selected.", "warning");
 
         try {
           const user_id = sessionStorage.getItem("user_id");
@@ -740,16 +740,16 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
             body: JSON.stringify({ user_id, admin_name }),
           });
 
-          showToast(`✅ Allowance type deleted successfully!`);
+          showToast(`Allowance type deleted successfully!`);
           loadAllowances();
         } catch (err) {
           console.error("Error deleting Allowance type:", err);
-          showToast("❌ Server error while deleting Allowance type.", "error");
+          showToast("Server error while deleting Allowance type.", "error");
         }
       }
 
       if (type === "deductions") {
-        if (!selectedId) showToast("⚠️ No deduction selected.", "warning");
+        if (!selectedId) showToast("No deduction selected.", "warning");
 
         try {
           const user_id = sessionStorage.getItem("user_id");
@@ -762,11 +762,11 @@ if (window.location.pathname === '/dashboard/utilities/list_manager.html') {
             body: JSON.stringify({ user_id, admin_name }),
           });
 
-          showToast(`✅ Deduction type deleted successfully!`);
+          showToast(`Deduction type deleted successfully!`);
           loadDeductions();
         } catch (err) {
           console.error("Error deleting Deduction type:", err);
-          showToast("❌ Server error while deleting Deduction type.", "error");
+          showToast("Server error while deleting Deduction type.", "error");
         }
       }
     }
@@ -1158,7 +1158,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
       resetInputFields();
     } catch (err) {
       console.error(`Error loading ${type}:`, err);
-      showToast(`❌ Failed to load ${type} data.`, "error");
+      showToast(`Failed to load ${type} data.`, "error");
     }
   }
 
@@ -1306,9 +1306,9 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const date = document.getElementById("dateEffective").value.trim();
 
         if (eccInputGroup.style.display == "none") {
-          if (low === "" || high === "" || ee === "" || er === "" || !date) return showToast("⚠️ Please complete all contribution fields.", "warning");
+          if (low === "" || high === "" || ee === "" || er === "" || !date) return showToast("Please complete all contribution fields.", "warning");
         } else {
-          if (low === "" || high === "" || ee === "" || er === "" || ecc === "" || !date) return showToast("⚠️ Please complete all contribution fields.", "warning");
+          if (low === "" || high === "" || ee === "" || er === "" || ecc === "" || !date) return showToast("Please complete all contribution fields.", "warning");
         }
 
         // Convert amount to number and validate
@@ -1319,9 +1319,9 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         ecc = parseFloat(ecc);
 
         if (eccInputGroup.style.display == "none") {
-          if (isNaN(low) || low < 0 || isNaN(high) || high < 0 || isNaN(ee) || ee < 0 || isNaN(er) || er < 0 ) return showToast("⚠️ Input must be a valid non-negative number.", "warning");
+          if (isNaN(low) || low < 0 || isNaN(high) || high < 0 || isNaN(ee) || ee < 0 || isNaN(er) || er < 0 ) return showToast("Input must be a valid non-negative number.", "warning");
         } else {
-          if (isNaN(low) || low < 0 || isNaN(high) || high < 0 || isNaN(ee) || ee < 0 || isNaN(er) || er < 0 || isNaN(ecc) || ecc < 0 ) return showToast("⚠️ Input must be a valid non-negative number.", "warning");
+          if (isNaN(low) || low < 0 || isNaN(high) || high < 0 || isNaN(ee) || ee < 0 || isNaN(er) || er < 0 || isNaN(ecc) || ecc < 0 ) return showToast("Input must be a valid non-negative number.", "warning");
         }
 
         // === SSS Table ===
@@ -1333,11 +1333,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
               body: JSON.stringify({ low, high, ee, er, ecc, date }),
             });
 
-            showToast(`✅ SSS contribution added successfully!`);
+            showToast(`SSS contribution added successfully!`);
             await refreshTableData(); 
           } catch (err) {
             console.error("Error adding sss contribution:", err);
-            showToast("❌ Failed to add sss contribution. Check console for details.", "error");
+            showToast("Failed to add sss contribution. Check console for details.", "error");
           }
         }
         
@@ -1350,11 +1350,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
               body: JSON.stringify({ low, high, ee, er, date }),
             });
 
-            showToast(`✅ Pag-IBIG contribution added successfully!`);
+            showToast(`Pag-IBIG contribution added successfully!`);
             await refreshTableData();
           } catch (err) {
             console.error("Error adding pagibig contribution:", err);
-            showToast("❌ Failed to add pagibig contribution. Check console for details.", "error");
+            showToast("Failed to add pagibig contribution. Check console for details.", "error");
           }
         }
 
@@ -1367,11 +1367,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
               body: JSON.stringify({ low, high, ee, er, date }),
             });
 
-            showToast(`✅ PhilHealth contribution added successfully!`);
+            showToast(`PhilHealth contribution added successfully!`);
             await refreshTableData();
           } catch (err) {
             console.error("Error adding philhealth contribution:", err);
-            showToast("❌ Failed to add philhealth contribution. Check console for details.", "error");
+            showToast("Failed to add philhealth contribution. Check console for details.", "error");
           }
         }
       } else if (!taxExemptionsContainer.classList.contains("hidden")) {
@@ -1379,12 +1379,12 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         let description = document.getElementById("descriptionInput").value.trim();
         let amount = document.getElementById("taxExemptionInput").value.trim();
 
-        if (!code || !description || amount === "") return showToast("⚠️ Please complete all tax exemption fields.", "warning");
+        if (!code || !description || amount === "") return showToast("Please complete all tax exemption fields.", "warning");
 
         // Convert amount to number and validate
         amount = parseFloat(amount);
 
-        if (isNaN(amount) || amount < 0) return showToast("⚠️ Amount must be a valid non-negative number.", "warning");
+        if (isNaN(amount) || amount < 0) return showToast("Amount must be a valid non-negative number.", "warning");
         
         try {
           await fetch("/api/add_tax_exemptions", {
@@ -1393,11 +1393,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
             body: JSON.stringify({ code, description, amount }),
           });
 
-          showToast(`✅ Tax exemption added successfully!`);
+          showToast(`Tax exemption added successfully!`);
           await refreshTableData();
         } catch (err) {
           console.error("Error adding tax exemption:", err);
-          showToast("❌ Failed to add tax exemption. Check console for details.", "error");
+          showToast("Failed to add tax exemption. Check console for details.", "error");
         }
       } else if (!taxContainer.classList.contains("hidden")) {
         let pay_period = document.getElementById("payPeriodSelect").value.trim();
@@ -1407,7 +1407,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         let percent_over = document.getElementById("percentOver").value.trim();
         let amount = document.getElementById("withholdingTaxInput").value.trim();
 
-        if (!pay_period || !status || tax_low === ""|| tax_high === ""|| percent_over === ""|| amount === "") return showToast("⚠️ Please complete all tax exemption fields.", "warning");
+        if (!pay_period || !status || tax_low === ""|| tax_high === ""|| percent_over === ""|| amount === "") return showToast("Please complete all tax exemption fields.", "warning");
 
         // Convert amount to number and validate
         tax_low = parseFloat(tax_low);
@@ -1415,7 +1415,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         percent_over = parseFloat(percent_over);
         amount = parseFloat(amount);
 
-        if (isNaN(tax_low) || tax_low < 0 || isNaN(tax_high) || tax_high < 0 || isNaN(percent_over) || percent_over < 0 || isNaN(amount) || amount < 0) return showToast("⚠️ Input must be a valid non-negative number.", "warning");
+        if (isNaN(tax_low) || tax_low < 0 || isNaN(tax_high) || tax_high < 0 || isNaN(percent_over) || percent_over < 0 || isNaN(amount) || amount < 0) return showToast("Input must be a valid non-negative number.", "warning");
         
         try {
           await fetch("/api/add_withholding_tax", {
@@ -1424,11 +1424,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
             body: JSON.stringify({ pay_period, status, tax_low, tax_high, percent_over, amount }),
           });
 
-          showToast(`✅ Withholding Tax added successfully!`);
+          showToast(`Withholding Tax added successfully!`);
           await refreshTableData();
         } catch (err) {
           console.error("Error adding withholding Tax:", err);
-          showToast("❌ Failed to add withholding Tax. Check console for details.", "error");
+          showToast("Failed to add withholding Tax. Check console for details.", "error");
         }
       }else if (!regionalWageContainer.classList.contains("hidden")) {
         let region_code = document.getElementById("regionCodeInput").value.trim();
@@ -1437,13 +1437,13 @@ if (window.location.pathname.includes('employee_benefits.html')) {
 
         // Check if all fields are filled
         if (!region_code || !region_name || wage_rate === "") 
-          return showToast("⚠️ Please complete all minimum wage fields.", "warning");
+          return showToast("Please complete all minimum wage fields.", "warning");
 
         // Convert wage_rate to number and validate
         wage_rate = parseFloat(wage_rate);
 
         if (isNaN(wage_rate) || wage_rate < 0) 
-          return showToast("⚠️ Wage rate must be a valid non-negative number.", "warning");
+          return showToast("Wage rate must be a valid non-negative number.", "warning");
 
         try {
           await fetch("/api/add_regional_minimum_wage_rate", {
@@ -1452,11 +1452,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
             body: JSON.stringify({ region_code, region_name, wage_rate }),
           });
 
-          showToast("✅ Minimum Wage added successfully!");
+          showToast("Minimum Wage added successfully!");
           await refreshTableData();
         } catch (err) {
           console.error("Error adding minimum wage:", err);
-          showToast("❌ Failed to add minimum wage. Check console for details.", "error");
+          showToast("Failed to add minimum wage. Check console for details.", "error");
         }
       }
     };
@@ -1632,7 +1632,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const tr = document.querySelector(`#contributionsTable tbody tr.selected-row`);
 
         if (!tr) {
-          showToast("⚠️ No SSS contribution selected!", "warning");
+          showToast("No SSS contribution selected!", "warning");
           return;
         }
 
@@ -1651,16 +1651,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to delete SSS contribution || "Unknown error"}`, "warning");
+            showToast(`Failed to delete SSS contribution || "Unknown error"}`, "warning");
             deleteModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ SSS contribution deleted successfully!`);
+          showToast(`SSS contribution deleted successfully!`);
           refreshTableData();
         } catch (err) {
           console.error("Error deleting SSS contribution:", err);
-          showToast("❌ Server error while deleting SSS contribution.", "error");
+          showToast("Server error while deleting SSS contribution.", "error");
         }
       }
       
@@ -1669,7 +1669,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const tr = document.querySelector(`#contributionsTable tbody tr.selected-row`);
 
         if (!tr) {
-          showToast("⚠️ No Pag-IBIG contribution selected!", "warning");
+          showToast("No Pag-IBIG contribution selected!", "warning");
           return;
         }
 
@@ -1688,16 +1688,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to delete Pag-IBIG contribution || "Unknown error"}`, "warning");
+            showToast(`Failed to delete Pag-IBIG contribution || "Unknown error"}`, "warning");
             deleteModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Pag-IBIG contribution deleted successfully!`);
+          showToast(`Pag-IBIG contribution deleted successfully!`);
           await refreshTableData(); 
           } catch (err) {
           console.error("Error deleting Pag-IBIG contribution:", err);
-          showToast("❌ Server error while deleting Pag-IBIG contribution.", "error");
+          showToast("Server error while deleting Pag-IBIG contribution.", "error");
         }
       }
       
@@ -1706,7 +1706,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const tr = document.querySelector(`#contributionsTable tbody tr.selected-row`);
 
         if (!tr) {
-          showToast("⚠️ No PhilHealth contribution selected!", "warning");
+          showToast("No PhilHealth contribution selected!", "warning");
           return;
         }
 
@@ -1725,16 +1725,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to delete PhilHealth contribution || "Unknown error"}`, "warning");
+            showToast(`Failed to delete PhilHealth contribution || "Unknown error"}`, "warning");
             deleteModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ PhilHealth contribution deleted successfully!`);
+          showToast(`PhilHealth contribution deleted successfully!`);
           await refreshTableData(); 
           } catch (err) {
           console.error("Error deleting PhilHealth contribution:", err);
-          showToast("❌ Server error while deleting PhilHealth contribution.", "error");
+          showToast("Server error while deleting PhilHealth contribution.", "error");
         }
       }
       
@@ -1743,7 +1743,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const tr = document.querySelector(`#taxExemptionsTable tbody tr.selected-row`);
 
         if (!tr) {
-          showToast("⚠️ No Tax Exemption selected!", "warning");
+          showToast("No Tax Exemption selected!", "warning");
           return;
         }
 
@@ -1762,16 +1762,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to delete Tax Exemption || "Unknown error"}`, "warning");
+            showToast(`Failed to delete Tax Exemption || "Unknown error"}`, "warning");
             deleteModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Tax Exemption deleted successfully!`);
+          showToast(`Tax Exemption deleted successfully!`);
           await refreshTableData(); 
           } catch (err) {
           console.error("Error deleting Tax Exemption:", err);
-          showToast("❌ Server error while deleting Tax Exemption.", "error");
+          showToast("Server error while deleting Tax Exemption.", "error");
         }
       }
       
@@ -1780,7 +1780,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const tr = document.querySelector(`#taxTable tbody tr.selected-row`);
 
         if (!tr) {
-          showToast("⚠️ No Withholding Tax selected!", "warning");
+          showToast("No Withholding Tax selected!", "warning");
           return;
         }
 
@@ -1799,16 +1799,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to delete Withholding Tax || "Unknown error"}`, "warning");
+            showToast(`Failed to delete Withholding Tax || "Unknown error"}`, "warning");
             deleteModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Withholding Tax deleted successfully!`);
+          showToast(`Withholding Tax deleted successfully!`);
           await refreshTableData(); 
           } catch (err) {
           console.error("Error deleting Withholding Tax:", err);
-          showToast("❌ Server error while deleting Withholding Tax.", "error");
+          showToast("Server error while deleting Withholding Tax.", "error");
         }
       }
 
@@ -1817,7 +1817,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
         const tr = document.querySelector(`#regionalWageTable tbody tr.selected-row`);
 
         if (!tr) {
-          showToast("⚠️ No Minimum Wage selected!", "warning");
+          showToast("No Minimum Wage selected!", "warning");
           return;
         }
 
@@ -1836,16 +1836,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to delete Minimum Wage || "Unknown error"}`, "warning");
+            showToast(`Failed to delete Minimum Wage || "Unknown error"}`, "warning");
             deleteModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Minimum Wage deleted successfully!`);
+          showToast(`Minimum Wage deleted successfully!`);
           await refreshTableData();
         } catch (err) {
           console.error("Error deleting Minimum Wage:", err);
-          showToast("❌ Server error while deleting Minimum Wage.", "error");
+          showToast("Server error while deleting Minimum Wage.", "error");
         }
       }
     }
@@ -1909,16 +1909,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           originalRowData = null;
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to update SSS contribution || "Unknown error"}`, "warning");
+            showToast(`Failed to update SSS contribution || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ SSS contribution updated successfully!`);
+          showToast(`SSS contribution updated successfully!`);
           refreshTableData();
           } catch (err) {
           console.error("Error saving SSS contribution:", err);
-          showToast("❌ Server error while saving SSS contribution.", "error");
+          showToast("Server error while saving SSS contribution.", "error");
         }
       }
       
@@ -1958,16 +1958,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           originalRowData = null;
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to update Pag-IBIG contribution || "Unknown error"}`, "warning");
+            showToast(`Failed to update Pag-IBIG contribution || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Pag-IBIG contribution updated successfully!`);
+          showToast(`Pag-IBIG contribution updated successfully!`);
           refreshTableData();
           } catch (err) {
           console.error("Error saving Pag-IBIG contribution:", err);
-          showToast("❌ Server error while saving Pag-IBIG contribution.", "error");
+          showToast("Server error while saving Pag-IBIG contribution.", "error");
         }
       }
       
@@ -2007,16 +2007,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           originalRowData = null;
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to update PhilHealth contribution || "Unknown error"}`, "warning");
+            showToast(`Failed to update PhilHealth contribution || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ PhilHealth contribution updated successfully!`);
+          showToast(`PhilHealth contribution updated successfully!`);
           refreshTableData();
           } catch (err) {
           console.error("Error saving PhilHealth contribution:", err);
-          showToast("❌ Server error while saving PhilHealth contribution.", "error");
+          showToast("Server error while saving PhilHealth contribution.", "error");
         }
       }
       
@@ -2052,16 +2052,16 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           originalRowData = null;
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to update Tax Exemptions || "Unknown error"}`, "warning");
+            showToast(`Failed to update Tax Exemptions || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
 
-          showToast(`✅ Tax Exemptions updated successfully!`);
+          showToast(`Tax Exemptions updated successfully!`);
           refreshTableData();
           } catch (err) {
           console.error("Error saving Tax Exemptions:", err);
-          showToast("❌ Server error while saving Tax Exemptions.", "error");
+          showToast("Server error while saving Tax Exemptions.", "error");
         }
       }
       
@@ -2091,7 +2091,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to update Withholding Tax || "Unknown error"}`, "warning");
+            showToast(`Failed to update Withholding Tax || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
@@ -2110,11 +2110,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           editingRow = null;
           originalRowData = null;
 
-          showToast(`✅ Withholding Tax updated successfully!`);
+          showToast(`Withholding Tax updated successfully!`);
           refreshTableData();
           } catch (err) {
           console.error("Error saving Withholding Tax:", err);
-          showToast("❌ Server error while saving Withholding Tax.", "error");
+          showToast("Server error while saving Withholding Tax.", "error");
         }
       }
 
@@ -2130,7 +2130,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
 
         // Validation
         if (!updated.region_code || !updated.region_name || isNaN(updated.wage_rate) || updated.wage_rate < 0) {
-          return showToast("⚠️ Please complete all fields with valid values.", "warning");
+          return showToast("Please complete all fields with valid values.", "warning");
         }
 
         try {
@@ -2144,7 +2144,7 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            showToast(`⚠️ Failed to update Minimum Wage || "Unknown error"}`, "warning");
+            showToast(`Failed to update Minimum Wage || "Unknown error"}`, "warning");
             saveModal.classList.add("hidden");
             return;
           }
@@ -2160,11 +2160,11 @@ if (window.location.pathname.includes('employee_benefits.html')) {
           editingRow = null;
           originalRowData = null;
 
-          showToast(`✅ Minimum Wage updated successfully!`);
+          showToast(`Minimum Wage updated successfully!`);
           refreshTableData();
         } catch (err) {
           console.error("Error saving Minimum Wage:", err);
-          showToast("❌ Server error while saving Minimum Wage.", "error");
+          showToast("Server error while saving Minimum Wage.", "error");
         }
       }
     }

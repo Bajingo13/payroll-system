@@ -113,7 +113,7 @@ function buildEmail(opts) {
           <tr>
             <td style="background:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 100%);padding:30px 32px 24px;text-align:center;">
               <p style="margin:0 0 6px;font-size:22px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">
-                ✦ <span style="color:#ffffff;">Astrea</span><span style="color:#7dd3fc;">Blue</span>
+                <span style="color:#ffffff;">Astrea</span><span style="color:#7dd3fc;">Blue</span>
               </p>
               <p style="margin:0;font-size:10px;font-weight:700;color:#93c5fd;letter-spacing:2.5px;text-transform:uppercase;">
                 HRIS &amp; Payroll System

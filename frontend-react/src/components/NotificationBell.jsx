@@ -2,14 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import AppIcon from './AppIcon.jsx';
 
 const TYPE_META = {
-  holiday:          { icon: '📅', label: 'Holiday',          route: '/leave-calendar' },
-  leave_request:    { icon: '📋', label: 'Leave Request',     route: '/leave-management' },
-  overtime_request: { icon: '⏱', label: 'Overtime Request',  route: '/overtime-management' },
-  leave_status:     { icon: '✅', label: 'Leave Update',      route: '/employee-leave-request' },
-  overtime_status:  { icon: '✅', label: 'Overtime Update',   route: '/employee-overtime-request' },
-  evaluation:       { icon: '⭐', label: 'Evaluation',        route: '/personal-management' },
+  holiday:          { icon: 'calendar', label: 'Holiday',          route: '/leave-calendar' },
+  leave_request:    { icon: 'clipboard', label: 'Leave Request',   route: '/leave-management' },
+  overtime_request: { icon: 'time', label: 'Overtime Request',     route: '/overtime-management' },
+  leave_status:     { icon: 'check', label: 'Leave Update',        route: '/employee-leave-request' },
+  overtime_status:  { icon: 'check', label: 'Overtime Update',     route: '/employee-overtime-request' },
+  evaluation:       { icon: 'chartUp', label: 'Evaluation',        route: '/personal-management' },
 };
 
 function timeAgo(dateStr) {
@@ -100,10 +101,7 @@ export default function NotificationBell() {
   return (
     <div className="notif-bell-wrap" ref={panelRef}>
       <button type="button" className="notif-bell-btn" onClick={() => setOpen((prev) => !prev)} aria-label="Notifications">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
+        <AppIcon name="bell" size={20} />
         {unreadCount > 0 && (
           <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
@@ -125,7 +123,7 @@ export default function NotificationBell() {
               <p className="notif-empty">No notifications yet.</p>
             ) : (
               notifications.map((n) => {
-                const meta = TYPE_META[n.type] || { icon: '🔔', label: n.type, route: null };
+                const meta = TYPE_META[n.type] || { icon: 'bell', label: n.type, route: null };
                 return (
                   <div
                     key={n.notification_id}
@@ -135,7 +133,7 @@ export default function NotificationBell() {
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleNotifClick(n); }}
                   >
-                    <span className="notif-item-icon">{meta.icon}</span>
+                    <span className="notif-item-icon"><AppIcon name={meta.icon} size={16} /></span>
                     <div className="notif-item-body">
                       <strong className="notif-item-title">{n.title}</strong>
                       <p className="notif-item-msg">{n.message}</p>

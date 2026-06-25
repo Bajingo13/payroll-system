@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import AppIcon from '../components/AppIcon.jsx';
 
 const C = ['#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6'];
 const RISK_P = {
@@ -25,29 +26,29 @@ function generateInsights(as) {
   const otForecast = Number(as.nextWeekOtForecast || 0);
   const out = [];
   if (tardinessRate > 15)
-    out.push({ type: 'danger', icon: '⏰', title: 'High Tardiness Alert', desc: `${tardinessRate.toFixed(1)}% tardiness is well above the 10% threshold.` });
+    out.push({ type: 'danger', icon: 'time', title: 'High Tardiness Alert', desc: `${tardinessRate.toFixed(1)}% tardiness is well above the 10% threshold.` });
   else if (tardinessRate > 8)
-    out.push({ type: 'warning', icon: '⏰', title: 'Tardiness Rising', desc: `Tardiness at ${tardinessRate.toFixed(1)}% — monitor and act early.` });
+    out.push({ type: 'warning', icon: 'time', title: 'Tardiness Rising', desc: `Tardiness at ${tardinessRate.toFixed(1)}% — monitor and act early.` });
   else
-    out.push({ type: 'success', icon: '⏰', title: 'Punctuality On Track', desc: `Tardiness at ${tardinessRate.toFixed(1)}% is within normal range.` });
+    out.push({ type: 'success', icon: 'time', title: 'Punctuality On Track', desc: `Tardiness at ${tardinessRate.toFixed(1)}% is within normal range.` });
   if (absenceRate > 10)
-    out.push({ type: 'danger', icon: '🏥', title: 'Absence Rate Critical', desc: `${absenceRate.toFixed(1)}% absence — immediate HR review needed.` });
+    out.push({ type: 'danger', icon: 'alert', title: 'Absence Rate Critical', desc: `${absenceRate.toFixed(1)}% absence — immediate HR review needed.` });
   else if (absenceRate > 5)
-    out.push({ type: 'warning', icon: '🏥', title: 'Absence Rate Elevated', desc: `Absence at ${absenceRate.toFixed(1)}% — review department patterns.` });
+    out.push({ type: 'warning', icon: 'alert', title: 'Absence Rate Elevated', desc: `Absence at ${absenceRate.toFixed(1)}% — review department patterns.` });
   else
-    out.push({ type: 'success', icon: '🏥', title: 'Absence Under Control', desc: `Absence at ${absenceRate.toFixed(1)}% is within healthy range.` });
+    out.push({ type: 'success', icon: 'check', title: 'Absence Under Control', desc: `Absence at ${absenceRate.toFixed(1)}% is within healthy range.` });
   if (highRisks >= 3)
-    out.push({ type: 'danger', icon: '🚨', title: `${highRisks} High-Risk Flags`, desc: 'Multiple employees at risk. Immediate retention action required.' });
+    out.push({ type: 'danger', icon: 'alert', title: `${highRisks} High-Risk Flags`, desc: 'Multiple employees at risk. Immediate retention action required.' });
   else if (highRisks >= 1)
-    out.push({ type: 'warning', icon: '⚠️', title: `${highRisks} Turnover Risk${highRisks > 1 ? 's' : ''}`, desc: `${highRisks} employee${highRisks > 1 ? 's' : ''} showing signals — engage proactively.` });
+    out.push({ type: 'warning', icon: 'alert', title: `${highRisks} Turnover Risk${highRisks > 1 ? 's' : ''}`, desc: `${highRisks} employee${highRisks > 1 ? 's' : ''} showing signals — engage proactively.` });
   else
-    out.push({ type: 'success', icon: '🎯', title: 'Retention Stable', desc: 'No high-risk turnover flags detected this period.' });
+    out.push({ type: 'success', icon: 'target', title: 'Retention Stable', desc: 'No high-risk turnover flags detected this period.' });
   if (otForecast > 80)
-    out.push({ type: 'warning', icon: '⏱️', title: 'Heavy OT Projected', desc: `${otForecast.toFixed(1)} hrs OT next week — consider task redistribution.` });
+    out.push({ type: 'warning', icon: 'time', title: 'Heavy OT Projected', desc: `${otForecast.toFixed(1)} hrs OT next week — consider task redistribution.` });
   else if (otForecast > 40)
-    out.push({ type: 'info', icon: '⏱️', title: 'Moderate OT Expected', desc: `${otForecast.toFixed(1)} hrs OT forecast — monitor workload distribution.` });
+    out.push({ type: 'info', icon: 'time', title: 'Moderate OT Expected', desc: `${otForecast.toFixed(1)} hrs OT forecast — monitor workload distribution.` });
   else
-    out.push({ type: 'success', icon: '⏱️', title: 'OT Workload Balanced', desc: `${otForecast.toFixed(1)} hrs OT is within normal operating range.` });
+    out.push({ type: 'success', icon: 'time', title: 'OT Workload Balanced', desc: `${otForecast.toFixed(1)} hrs OT is within normal operating range.` });
   return out;
 }
 
@@ -173,12 +174,12 @@ export default function DashboardPage() {
 
       <div className="dboard-kpi-row">
         {[
-          { icon: '👥', label: 'Total Employees', value: Number(summary.totalEmployees || 0).toLocaleString(), sub: `${activeP}% active`,    bg: '#e0f2fe', route: '/employee-management' },
-          { icon: '✅', label: 'Active',           value: Number(activeEmp || 0).toLocaleString(),             sub: 'Currently employed',     bg: '#dcfce7', route: '/employee-management' },
-          { icon: '💰', label: 'Payroll Runs',     value: Number(summary.processedPayrolls || 0).toLocaleString(), sub: 'Processed',          bg: '#ede9fe', route: '/payroll-computation' },
-          { icon: '📋', label: 'Pending Leaves',    value: pendingLeaves,                                       sub: 'Awaiting approval',      bg: '#fef9c3', route: '/leave-management' },
-          { icon: '⏰', label: 'Pending Overtime',  value: pendingOvertimes,                                    sub: 'Awaiting approval',      bg: '#ecfeff', route: '/overtime-management' },
-          { icon: '⚠️', label: 'Turnover Risk',    value: as.highTurnoverRisks || 0,                          sub: 'High-risk flags',         bg: '#fee2e2', route: '/analytics-dashboard' },
+          { icon: 'users', label: 'Total Employees', value: Number(summary.totalEmployees || 0).toLocaleString(), sub: `${activeP}% active`,    bg: '#e0f2fe', route: '/employee-management' },
+          { icon: 'check', label: 'Active',           value: Number(activeEmp || 0).toLocaleString(),             sub: 'Currently employed',     bg: '#dcfce7', route: '/employee-management' },
+          { icon: 'wallet', label: 'Payroll Runs',     value: Number(summary.processedPayrolls || 0).toLocaleString(), sub: 'Processed',          bg: '#ede9fe', route: '/payroll-computation' },
+          { icon: 'clipboard', label: 'Pending Leaves',    value: pendingLeaves,                                       sub: 'Awaiting approval',      bg: '#fef9c3', route: '/leave-management' },
+          { icon: 'time', label: 'Pending Overtime',  value: pendingOvertimes,                                    sub: 'Awaiting approval',      bg: '#ecfeff', route: '/overtime-management' },
+          { icon: 'alert', label: 'Turnover Risk',    value: as.highTurnoverRisks || 0,                          sub: 'High-risk flags',         bg: '#fee2e2', route: '/analytics-dashboard' },
         ].map((s, i) => (
           <div
             className="dboard-kpi dboard-kpi-link"
@@ -189,7 +190,7 @@ export default function DashboardPage() {
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter') navigate(s.route); }}
           >
-            <div className="dboard-kpi-icon" style={{ background: s.bg }}>{s.icon}</div>
+            <div className="dboard-kpi-icon" style={{ background: s.bg }}><AppIcon name={s.icon} /></div>
             <span>{s.label}</span>
             <strong>{s.value}</strong>
             <small>{s.sub}</small>
@@ -202,7 +203,7 @@ export default function DashboardPage() {
         {/* ── Row 1: Core snapshot — 3 equal cards ── */}
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#e0f2fe' }}>👥</div>
+            <div className="dboard-ch-icon" style={{ background: '#e0f2fe' }}><AppIcon name="users" /></div>
             <div><h3>Attendance</h3><p>Workforce presence</p></div>
           </div>
           <div className="dboard-big-num">
@@ -224,7 +225,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#dcfce7' }}>💰</div>
+            <div className="dboard-ch-icon" style={{ background: '#dcfce7' }}><AppIcon name="wallet" /></div>
             <div><h3>Payroll</h3><p>{summary.processedPayrolls || 0} processed runs</p></div>
           </div>
           <div className="dboard-rows">
@@ -241,7 +242,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#ede9fe' }}>📊</div>
+            <div className="dboard-ch-icon" style={{ background: '#ede9fe' }}><AppIcon name="chart" /></div>
             <div><h3>Performance</h3><p>Attendance &amp; OT signals</p></div>
             <span className="dboard-badge-period">7 Days</span>
           </div>
@@ -265,7 +266,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-3">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fff7ed' }}>📈</div>
+            <div className="dboard-ch-icon" style={{ background: '#fff7ed' }}><AppIcon name="chartUp" /></div>
             <div><h3>Employment Status</h3><p>{Number(summary.totalEmployees || 0).toLocaleString()} total employees</p></div>
           </div>
           <SegBar rows={summary.employeeStatuses} />
@@ -276,7 +277,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fef9c3' }}>📋</div>
+            <div className="dboard-ch-icon" style={{ background: '#fef9c3' }}><AppIcon name="clipboard" /></div>
             <div><h3>Leave Requests</h3><p>Approval overview</p></div>
           </div>
           <div className="dboard-rows">
@@ -293,7 +294,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏰</div>
+            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}><AppIcon name="time" /></div>
             <div><h3>Overtime Requests</h3><p>Approval overview</p></div>
           </div>
           <div className="dboard-rows">
@@ -310,7 +311,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fee2e2' }}>⚠️</div>
+            <div className="dboard-ch-icon" style={{ background: '#fee2e2' }}><AppIcon name="alert" /></div>
             <div><h3>Turnover Risk</h3><p>Needs attention</p></div>
           </div>
           <div className="dboard-rows">
@@ -334,9 +335,9 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-3">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: 'linear-gradient(135deg,#dbeafe,#ede9fe)' }}>🤖</div>
+            <div className="dboard-ch-icon" style={{ background: 'linear-gradient(135deg,#dbeafe,#ede9fe)' }}><AppIcon name="robot" /></div>
             <div><h3>AI Insights</h3><p>Workforce intelligence summary</p></div>
-            <span className="dboard-ai-badge">✦ AI</span>
+            <span className="dboard-ai-badge">AI</span>
           </div>
           <div className="dboard-ai-body" style={{ gridTemplateColumns: '90px 1fr 1fr' }}>
             <div className="dboard-ai-score">
@@ -356,7 +357,7 @@ export default function DashboardPage() {
                 const ic = INSIGHT_COLORS[ins.type];
                 return (
                   <div key={ins.title} className="dboard-ai-insight" style={{ background: ic.bg, borderLeft: `3px solid ${ic.border}` }}>
-                    <span className="dboard-ai-insight-icon" style={{ background: ic.icon_bg }}>{ins.icon}</span>
+                    <span className="dboard-ai-insight-icon" style={{ background: ic.icon_bg }}><AppIcon name={ins.icon} size={15} /></span>
                     <div>
                       <strong style={{ color: ic.fg }}>{ins.title}</strong>
                       <small>{ins.desc}</small>
@@ -387,7 +388,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#fefce8' }}>🗓️</div>
+            <div className="dboard-ch-icon" style={{ background: '#fefce8' }}><AppIcon name="calendar" /></div>
             <div><h3>Attendance Analytics</h3><p>Tardiness &amp; absence</p></div>
             <span className="dboard-badge-period">30 Days</span>
           </div>
@@ -417,7 +418,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}>⏱️</div>
+            <div className="dboard-ch-icon" style={{ background: '#ecfeff' }}><AppIcon name="time" /></div>
             <div><h3>Overtime Trends</h3><p>Weekly OT pattern</p></div>
             <span className="dboard-badge-period">8 Wks</span>
           </div>
@@ -446,7 +447,7 @@ export default function DashboardPage() {
 
         <article className="dboard-card dboard-span-1">
           <div className="dboard-ch">
-            <div className="dboard-ch-icon" style={{ background: '#dcfce7' }}>📉</div>
+            <div className="dboard-ch-icon" style={{ background: '#dcfce7' }}><AppIcon name="chartDown" /></div>
             <div><h3>Payroll Forecast</h3><p>Budget projections</p></div>
           </div>
           {forecast === null ? (

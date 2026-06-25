@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 
@@ -151,7 +152,7 @@ export default function NotificationsScreen({ navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#1e40af" />}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Text style={s.emptyIcon}>🔔</Text>
+              <Ionicons name="notifications-outline" size={48} color="#94a3b8" style={s.emptyIcon} />
               <Text style={s.emptyText}>No notifications yet</Text>
             </View>
           }

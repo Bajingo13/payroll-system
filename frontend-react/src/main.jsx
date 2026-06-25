@@ -200,6 +200,15 @@ function AppRoutes() {
         />
 
         <Route
+          path="account-settings"
+          element={
+            <RoleRoute roles={['admin', 'hr', 'employee']} feature="user-settings">
+              <UserSettingsPage accountOnly />
+            </RoleRoute>
+          }
+        />
+
+        <Route
           path="profile-management"
           element={<Navigate to="/dashboard" replace />}
         />

@@ -1,6 +1,6 @@
 export const FEATURE_OPTIONS = [
   { key: 'dashboard', label: 'Dashboard' },
-  { key: 'user-settings', label: 'User Settings' },
+  { key: 'user-settings', label: 'User Account Settings' },
   { key: 'personal-management', label: 'Personal Management' },
   { key: 'employee-leave-request', label: 'Employee Leave Request' },
   { key: 'employee-overtime-request', label: 'Employee Overtime Request' },

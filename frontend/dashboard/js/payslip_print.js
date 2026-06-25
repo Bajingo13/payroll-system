@@ -123,18 +123,18 @@ async function loadProfile() {
 
     const user = data.user;
 
-    // ✅ THIS PART sets "Admin" and "System Administrator"
+    // THIS PART sets "Admin" and "System Administrator"
     const profileEl = document.querySelector(".sidebar .profile");
     if (profileEl) {
       profileEl.querySelector("h3").textContent = user.full_name;
       profileEl.querySelector("p").textContent = user.role;
     }
 
-    // ✅ THIS PART sets "Welcome, Admin 👋"
+    // THIS PART sets "Welcome, Admin"
     if (window.location.pathname === '/dashboard/dashboard.html') {
       const welcomeMessage = document.querySelector(".section .header");
       if (welcomeMessage) {
-        welcomeMessage.querySelector("h2").textContent += user.full_name + " 👋";
+        welcomeMessage.querySelector("h2").textContent += user.full_name + "";
       }
     }
 

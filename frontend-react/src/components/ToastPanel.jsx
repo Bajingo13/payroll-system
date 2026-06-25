@@ -50,7 +50,7 @@ export default function ToastPanel({ open, title, onClose, children }) {
             color: '#fff', fontSize: 14, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-        >✕</button>
+        >×</button>
       </div>
 
       {/* Scrollable body */}

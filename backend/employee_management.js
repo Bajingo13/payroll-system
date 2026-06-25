@@ -293,7 +293,7 @@ module.exports = function (app, pool) {
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
-            console.error("🚫 logAudit aborted: Missing user_id or admin_name");
+            console.error("logAudit aborted: Missing user_id or admin_name");
             return; // Don’t try to insert invalid data
         }
 
@@ -304,9 +304,9 @@ module.exports = function (app, pool) {
             "INSERT INTO audit_logs (user_id, admin_name, action, status) VALUES (?, ?, ?, ?)",
             [user_id, admin_name, action, status]
             );
-            console.log(`✅ Audit logged: ${admin_name} → ${action}`);
+            console.log(`Audit logged: ${admin_name} → ${action}`);
         } catch (err) {
-            console.error("❌ Failed to log audit:", err.message);
+            console.error("Failed to log audit:", err.message);
         } finally {
             if (conn) conn.release();
         }
@@ -340,10 +340,10 @@ module.exports = function (app, pool) {
         const page = parseInt(req.query.page, 10) || 1;
         const offset = (page - 1) * limit;
 
-        // 🟢 Get sortBy from frontend (default: ID)
+        // Get sortBy from frontend (default: ID)
         const sortBy = req.query.sortBy || "ID";
 
-        // 🟢 Choose which column to sort by
+        // Choose which column to sort by
         let orderColumn;
         switch (sortBy) {
             case "Name":
@@ -373,7 +373,7 @@ module.exports = function (app, pool) {
             const totalEmployees = countResult[0].total;
             const totalPages = Math.ceil(totalEmployees / limit);
 
-            // 🟢 Query employees with dynamic sorting
+            // Query employees with dynamic sorting
             const [employees] = await conn.query(
             `SELECT e.emp_code,
                     CONCAT(e.first_name, ' ', e.last_name) AS full_name,
@@ -602,7 +602,7 @@ module.exports = function (app, pool) {
 
             // Basic validation
             if (!last_name || !email || !date_hired) {
-                console.error("❌ Missing field(s):", { first_name, last_name, email, date_hired });
+                console.error("Missing field(s):", { first_name, last_name, email, date_hired });
                 return res.status(400).json({
                     success: false,
                     message: "Missing required fields: last_name, email, or date_hired",
@@ -875,7 +875,7 @@ module.exports = function (app, pool) {
             });
         } catch (err) {
             await conn.rollback().catch(() => {});
-            console.error("❌ /api/add_employee error:", err);
+            console.error("/api/add_employee error:", err);
             res
             .status(err.statusCode || 500)
             .json({
@@ -1070,7 +1070,7 @@ module.exports = function (app, pool) {
             });
         } catch (error) {
             if (conn) await conn.rollback().catch(() => {});
-            console.error('❌ Error saving employee system account:', error);
+            console.error('Error saving employee system account:', error);
             return res.status(error.statusCode || 500).json({
                 success: false,
                 message: error.statusCode ? error.message : 'Server error while saving employee account',
@@ -1728,7 +1728,7 @@ module.exports = function (app, pool) {
             }
             const employeeId = empRows[0].employee_id;
 
-            // 🔹 Step 2: Check if new emp_code is already used by another employee
+            // Step 2: Check if new emp_code is already used by another employee
             if (body.emp_code && body.emp_code !== empCode) {
             const [dupRows] = await conn.query(
                 `SELECT employee_id FROM employees WHERE emp_code = ? AND employee_id != ?`,
@@ -2099,7 +2099,7 @@ module.exports = function (app, pool) {
             });
         } catch (error) {
             if (conn) await conn.rollback().catch(() => {});
-            console.error("❌ Error updating employee:", error);
+            console.error("Error updating employee:", error);
             if (error.code === "ER_DUP_ENTRY") {
             return res.status(400).json({ success: false, message: "Employee ID already exists" });
             }
@@ -2149,7 +2149,7 @@ module.exports = function (app, pool) {
         res.json({ success: true, message: 'Employee deleted successfully' });
         conn.release();
       } catch (error) {
-        console.error('❌ Error deleting employee:', error);
+        console.error('Error deleting employee:', error);
         res.status(500).json({ success: false, message: 'Server error while deleting employee' });
       }
     });

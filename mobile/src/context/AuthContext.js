@@ -27,9 +27,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Step 1 — authenticate + persist, but do NOT navigate yet
-  async function login(username, password) {
-    const { data } = await api.post('/login', { username, password });
-    if (!data.success) throw new Error(data.message || 'Invalid username or password.');
+  async function persistUser(data) {
     const nextUser = {
       user_id: String(data.user_id),
       full_name: data.full_name || '',
@@ -41,6 +39,18 @@ export function AuthProvider({ children }) {
       ['role', nextUser.role],
     ]);
     return nextUser;
+  }
+
+  async function login(username, password) {
+    const { data } = await api.post('/login', { username, password });
+    if (!data.success) throw new Error(data.message || 'Invalid username or password.');
+    if (data.requiresOtp) return data;
+    return persistUser(data);
+  }
+
+  async function finishLogin(data) {
+    if (!data?.success) throw new Error(data?.message || 'Login was not completed.');
+    return persistUser(data);
   }
 
   // Step 2 — set user state (triggers navigation to Main)
@@ -60,7 +70,7 @@ export function AuthProvider({ children }) {
   const clearLogoutFlag = useCallback(() => setJustLoggedOut(false), []);
 
   const value = useMemo(
-    () => ({ user, loading, login, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag }),
+    () => ({ user, loading, login, finishLogin, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag }),
     [user, loading, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag]
   );
 

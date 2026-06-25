@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
 
   async function login(username, password) {
-const { data } = await api.post('/login', { username, password });
+    const { data } = await api.post('/login', { username, password });
     if (!data.success) {
       throw new Error(data.message || 'Invalid username or password.');
     }
@@ -29,6 +29,19 @@ const { data } = await api.post('/login', { username, password });
       role: data.role || ''
     };
 
+    sessionStorage.setItem('user_id', nextUser.user_id);
+    sessionStorage.setItem('admin_name', nextUser.full_name);
+    sessionStorage.setItem('role', nextUser.role);
+    setUser(nextUser);
+    return nextUser;
+  }
+
+  function setAuthUser(userData) {
+    const nextUser = {
+      user_id: String(userData.user_id),
+      full_name: userData.full_name || '',
+      role: userData.role || ''
+    };
     sessionStorage.setItem('user_id', nextUser.user_id);
     sessionStorage.setItem('admin_name', nextUser.full_name);
     sessionStorage.setItem('role', nextUser.role);
@@ -49,7 +62,7 @@ const { data } = await api.post('/login', { username, password });
     }
   }, []);
 
-  const value = useMemo(() => ({ user, login, logout }), [logout, user]);
+  const value = useMemo(() => ({ user, login, logout, setAuthUser }), [logout, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1693,7 +1693,7 @@ export default function EmployeeManagementPage() {
                         console.log('restoring original payroll computation:', source);
 
                     Object.entries(source).forEach(([field, value]) => {
-                      if (field === 'strict_no_overtime') return; // 🔥 critical fix
+                      if (field === 'strict_no_overtime') return;
                       updateNestedAddField('payrollComputation', field, value);
                     });
                   }
@@ -1721,7 +1721,7 @@ export default function EmployeeManagementPage() {
                 </select>
               ),
               {
-                required: !comp.strict_no_overtime // 🔥 FIX HERE
+                required: !comp.strict_no_overtime
               }
             )}
             {renderFormRow('Days in a Year (O.T.):', <input
