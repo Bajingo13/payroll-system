@@ -885,6 +885,7 @@ export default function PayrollComputationPage() {
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
     const rec = data.data || {};
     console.log('Payroll settings for employee', empId, rec);
+    console.log(JSON.stringify(rec, null, 2));
 
     // Compute basic_salary from settings so we can pass it to HRIS
     let computedBasicSalary = toNum(rec.basic_salary);
@@ -1169,6 +1170,14 @@ export default function PayrollComputationPage() {
       const payrolls = filteredEmps.map(emp => {
         const d = cache[emp.employee_id];
         const p = d.payroll;
+          console.log('YTD values for employee', emp.employee_id, {
+    ytd_sss: p.ytd_sss,
+    ytd_wtax: p.ytd_wtax,
+    ytd_philhealth: p.ytd_philhealth,
+    ytd_gsis: p.ytd_gsis,
+    ytd_pagibig: p.ytd_pagibig,
+    ytd_gross: p.ytd_gross,
+  });
         const allowTotals = effectiveAllowanceTotals(p, d.allowances);
         const rowDeductions = effectiveDeductionTotal(p, d.deductions);
         const gross = toNum(p.basic_salary)-toNum(p.absence_deduction)-toNum(p.late_deduction)-toNum(p.undertime_deduction)+toNum(p.overtime)+toNum(p.holiday_pay)+allowTotals.taxable+allowTotals.nontaxable+toNum(p.adj_comp)+toNum(p.adj_non_comp)+toNum(p.total_leaves_used);
@@ -1679,7 +1688,6 @@ export default function PayrollComputationPage() {
                           <tr><td>Adj. Compensation (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></td></tr>
                           <tr><td>Adj. Non-Comp. (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_non_comp} set={v=>upPayroll('adj_non_comp',v)} /></td></tr>
                           <tr><td>Total Leaves Used (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></td></tr>
-                          <tr className="payroll-entry-total-row"><td>Gross Pay</td><td></td><td><strong>&#8369;{fmt(totals.gross)}</strong></td></tr>
                         </tbody>
                       </table>
                     </div>
