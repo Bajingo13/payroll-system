@@ -320,8 +320,10 @@ export default function PayrollComputationPage() {
   const [step, setStep]   = useState('setup');
   const [meta, setMeta]   = useState({ payrollGroups:[], payrollPeriods:[], payrollMonths:[], payrollYears:[] });
   const [lists, setLists] = useState({});
+  const currentMonthId = String(new Date().getMonth() + 1);
+  const currentDay = new Date().getDate();
   const [filters, setFilters] = useState({
-    payroll_group:'', payroll_period:'', month:'', year:'',
+    payroll_group:'2', payroll_period:currentDay <= 15 ? 5 : 6, month:currentMonthId, year:'',
     option:'active',
     company:'', location:'', branch:'', division:'', department:'',
     class:'', position:'', empType:'', salaryType:'',

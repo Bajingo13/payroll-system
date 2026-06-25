@@ -943,6 +943,8 @@ module.exports = function (app, pool) {
                             iterD.setUTCDate(iterD.getUTCDate() + 1);
                         }
                         totalAbsentDays = absentCount;
+                        console.log("attLogs:", attLogs);
+                        console.log(iterD, iterEnd, absentCountStartDate, endDate, workingDays, nonWorkingHolidayDates, presentDates, totalAbsentDays);
                         attendanceSource = 'computed_from_attendance';
 
                         // Parse scheduled shift start from settings (e.g. '08:00', '22:00').

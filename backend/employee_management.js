@@ -601,11 +601,16 @@ module.exports = function (app, pool) {
             const dependents = Array.isArray(body.dependents) ? body.dependents : [];
 
             // Basic validation
+<<<<<<< HEAD
             if (!first_name || !last_name || !email || !date_hired) {
                 console.error("Missing field(s):", { first_name, last_name, email, date_hired });
+=======
+            if (!last_name || !email || !date_hired) {
+                console.error("❌ Missing field(s):", { first_name, last_name, email, date_hired });
+>>>>>>> 8a48bf50608d1e62d020c2ab0bf36c09222d34ed
                 return res.status(400).json({
                     success: false,
-                    message: "Missing required fields: first_name, last_name, email, or date_hired",
+                    message: "Missing required fields: last_name, email, or date_hired",
                 });
             }
 
