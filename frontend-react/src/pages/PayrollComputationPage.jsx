@@ -105,6 +105,7 @@ function getPayrollPeriodBounds(periodRow, monthRow, yearValue) {
 
   return { start: `${year}-${mm}-01`, end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
 }
+
 function parseTimeToMinutes(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   const text = String(value ?? '').trim();
@@ -116,12 +117,14 @@ function parseTimeToMinutes(value) {
   const numeric = Number(text);
   return Number.isFinite(numeric) ? numeric : 0;
 }
+
 function formatMinutesToTime(value) {
   const total = Math.max(0, Math.round(parseTimeToMinutes(value)));
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
   return `${String(hours).padStart(3, '0')}:${String(minutes).padStart(2, '0')}`;
 }
+
 function normalizeAdjustmentTimes(data = {}) {
   const next = { ...data };
   Object.keys(next).forEach((key) => {
@@ -129,6 +132,7 @@ function normalizeAdjustmentTimes(data = {}) {
   });
   return next;
 }
+
 function sumAllowanceRows(rows = []) {
   return rows.reduce((acc, row) => {
     if (Number(row.is_taxable) === 1) acc.taxable += toNum(row.amount);
@@ -136,6 +140,7 @@ function sumAllowanceRows(rows = []) {
     return acc;
   }, { taxable: 0, nontaxable: 0 });
 }
+
 function effectiveAllowanceTotals(payroll, rows = []) {
   const rowTotals = sumAllowanceRows(rows);
   return {
@@ -143,6 +148,7 @@ function effectiveAllowanceTotals(payroll, rows = []) {
     nontaxable: rows.length ? rowTotals.nontaxable : toNum(payroll.non_taxable_allowances)
   };
 }
+
 function effectiveDeductionTotal(payroll, rows = []) {
   return rows.length ? rows.reduce((sum, row) => sum + toNum(row.amount), 0) : toNum(payroll.total_deductions);
 }
@@ -878,6 +884,7 @@ export default function PayrollComputationPage() {
     const { data } = settingsResp;
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
     const rec = data.data || {};
+    console.log('Payroll settings for employee', empId, rec);
 
     // Compute basic_salary from settings so we can pass it to HRIS
     let computedBasicSalary = toNum(rec.basic_salary);
@@ -905,31 +912,42 @@ export default function PayrollComputationPage() {
     }
 
     const nextP = makeEmptyPayroll();
-    Object.keys(nextP).forEach(k => { if(rec[k]!=null) nextP[k]=rec[k]; });
-    // Use the already-computed basic_salary (same logic run above for HRIS call)
-    if (computedBasicSalary > 0) nextP.basic_salary = computedBasicSalary;
-    if (rec.previousYtd) {
-      const ytd = rec.previousYtd;
-      if (!nextP.ytd_sss)        nextP.ytd_sss        = ytd.ytd_sss||'';
-      if (!nextP.ytd_wtax)       nextP.ytd_wtax       = ytd.ytd_wtax||'';
-      if (!nextP.ytd_philhealth) nextP.ytd_philhealth = ytd.ytd_philhealth||'';
-      if (!nextP.ytd_gsis)       nextP.ytd_gsis       = ytd.ytd_gsis||'';
-      if (!nextP.ytd_pagibig)    nextP.ytd_pagibig    = ytd.ytd_pagibig||'';
-      if (!nextP.ytd_gross)      nextP.ytd_gross      = ytd.ytd_gross||'';
+
+    Object.keys(nextP).forEach(k => {
+      if (rec[k] != null) nextP[k] = rec[k];
+    });
+
+    // Use the already-computed basic_salary
+    if (computedBasicSalary > 0) {
+      nextP.basic_salary = computedBasicSalary;
     }
+    
     const allowList = rec.allowances||[];
+
     if (!toNum(nextP.taxable_allowances)) {
-      const tx = allowList.filter(a=>Number(a.is_taxable)===1).reduce((s,a)=>s+toNum(a.amount),0);
+      const tx = allowList
+        .filter(a => Number(a.is_taxable)===1)
+        .reduce((s,a)=>s+toNum(a.amount),0);
+
       if (tx>0) nextP.taxable_allowances = tx;
     }
+
     if (!toNum(nextP.non_taxable_allowances)) {
-      const nt = allowList.filter(a=>Number(a.is_taxable)!==1).reduce((s,a)=>s+toNum(a.amount),0);
+      const nt = allowList
+        .filter(a => Number(a.is_taxable)!==1)
+        .reduce((s,a)=>s+toNum(a.amount),0);
+
       if (nt>0) nextP.non_taxable_allowances = nt;
     }
+
     const deductionList = rec.deductions || [];
+
     if (!toNum(nextP.total_deductions)) {
-      const totalDeductionRows = deductionList.reduce((s, d) => s + toNum(d.amount), 0);
-      if (totalDeductionRows > 0) nextP.total_deductions = totalDeductionRows;
+      const totalDeductionRows = deductionList
+        .reduce((s, d) => s + toNum(d.amount), 0);
+
+      if (totalDeductionRows > 0)
+        nextP.total_deductions = totalDeductionRows;
     }
 
     const nextOt  = makeEmptyOtNd();    const otR = rec.ot_nd||{};       Object.keys(nextOt).forEach(k=>{if(otR[k]!=null)nextOt[k]=otR[k];});
@@ -941,29 +959,30 @@ export default function PayrollComputationPage() {
       const hrisUndertimeMinutes = hris.attendance?.undertime_minutes || 0;
       const hrisOtMinutes      = Math.round((hris.ot?.total_hours || 0) * 60);
       nextP.absence_time        = hrisAbsenceMinutes;
-      nextP.absence_deduction   = hris.absences?.computed_deduction || 0;
+      nextP.absence_deduction   = (hris.absences?.computed_deduction || 0).toFixed(2);
       nextP.late_time           = hrisLateMinutes;
-      nextP.late_deduction      = hris.attendance?.late_deduction || 0;
+      nextP.late_deduction      = (hris.attendance?.late_deduction || 0).toFixed(2);
       nextP.undertime           = hrisUndertimeMinutes;
-      nextP.undertime_deduction = hris.attendance?.undertime_deduction || 0;
-      nextP.overtime            = hris.ot?.computed_amount || 0;
-      nextP.holiday_pay         = hris.holiday?.computed_amount || 0;
+      nextP.undertime_deduction = (hris.attendance?.undertime_deduction || 0).toFixed(2);
+      nextP.overtime            = (hris.ot?.computed_amount || 0).toFixed(2);
+      nextP.holiday_pay         = (hris.holiday?.computed_amount || 0).toFixed(2);
       nextP.total_leaves_used   = buildPeriodLeaveRows(hris, nextP.basic_salary, rec.leaveBalances || [])
         .reduce((sum, row) => sum + toNum(row.amount), 0)
         .toFixed(2);
       nextAtt.absences_time  = hrisAbsenceMinutes;
-      nextAtt.absences_amt   = hris.absences?.computed_deduction || 0;
+      nextAtt.absences_amt   = (hris.absences?.computed_deduction || 0).toFixed(2);
       nextAtt.late_time      = hrisLateMinutes;
-      nextAtt.late_amt       = hris.attendance?.late_deduction || 0;
+      nextAtt.late_amt       = (hris.attendance?.late_deduction || 0).toFixed(2);
       nextAtt.undertime_time = hrisUndertimeMinutes;
-      nextAtt.undertime_amt  = hris.attendance?.undertime_deduction || 0;
+      nextAtt.undertime_amt  = (hris.attendance?.undertime_deduction || 0).toFixed(2);
       nextAdj.ot_adj_rg_ot_time = hrisOtMinutes;
-      nextAdj.ot_adj_rg_ot      = hris.ot?.computed_amount || 0;
+      nextAdj.ot_adj_rg_ot      = (hris.ot?.computed_amount || 0).toFixed(2);
     }
 
     Object.assign(nextP, applyContributionRows(nextP, rec.contributions || []));
     try {
       const computed = await computePayrollDeductions(nextP, rec, allowList, deductionList);
+      console.log('Computed deductions:', computed);
       if (computed) {
         [
           'gsis_employee', 'gsis_employer', 'gsis_ecc',
@@ -972,11 +991,57 @@ export default function PayrollComputationPage() {
           'philhealth_employee', 'philhealth_employer', 'philhealth_ecc',
           'tax_withheld'
         ].forEach((field) => {
-          if (!toNum(nextP[field]) && computed[field] != null) nextP[field] = computed[field];
+          if (!toNum(nextP[field]) && computed[field] != null) { nextP[field] = (computed[field] ?? 0).toFixed(2); }
         });
       }
+      console.log('Computed payroll deductions:', computed);
     } catch {
       // Keep loaded payroll values if automatic statutory computation is unavailable.
+    }
+    
+    if (rec.previousYtd) {
+      const ytd = rec.previousYtd;
+
+      nextP.ytd_gsis = (
+        parseFloat(ytd.ytd_gsis || 0) +
+        parseFloat(nextP.gsis_employee || 0)
+      ).toFixed(2);
+
+      nextP.ytd_sss = (
+        parseFloat(ytd.ytd_sss || 0) +
+        parseFloat(nextP.sss_employee || 0)
+      ).toFixed(2);
+
+      nextP.ytd_pagibig = (
+        parseFloat(ytd.ytd_pagibig || 0) +
+        parseFloat(nextP.pagibig_employee || 0)
+      ).toFixed(2);
+
+      nextP.ytd_philhealth = (
+        parseFloat(ytd.ytd_philhealth || 0) +
+        parseFloat(nextP.philhealth_employee || 0)
+      ).toFixed(2);
+
+      nextP.ytd_wtax = (
+        parseFloat(ytd.ytd_wtax || 0) +
+        parseFloat(nextP.tax_withheld || 0)
+      ).toFixed(2);
+
+      const gross =
+        toNum(nextP.basic_salary) -
+        toNum(nextP.absence_deduction) -
+        toNum(nextP.late_deduction) -
+        toNum(nextP.undertime_deduction) +
+        toNum(nextP.overtime) +
+        toNum(nextP.taxable_allowances) +
+        toNum(nextP.non_taxable_allowances) +
+        toNum(nextP.adj_comp) +
+        toNum(nextP.adj_non_comp) +
+        toNum(nextP.total_leaves_used);
+
+      nextP.ytd_gross = (
+        parseFloat(ytd.ytd_gross || 0) + gross
+      ).toFixed(2);
     }
 
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
@@ -1872,22 +1937,39 @@ export default function PayrollComputationPage() {
 
             {activeTab==='attendanceAdj' && (
               <div className="summary-input">
-                <div className="form-box premium-box">
-                  <h4>Premium Adjustments</h4>
-                  <table className="ot-nd-table premium-adjustment-table">
-                    <thead><tr><th>Type</th><th style={{width:120}}>Employee Share</th><th style={{width:120}}>Employer Share</th><th style={{width:120}}>ECC</th></tr></thead>
-                    <tbody>
-                      {PREM_ROWS.map(({key,label})=>(
-                        <tr key={key}>
-                          <td>{label}</td>
-                          <td><Ni dis={!isEditing} v={attAdj[`${key}_emp`]} set={v=>upAttAdj(`${key}_emp`,v)} /></td>
-                          <td><Ni dis={!isEditing} v={attAdj[`${key}_employer`]} set={v=>upAttAdj(`${key}_employer`,v)} /></td>
-                          <td><Ni dis={!isEditing} v={attAdj[`${key}_ecc`]} set={v=>upAttAdj(`${key}_ecc`,v)} /></td>
-                        </tr>
-                      ))}
-                      <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td></td><td></td></tr>
-                    </tbody>
-                  </table>
+                <div className="attendance-adj-grid">
+                  <div className="form-box attendance-box">
+                    <h4>Attendance Adjustments</h4>
+                    <table className="ot-nd-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Time</th><th style={{width:120}}>Amount</th></tr></thead>
+                      <tbody>
+                        {ATT_ROWS.map(({key,label,hasTime})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td>{hasTime?<Ti dis={!isEditing} v={attAdj[`${key}_time`]} set={v=>upAttAdj(`${key}_time`,v)} />:null}</td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_amt`]} set={v=>upAttAdj(`${key}_amt`,v)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="form-box premium-box">
+                    <h4>Premium Adjustments</h4>
+                    <table className="ot-nd-table">
+                      <thead><tr><th>Type</th><th style={{width:120}}>Employee Share</th><th style={{width:120}}>Employer Share</th><th style={{width:120}}>ECC</th></tr></thead>
+                      <tbody>
+                        {PREM_ROWS.map(({key,label})=>(
+                          <tr key={key}>
+                            <td>{label}</td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_emp`]} set={v=>upAttAdj(`${key}_emp`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_employer`]} set={v=>upAttAdj(`${key}_employer`,v)} /></td>
+                            <td><Ni dis={!isEditing} v={attAdj[`${key}_ecc`]} set={v=>upAttAdj(`${key}_ecc`,v)} /></td>
+                          </tr>
+                        ))}
+                        <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={attAdj.tax_withheld} set={v=>upAttAdj('tax_withheld',v)} /></td><td colSpan="2"></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -2114,11 +2196,13 @@ const th = {padding:'8px 10px',border:'1px solid #ddd',textAlign:'left',fontWeig
 const td = {padding:'7px 10px',border:'1px solid #ddd'};
 
 function Ni({ v, set, dis=false }) {
-  return <input type="number" step="0.01" disabled={dis} value={v??''} onChange={e=>set&&set(e.target.value)} />;
+  return <input placeholder="0.00" type="number" step="0.01" disabled={dis} value={v??''} onChange={e=>set&&set(e.target.value)} />;
 }
+
 function Ti({ v, set, dis=false }) {
   return <input type="text" disabled={dis} value={v??''} onChange={e=>set&&set(e.target.value)} style={{width:80}} />;
 }
+
 function TimeInput({ v, set, dis=false }) {
   const [text, setText] = useState(formatMinutesToTime(v));
   const [focused, setFocused] = useState(false);
@@ -2146,6 +2230,7 @@ function TimeInput({ v, set, dis=false }) {
     />
   );
 }
+
 function AllowanceTimeInput({ v, set, dis=false }) {
   const [text, setText] = useState(String(v || '00:00:00'));
   const [focused, setFocused] = useState(false);
@@ -2175,6 +2260,7 @@ function AllowanceTimeInput({ v, set, dis=false }) {
     />
   );
 }
+
 function PConfirm({ open, title, msg, onOk, onCancel, okLabel='Confirm', okCls='btn' }) {
   if (!open) return null;
   return (

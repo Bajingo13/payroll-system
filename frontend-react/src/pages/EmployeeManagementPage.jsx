@@ -2118,39 +2118,51 @@ export default function EmployeeManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {displayRows.map((row, index) => (
-                <tr key={`${title}-${index}`}>
-                  <td className="em-entry-row-num">{index + 1}.</td>
-                  <td>
-                    <select
-                      value={row.allowance_type_id || ''}
+              {displayRows.map((row, index) => {
+                const comp = addForm.payrollComputation || {};
+                return (
+                  <tr key={`${title}-${index}`}>
+                    <td className="em-entry-row-num">{index + 1}.</td>
+                    <td>
+                      <select
+                        value={row.allowance_type_id || ''}
                       onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'allowance_type_id', event.target.value)}
-                    >
-                      <option value=""></option>
-                      {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-                    </select>
-                  </td>
-                  <td>
-                    <select
-                      value={row.period || ''}
-                      disabled={!row.allowance_type_id}
-                      onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'period', event.target.value)}
-                    >
-                      <option value=""></option>
-                      {ENTRY_PERIOD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={row.allowance_type_id ? row.amount || '' : '0.00'}
-                      disabled={!row.allowance_type_id}
-                      onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'amount', event.target.value)}
-                    />
-                  </td>
-                </tr>
-              ))}
+                      >
+                        <option value=""></option>
+                        {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={row.period || ''}
+                        disabled={!row.allowance_type_id}
+                        onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'period', event.target.value)}
+                      >
+                      <option value="">
+                        {comp.payroll_period
+                          ? ''
+                          : '-- Please select a payroll period first --'}
+                      </option>
+                      {comp.payroll_period &&
+                        contributionPeriodOptionsFor(comp.payroll_period).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                      ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={row.allowance_type_id ? row.amount || '' : '0.00'}
+                        disabled={!row.allowance_type_id}
+                        onChange={(event) => updateAllowanceEntrySlot(taxable, index, 'amount', event.target.value)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2211,11 +2223,13 @@ export default function EmployeeManagementPage() {
             </tr>
           </thead>
           <tbody>
-            {displayRows.map((row, index) => (
-              <tr key={`deduction-entry-${index}`}>
-                <td className="em-entry-row-num">{index + 1}.</td>
-                <td>
-                  <select
+            {displayRows.map((row, index) => {
+              const comp = addForm.payrollComputation || {};
+              return (
+                <tr key={`deduction-entry-${index}`}>
+                  <td className="em-entry-row-num">{index + 1}.</td>
+                  <td>
+                    <select
                     value={row.deduction_type_id || ''}
                     onChange={(event) => updateDeductionEntrySlot(index, 'deduction_type_id', event.target.value)}
                   >
@@ -2229,8 +2243,17 @@ export default function EmployeeManagementPage() {
                     disabled={!row.deduction_type_id}
                     onChange={(event) => updateDeductionEntrySlot(index, 'period', event.target.value)}
                   >
-                    <option value=""></option>
-                    {ENTRY_PERIOD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                      <option value="">
+                        {comp.payroll_period
+                          ? ''
+                          : '-- Please select a payroll period first --'}
+                      </option>
+                      {comp.payroll_period &&
+                        contributionPeriodOptionsFor(comp.payroll_period).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                      ))}
                   </select>
                 </td>
                 <td>
@@ -2243,7 +2266,8 @@ export default function EmployeeManagementPage() {
                   />
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
