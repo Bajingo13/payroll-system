@@ -421,9 +421,12 @@ module.exports = function (app, pool) {
         const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
         const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
         const statutoryEmployee = sssEmployee + gsisEmployee + pagibigEmployee + philhealthEmployee;
+        console.log("computePayrollAutomation: salaryBasis =", salaryBasis, "sssEmployee =", sssEmployee, "gsisEmployee =", gsisEmployee, "pagibigEmployee =", pagibigEmployee, "philhealthEmployee =", philhealthEmployee, "statutoryEmployee =", statutoryEmployee);
         const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
+        console.log("computePayrollAutomation: taxableIncome =", taxableIncome, "basicSalary =", basicSalary, "overtime =", overtime, "holidayPay =", holidayPay, "taxableAllowances =", taxableAllowances, "adjComp =", adjComp, "absenceDeduction =", absenceDeduction, "lateDeduction =", lateDeduction, "undertimeDeduction =", undertimeDeduction, "statutoryEmployee =", statutoryEmployee);
         const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
         const taxWithheld = roundMoney(taxResult.amount);
+        console.log("computePayrollAutomation: taxWithheld =", taxWithheld, "taxResult =", taxResult);
 
         const grossPay = roundMoney(
             basicSalary -
@@ -1060,6 +1063,7 @@ module.exports = function (app, pool) {
             if (conn) conn.release();
         }
     });
+
     // Helper: For audit logs
     async function logAudit(pool, user_id, admin_name, action, status) {
         if (!user_id || !admin_name) {
@@ -1081,9 +1085,6 @@ module.exports = function (app, pool) {
             if (conn) conn.release();
         }
     }
-
-
-
 
     // === EMPLOYEE PAYROLL === 
     // GET payroll periods selectors from the payroll_periods, payroll_groups, payroll_months, payroll_years
@@ -1766,6 +1767,22 @@ module.exports = function (app, pool) {
                 employee
             );
 
+            function prorateAmount(amount, payrollPeriod, employee) {
+                const value = Number(amount) || 0;
+                const period = String(payrollPeriod || '').toUpperCase();
+
+                if (period.includes('SEMI')) {
+                    return Math.round((value / 2) * 100) / 100;
+                }
+
+                if (period.includes('WEEK')) {
+                    const weekInYear = Number(employee.week_in_year) || 52;
+                    return Math.round((value * 12 / weekInYear) * 100) / 100;
+                }
+
+                return value;
+            }
+
             // Fetch OT / ND record for this employee and run_id
             const [otNdRows] = await conn.query(`
                 SELECT *
@@ -2120,6 +2137,16 @@ module.exports = function (app, pool) {
                 employee.allowances = allAllowances;
                 employee.deductions = allDeductions;
             }
+
+            employee.allowances = (employee.allowances || []).map(a => ({
+                ...a,
+                amount: prorateAmount(a.amount, effectivePayrollPeriod, employee)
+            }));
+
+            employee.deductions = (employee.deductions || []).map(d => ({
+                ...d,
+                amount: prorateAmount(d.amount, effectivePayrollPeriod, employee)
+            }));
 
             conn.release();
 
@@ -2925,7 +2952,7 @@ module.exports = function (app, pool) {
                         pagibig_employee = ?, pagibig_employer = ?, pagibig_ecc = ?, philhealth_employee = ?, philhealth_employer = ?, philhealth_ecc = ?,
                         tax_withheld = ?, deductions = ?, loans = ?, other_deductions = ?, premium_adj = ?,
                         ytd_sss = ?, ytd_wtax = ?, ytd_philhealth = ?, ytd_gsis = ?, ytd_pagibig = ?, ytd_gross = ?,
-                        payroll_status = ?, gross_pay = ?, total_deductions = ?, net_pay = ?
+                        payroll_status = ?, gross_pay = ?, total_deductions = ?, net_pay = ?, date_generated = IFNULL(date_generated, CURRENT_TIMESTAMP)
                     WHERE employee_id = ? AND run_id = ?`,
                     [
                         p.basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
@@ -3148,7 +3175,7 @@ module.exports = function (app, pool) {
         }
     });
 
-//--------------payslip run for employee----------------
+    //--------------payslip run for employee----------------
     app.get("/api/payslip_latest/:empCode", async (req, res) => {
         const { empCode } = req.params;
         let conn;
@@ -3297,5 +3324,4 @@ module.exports = function (app, pool) {
             });
         }
     });
-
 };
