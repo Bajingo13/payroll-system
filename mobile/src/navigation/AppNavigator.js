@@ -125,7 +125,7 @@ function MainTabs({ role }) {
 }
 
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, needsPasswordChange, clearNeedsPasswordChange } = useAuth();
   const notifListenerRef = useRef(null);
   const responseListenerRef = useRef(null);
 
@@ -135,6 +135,18 @@ export default function AppNavigator() {
       registerPushToken(user.user_id);
     }
   }, [user?.user_id]);
+
+  // Navigate to Settings → Change Password when logged in with temp password
+  useEffect(() => {
+    if (user && needsPasswordChange) {
+      clearNeedsPasswordChange();
+      setTimeout(() => {
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Settings', { forceTempChange: true });
+        }
+      }, 400);
+    }
+  }, [user, needsPasswordChange]);
 
   // Listen for push notifications (only if module loaded successfully)
   useEffect(() => {

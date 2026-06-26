@@ -99,7 +99,11 @@ export default function LoginPage() {
   const [isTempPw,    setIsTempPw]    = useState(false);
 
   // Locked modal
-  const [lockedModal, setLockedModal] = useState(false);
+  const [lockedModal,       setLockedModal]       = useState(false);
+  const [unlockView,        setUnlockView]        = useState('info'); // 'info' | 'request' | 'success'
+  const [unlockReason,      setUnlockReason]      = useState('');
+  const [unlockLoading,     setUnlockLoading]     = useState(false);
+  const [unlockMessage,     setUnlockMessage]     = useState('');
 
   // Password reset modal
   const [resetOpen,    setResetOpen]    = useState(false);
@@ -224,6 +228,32 @@ export default function LoginPage() {
     } finally {
       setResetLoading(false);
     }
+  }
+
+  // ── Request unlock ─────────────────────────────────────────────────────────
+  async function handleUnlockRequest(e) {
+    e.preventDefault();
+    setUnlockMessage('');
+    setUnlockLoading(true);
+    try {
+      const { data } = await api.post('/login/request-unlock', {
+        username: loginForm.username.trim(),
+        reason: unlockReason.trim(),
+      });
+      setUnlockView('success');
+      setUnlockMessage(data.message || 'Request sent.');
+    } catch (err) {
+      setUnlockMessage(getApiMessage(err, 'Unable to send request.'));
+    } finally {
+      setUnlockLoading(false);
+    }
+  }
+
+  function closeLockedModal() {
+    setLockedModal(false);
+    setUnlockView('info');
+    setUnlockReason('');
+    setUnlockMessage('');
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -363,46 +393,110 @@ export default function LoginPage() {
       {/* ── Locked account modal ── */}
       <Modal
         open={lockedModal}
-        title="Account Locked"
-        onClose={() => setLockedModal(false)}
+        title={unlockView === 'request' ? 'Request Account Unlock' : unlockView === 'success' ? 'Request Sent' : 'Account Locked'}
+        onClose={closeLockedModal}
       >
-        <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
-          <div style={{ display: 'inline-flex', width: 58, height: 58, borderRadius: 18, background: '#fee2e2', color: '#b91c1c', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}><AppIcon name="lock" size={30} /></div>
-          <h3 style={{ margin: '0 0 0.5rem', color: '#b91c1c' }}>Account Temporarily Locked</h3>
-          <p style={{ color: 'var(--muted,#6b7280)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-            Your account has been locked after <strong>3 failed login attempts</strong> as a security measure.
-            Please contact your <strong>HR Administrator</strong> or <strong>System Admin</strong> to reactivate your account and receive a temporary password.
-          </p>
-
-          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '1rem', marginBottom: '1rem', fontSize: '0.85rem', textAlign: 'left' }}>
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600, color: '#991b1b' }}>What to do next:</p>
-            <ol style={{ margin: 0, paddingLeft: '1.2rem', color: '#7f1d1d', lineHeight: 1.8 }}>
-              <li>Contact your HR or Admin representative</li>
-              <li>Request account reactivation</li>
-              <li>You will receive a temporary password via email</li>
-              <li>Log in with the temporary password and change it immediately</li>
-            </ol>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="primary-btn"
-              style={{ flex: 1, minWidth: 140 }}
-              onClick={() => { setLockedModal(false); setInfoModal('contacts'); }}
-            >
-              <AppIcon name="phone" size={16} /> View Contacts
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline"
-              style={{ flex: 1, minWidth: 140 }}
-              onClick={() => setLockedModal(false)}
-            >
+        {/* ── Info view ── */}
+        {unlockView === 'info' && (
+          <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+            <div style={{ display: 'inline-flex', width: 58, height: 58, borderRadius: 18, background: '#fee2e2', color: '#b91c1c', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}><AppIcon name="lock" size={30} /></div>
+            <h3 style={{ margin: '0 0 0.5rem', color: '#b91c1c' }}>Account Temporarily Locked</h3>
+            <p style={{ color: 'var(--muted,#6b7280)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+              Your account has been locked after <strong>3 failed login attempts</strong> as a security measure.
+              You can request the administrator to unlock your account, or contact HR directly.
+            </p>
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '1rem', marginBottom: '1.25rem', fontSize: '0.85rem', textAlign: 'left' }}>
+              <p style={{ margin: '0 0 0.5rem', fontWeight: 600, color: '#991b1b' }}>What to do next:</p>
+              <ol style={{ margin: 0, paddingLeft: '1.2rem', color: '#7f1d1d', lineHeight: 1.8 }}>
+                <li>Click <strong>Request Unlock</strong> below to notify the admin</li>
+                <li>Wait for admin approval — you will receive a temporary password via email</li>
+                <li>Log in with the temporary password and change it immediately</li>
+              </ol>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="primary-btn"
+                style={{ flex: 1, minWidth: 140 }}
+                onClick={() => { setUnlockView('request'); setUnlockMessage(''); }}
+              >
+                <AppIcon name="lock" size={16} /> Request Unlock
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ flex: 1, minWidth: 140 }}
+                onClick={() => { closeLockedModal(); setInfoModal('contacts'); }}
+              >
+                <AppIcon name="phone" size={16} /> View Contacts
+              </button>
+            </div>
+            <button type="button" className="forgot-password-btn" style={{ marginTop: '0.75rem' }} onClick={closeLockedModal}>
               Close
             </button>
           </div>
-        </div>
+        )}
+
+        {/* ── Request form view ── */}
+        {unlockView === 'request' && (
+          <form className="modal-form" onSubmit={handleUnlockRequest} style={{ padding: '0.25rem 0' }}>
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'inline-flex', width: 50, height: 50, borderRadius: 14, background: '#eff6ff', color: '#1e40af', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}><AppIcon name="bell" size={24} /></div>
+              <p style={{ color: 'var(--muted,#6b7280)', fontSize: '0.88rem', margin: 0 }}>
+                Submit a request and the admin will be notified to unlock your account.
+              </p>
+            </div>
+            <label>
+              Username
+              <input
+                type="text"
+                value={loginForm.username}
+                onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))}
+                placeholder="Your username"
+                required
+              />
+            </label>
+            <label>
+              Reason (optional)
+              <textarea
+                value={unlockReason}
+                onChange={e => setUnlockReason(e.target.value)}
+                placeholder="Briefly describe what happened..."
+                rows={3}
+                maxLength={500}
+                style={{ resize: 'vertical', minHeight: 72 }}
+              />
+            </label>
+            {unlockMessage && <p className="form-message error">{unlockMessage}</p>}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setUnlockView('info')}>
+                Back
+              </button>
+              <button className="primary-btn" type="submit" disabled={unlockLoading} style={{ flex: 2 }}>
+                {unlockLoading ? 'Sending...' : 'Send Request to Admin'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ── Success view ── */}
+        {unlockView === 'success' && (
+          <div style={{ textAlign: 'center', padding: '0.75rem 0' }}>
+            <div style={{ display: 'inline-flex', width: 58, height: 58, borderRadius: 18, background: '#dcfce7', color: '#16a34a', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
+              <AppIcon name="check" size={30} />
+            </div>
+            <h3 style={{ margin: '0 0 0.5rem', color: '#15803d' }}>Request Sent!</h3>
+            <p style={{ color: 'var(--muted,#6b7280)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+              {unlockMessage}
+            </p>
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '0.85rem', marginBottom: '1.25rem', fontSize: '0.85rem', textAlign: 'left', color: '#166534' }}>
+              The administrator has been notified. Once your account is unlocked, you will receive a <strong>temporary password</strong> via email.
+            </div>
+            <button type="button" className="primary-btn" style={{ width: '100%' }} onClick={closeLockedModal}>
+              Close
+            </button>
+          </div>
+        )}
       </Modal>
 
       {/* ── Password reset modal ── */}

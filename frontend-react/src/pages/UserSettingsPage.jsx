@@ -159,13 +159,15 @@ export default function UserSettingsPage({ accountOnly = false }) {
     setSaving(true);
 
     try {
-      const { data } = await api.put('/user/password', {
+      const body = {
         user_id: resolvedUserId,
         full_name: resolvedFullName,
-        currentPassword: form.currentPassword,
         newPassword: form.newPassword,
-        confirmPassword: form.confirmPassword
-      });
+        confirmPassword: form.confirmPassword,
+      };
+      if (!forcedPasswordChange) body.currentPassword = form.currentPassword;
+
+      const { data } = await api.put('/user/password', body);
 
       if (!data.success) throw new Error(data.message || 'Unable to change password.');
 
@@ -190,8 +192,8 @@ export default function UserSettingsPage({ accountOnly = false }) {
   return (
     <>
       <header className="header">
-        <h2>{showAdminManagement ? 'User Account Settings' : 'Account Settings'}</h2>
-        <p>{showAdminManagement ? 'Manage role access and locked accounts.' : 'Manage your email address and password.'}</p>
+        <h2>{showAdminManagement ? 'User Account Settings' : forcedPasswordChange ? 'Change Your Password' : 'Account Settings'}</h2>
+        <p>{showAdminManagement ? 'Manage role access and locked accounts.' : forcedPasswordChange ? 'Your account was unlocked with a temporary password. Set a new password to continue.' : 'Manage your email address and password.'}</p>
       </header>
 
       {forcedPasswordChange && (
@@ -260,44 +262,46 @@ export default function UserSettingsPage({ accountOnly = false }) {
 
       {showPersonalSettings ? (
         <>
-          <section className="table-section user-settings-section">
-            <div className="table-header">
-              <div>
-                <h3>Email Address</h3>
-                <p>Set the email address where you will receive leave and overtime notifications.</p>
+          {!forcedPasswordChange && (
+            <section className="table-section user-settings-section">
+              <div className="table-header">
+                <div>
+                  <h3>Email Address</h3>
+                  <p>Set the email address where you will receive leave and overtime notifications.</p>
+                </div>
               </div>
-            </div>
 
-            <form className="user-settings-form" onSubmit={saveEmail}>
-              <label>
-                Account
-                <input value={user?.full_name || 'User'} disabled />
-              </label>
-              <label>
-                Email Address
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. your@email.com"
-                  autoComplete="email"
-                />
-              </label>
-              <div className="toolbar">
-                <button type="submit" className="btn" disabled={emailSaving}>
-                  {emailSaving ? 'Saving...' : 'Save Email'}
-                </button>
-              </div>
-            </form>
+              <form className="user-settings-form" onSubmit={saveEmail}>
+                <label>
+                  Account
+                  <input value={user?.full_name || 'User'} disabled />
+                </label>
+                <label>
+                  Email Address
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. your@email.com"
+                    autoComplete="email"
+                  />
+                </label>
+                <div className="toolbar">
+                  <button type="submit" className="btn" disabled={emailSaving}>
+                    {emailSaving ? 'Saving...' : 'Save Email'}
+                  </button>
+                </div>
+              </form>
 
-            {emailMessage ? <p className={`form-message ${emailMessageType}`}>{emailMessage}</p> : null}
-          </section>
+              {emailMessage ? <p className={`form-message ${emailMessageType}`}>{emailMessage}</p> : null}
+            </section>
+          )}
 
           <section className="table-section user-settings-section">
             <div className="table-header">
               <div>
                 <h3>Change Password</h3>
-                <p>Enter your current password before setting a new one.</p>
+                <p>{forcedPasswordChange ? 'Set a new permanent password for your account.' : 'Enter your current password before setting a new one.'}</p>
               </div>
             </div>
 
@@ -307,27 +311,29 @@ export default function UserSettingsPage({ accountOnly = false }) {
                 <input value={user?.full_name || 'User'} disabled />
               </label>
 
-              <label>
-                Current Password
-                <div className="password-field">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={form.currentPassword}
-                    onChange={(event) => updateField('currentPassword', event.target.value)}
-                    autoComplete="current-password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowPassword((current) => !current)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <PasswordToggleIcon visible={showPassword} />
-                  </button>
-                </div>
-              </label>
+              {!forcedPasswordChange && (
+                <label>
+                  Current Password
+                  <div className="password-field">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={form.currentPassword}
+                      onChange={(event) => updateField('currentPassword', event.target.value)}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword((current) => !current)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <PasswordToggleIcon visible={showPassword} />
+                    </button>
+                  </div>
+                </label>
+              )}
 
               <label>
                 New Password
@@ -456,12 +462,13 @@ function LockedAccountsPanel() {
                 <th>Failed Attempts</th>
                 <th>Locked At</th>
                 <th>Status</th>
+                <th>Unlock Request</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {accounts.map(acc => (
-                <tr key={acc.user_id}>
+                <tr key={acc.user_id} style={acc.unlock_requested_at ? { background: '#fffbeb' } : {}}>
                   <td><strong>{acc.username}</strong></td>
                   <td>{acc.full_name}</td>
                   <td>{acc.role}</td>
@@ -473,11 +480,30 @@ function LockedAccountsPanel() {
                       : '—'}
                   </td>
                   <td><span className="status pending">{acc.account_status}</span></td>
+                  <td style={{ fontSize: '0.82rem', minWidth: 160 }}>
+                    {acc.unlock_requested_at ? (
+                      <div>
+                        <span className="status active" style={{ fontSize: '0.75rem', marginBottom: '0.25rem', display: 'inline-block' }}>
+                          Requested
+                        </span>
+                        <div style={{ color: 'var(--muted,#6b7280)', fontSize: '0.78rem', marginTop: '0.2rem' }}>
+                          {new Date(acc.unlock_requested_at).toLocaleString('en-PH', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </div>
+                        {acc.unlock_request_reason && (
+                          <div style={{ color: '#92400e', fontSize: '0.78rem', marginTop: '0.2rem', fontStyle: 'italic', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={acc.unlock_request_reason}>
+                            "{acc.unlock_request_reason}"
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--muted,#9ca3af)', fontSize: '0.8rem' }}>—</span>
+                    )}
+                  </td>
                   <td>
                     <button
                       type="button"
                       className="btn"
-                      style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem' }}
+                      style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', ...(acc.unlock_requested_at ? { background: '#d97706', borderColor: '#d97706', color: '#fff' } : {}) }}
                       disabled={unlocking === acc.user_id}
                       onClick={() => handleUnlock(acc.user_id, acc.full_name)}
                     >

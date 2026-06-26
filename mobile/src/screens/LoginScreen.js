@@ -46,6 +46,7 @@ export default function LoginScreen() {
   const [otpInfo, setOtpInfo] = useState({ maskedEmail: null, maskedPhone: null });
   const [otpAttemptsLeft, setOtpAttemptsLeft] = useState(null);
   const [resending, setResending] = useState(false);
+  const [isTempPw, setIsTempPw] = useState(false);
   const [uFocus, setUFocus] = useState(false);
   const [pFocus, setPFocus] = useState(false);
 
@@ -76,7 +77,8 @@ export default function LoginScreen() {
       return;
     }
 
-    setToast('Logged in successfully!');
+    const tempPw = Boolean(user.isTempPassword);
+    setToast(tempPw ? 'Logged in with temporary password. Please change it now.' : 'Logged in successfully!');
     loginTimerRef.current = setTimeout(() => commitLogin(user), 500);
   }
 
@@ -91,6 +93,7 @@ export default function LoginScreen() {
       if (result.requiresOtp) {
         setOtpUserId(result.userId);
         setOtpInfo({ maskedEmail: result.maskedEmail, maskedPhone: result.maskedPhone });
+        setIsTempPw(Boolean(result.isTempPassword));
         setOtp('');
         setOtpAttemptsLeft(null);
         setStep('otp');
@@ -116,7 +119,7 @@ export default function LoginScreen() {
     try {
       const { data } = await api.post('/login/verify-otp', { userId: otpUserId, otp });
       const user = await finishLogin(data);
-      await completeMobileLogin(user);
+      await completeMobileLogin({ ...user, isTempPassword: isTempPw || Boolean(data.isTempPassword) });
     } catch (err) {
       const resp = err?.response?.data;
       setError(getApiMessage(err, 'Incorrect verification code.'));

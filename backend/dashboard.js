@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const cloudStorage = require('./cloud_storage');
 
 module.exports = function (app, pool) {
 
@@ -10,20 +11,48 @@ module.exports = function (app, pool) {
   if (!fs.existsSync(attendanceUploadDir)) fs.mkdirSync(attendanceUploadDir, { recursive: true });
 
   const attendanceUpload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, attendanceUploadDir),
-      filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname) || '.jpg';
-        cb(null, `${req.body.user_id}_${Date.now()}_${req.body.type}_${file.fieldname}${ext}`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
   });
 
-  app.get('/api/attendance/photo/:filename', (req, res) => {
-    const filename = path.basename(String(req.params.filename || ''));
-    if (!filename) return res.status(404).send('Attendance photo not found.');
+  async function saveUploadedImage(file, folder, filename, localDir) {
+    if (!file || !file.buffer) return null;
+    if (cloudStorage.isConfigured()) {
+      const key = cloudStorage.buildObjectKey(folder, filename);
+      return cloudStorage.uploadBuffer({
+        key,
+        buffer: file.buffer,
+        contentType: file.mimetype || 'application/octet-stream',
+      });
+    }
+
+    if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+    fs.writeFileSync(path.join(localDir, filename), file.buffer);
+    return filename;
+  }
+
+  function profilePhotoUrl(value) {
+    if (!value) return null;
+    if (cloudStorage.isCloudRef(value) || /^https?:\/\//i.test(String(value))) {
+      return cloudStorage.getFileUrl(value);
+    }
+    return `/uploads/profiles/${value}`;
+  }
+
+  async function serveAttendancePhoto(requested, res) {
+    if (!requested) return res.status(404).send('Attendance photo not found.');
+
+    if (cloudStorage.isCloudRef(requested)) {
+      try {
+        return await cloudStorage.sendObjectToResponse(requested, res, path.basename(cloudStorage.fromCloudRef(requested)));
+      } catch (err) {
+        console.error('Attendance cloud photo error:', err.message);
+        return res.status(500).send('Error serving attendance photo.');
+      }
+    }
+
+    const filename = path.basename(requested);
 
     const filePath = path.join(attendanceUploadDir, filename);
     if (!filePath.startsWith(attendanceUploadDir) || !fs.existsSync(filePath)) {
@@ -32,6 +61,14 @@ module.exports = function (app, pool) {
 
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.sendFile(filePath);
+  }
+
+  app.get('/api/attendance/photo', async (req, res) => {
+    return serveAttendancePhoto(String(req.query.ref || '').trim(), res);
+  });
+
+  app.get('/api/attendance/photo/:filename', async (req, res) => {
+    return serveAttendancePhoto(String(req.params.filename || '').trim(), res);
   });
 
   function getOfficeLocationConfig() {
@@ -228,13 +265,7 @@ module.exports = function (app, pool) {
   if (!fs.existsSync(profileUploadDir)) fs.mkdirSync(profileUploadDir, { recursive: true });
 
   const profileUpload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, profileUploadDir),
-      filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname) || '.jpg';
-        cb(null, `user_${req.body.user_id}_${Date.now()}${ext}`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
   });
@@ -247,15 +278,27 @@ module.exports = function (app, pool) {
     let conn;
     try {
       conn = await pool.getConnection();
-      // Delete old profile photo file if it exists
+      const ext = cloudStorage.safeExt(req.file.originalname, '.jpg');
+      const storedPhoto = await saveUploadedImage(
+        req.file,
+        'profiles',
+        `user_${userId}_${Date.now()}${ext}`,
+        profileUploadDir
+      );
+
       const [existing] = await conn.execute('SELECT profile_photo FROM users WHERE user_id = ? LIMIT 1', [userId]);
       if (existing[0]?.profile_photo) {
-        const oldPath = path.join(profileUploadDir, existing[0].profile_photo);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        if (cloudStorage.isCloudRef(existing[0].profile_photo)) {
+          await cloudStorage.deleteObject(existing[0].profile_photo);
+        } else {
+          const oldPath = path.join(profileUploadDir, existing[0].profile_photo);
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
       }
-      await conn.execute('UPDATE users SET profile_photo = ? WHERE user_id = ?', [req.file.filename, userId]);
-      return res.json({ success: true, filename: req.file.filename, url: `/uploads/profiles/${req.file.filename}` });
+      await conn.execute('UPDATE users SET profile_photo = ? WHERE user_id = ?', [storedPhoto, userId]);
+      return res.json({ success: true, filename: storedPhoto, url: profilePhotoUrl(storedPhoto) });
     } catch (err) {
+      console.error('Profile photo upload error:', err);
       return res.status(500).json({ success: false, message: 'Server error' });
     } finally {
       if (conn) conn.release();
@@ -1063,10 +1106,6 @@ module.exports = function (app, pool) {
         [userId]
       );
 
-      const profilePhotoUrl = user.profile_photo
-        ? `/uploads/profiles/${user.profile_photo}`
-        : null;
-
       return res.json({
         success: true,
         user,
@@ -1079,7 +1118,7 @@ module.exports = function (app, pool) {
         attendanceSummary,
         todayTime,
         attendanceLogs: attendanceRows,
-        profilePhotoUrl,
+        profilePhotoUrl: profilePhotoUrl(user.profile_photo),
       });
     } catch (err) {
       console.error('Employee dashboard error:', err);
@@ -1096,7 +1135,21 @@ module.exports = function (app, pool) {
     const longitude = req.body.longitude != null ? Number(req.body.longitude) : null;
     const postedDistanceM = req.body.distance_m != null ? Number(req.body.distance_m) : null;
     const cameraMode = String(req.body.camera_mode || '').toLowerCase();
-    const uploadedPhotoFilename = req.file ? req.file.filename : null;
+    let uploadedPhotoFilename = null;
+    if (req.file) {
+      try {
+        const ext = cloudStorage.safeExt(req.file.originalname, '.jpg');
+        uploadedPhotoFilename = await saveUploadedImage(
+          req.file,
+          'attendance',
+          `${userId || 'user'}_${Date.now()}_${type || 'entry'}_${req.file.fieldname}${ext}`,
+          attendanceUploadDir
+        );
+      } catch (err) {
+        console.error('Attendance photo upload error:', err);
+        return res.status(500).json({ success: false, message: 'Unable to save attendance photo.' });
+      }
+    }
     const photoFilename = [
       cameraMode && `mode:${cameraMode}`,
       uploadedPhotoFilename && `photo:${uploadedPhotoFilename}`

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
@@ -23,6 +23,18 @@ import { API_BASE_URL } from '../config';
 
 const BASE_URL = API_BASE_URL.replace('/api', '');
 
+const DAYS_MAP = { '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat' };
+function formatWorkingDays(str) {
+  if (!str) return '—';
+  return String(str).split(',').map(d => DAYS_MAP[d.trim()]).filter(Boolean).join(', ');
+}
+function fmt12(t) {
+  if (!t) return '—';
+  const [h, m] = String(t).split(':');
+  const hr = Number(h); const ampm = hr >= 12 ? 'PM' : 'AM';
+  return `${hr % 12 || 12}:${m} ${ampm}`;
+}
+
 function Row({ label, value }) {
   return (
     <View style={s.row}>
@@ -36,6 +48,7 @@ export default function SettingsScreen({ navigation, route }) {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const employee = route.params?.employee || {};
+  const forceTempChange = Boolean(route.params?.forceTempChange);
   const [photoUrl, setPhotoUrl] = useState(getAssetUrl(route.params?.profilePhotoUrl));
   const [uploading, setUploading] = useState(false);
   const [photoSheet, setPhotoSheet] = useState(false);
@@ -50,6 +63,29 @@ export default function SettingsScreen({ navigation, route }) {
   const [toast, setToast] = useState('');
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
+  const [schedule, setSchedule]           = useState(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+
+  useEffect(() => {
+    const empId = employee?.employee_id;
+    if (!empId) return;
+    setScheduleLoading(true);
+    api.get(`/admin_schedule_management/${empId}`)
+      .then(({ data }) => { if (data.success) setSchedule(data.schedule || null); })
+      .catch(() => {})
+      .finally(() => setScheduleLoading(false));
+  }, [employee?.employee_id]);
+
+  // Auto-open change password modal when navigated from temp password login
+  useEffect(() => {
+    if (forceTempChange) {
+      setPwForm({ current: '', next: '', confirm: '' });
+      setPwError('');
+      setPwShow({ current: false, next: false, confirm: false });
+      setPwModal(true);
+    }
+  }, [forceTempChange]);
+
   function confirmLogout() {
     setLogoutSheet(true);
   }
@@ -62,8 +98,11 @@ export default function SettingsScreen({ navigation, route }) {
   }
 
   async function savePassword() {
-    if (!pwForm.current || !pwForm.next || !pwForm.confirm) {
-      setPwError('All fields are required.'); return;
+    if (!forceTempChange && !pwForm.current) {
+      setPwError('Current password is required.'); return;
+    }
+    if (!pwForm.next || !pwForm.confirm) {
+      setPwError('Please fill in all password fields.'); return;
     }
     if (pwForm.next !== pwForm.confirm) {
       setPwError('New password and confirmation do not match.'); return;
@@ -73,15 +112,18 @@ export default function SettingsScreen({ navigation, route }) {
     }
     setPwSaving(true); setPwError('');
     try {
-      const { data } = await api.put('/user/password', {
+      const body = {
         user_id: user.user_id,
-        currentPassword: pwForm.current,
         newPassword: pwForm.next,
         confirmPassword: pwForm.confirm,
-      });
+      };
+      if (!forceTempChange) body.currentPassword = pwForm.current;
+
+      const { data } = await api.put('/user/password', body);
       if (!data.success) throw new Error(data.message);
       setPwModal(false);
       showToast('Password changed successfully.');
+      if (forceTempChange) navigation.goBack();
     } catch (err) {
       setPwError(getApiMessage(err, 'Failed to change password.'));
     } finally {
@@ -214,6 +256,77 @@ export default function SettingsScreen({ navigation, route }) {
           <Row label="Position" value={employee.position} />
         </View>
 
+        {/* My Schedule */}
+        <View style={s.card}>
+          <View style={s.scheduleCardHeader}>
+            <View style={s.scheduleIconWrap}>
+              <Ionicons name="calendar-outline" size={16} color="#1e40af" />
+            </View>
+            <Text style={[s.cardTitle, { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 }]}>My Schedule</Text>
+          </View>
+          {scheduleLoading ? (
+            <ActivityIndicator color="#1e40af" style={{ marginVertical: 16 }} />
+          ) : !schedule ? (
+            <View style={s.scheduleEmpty}>
+              <Ionicons name="calendar-clear-outline" size={28} color="#cbd5e1" />
+              <Text style={s.scheduleEmptyText}>No schedule assigned yet.</Text>
+              <Text style={s.scheduleEmptyHint}>Contact HR to have a schedule assigned to your account.</Text>
+            </View>
+          ) : (
+            <>
+              {schedule.template_name ? (
+                <View style={s.templateBadge}>
+                  <Ionicons name="bookmark-outline" size={13} color="#1e40af" />
+                  <Text style={s.templateBadgeText}>{schedule.template_name}</Text>
+                </View>
+              ) : null}
+
+              <View style={s.scheduleGrid}>
+                <View style={s.scheduleItem}>
+                  <Ionicons name="log-in-outline" size={18} color="#1e40af" />
+                  <Text style={s.scheduleItemLabel}>Time In</Text>
+                  <Text style={s.scheduleItemValue}>{fmt12(schedule.time_in)}</Text>
+                </View>
+                <View style={s.scheduleItem}>
+                  <Ionicons name="log-out-outline" size={18} color="#1e40af" />
+                  <Text style={s.scheduleItemLabel}>Time Out</Text>
+                  <Text style={s.scheduleItemValue}>{fmt12(schedule.time_out)}</Text>
+                </View>
+                <View style={s.scheduleItem}>
+                  <Ionicons name="cafe-outline" size={18} color="#1e40af" />
+                  <Text style={s.scheduleItemLabel}>Break</Text>
+                  <Text style={s.scheduleItemValue}>{schedule.break_minutes ? `${schedule.break_minutes} min` : '—'}</Text>
+                </View>
+                <View style={s.scheduleItem}>
+                  <Ionicons name="sunny-outline" size={18} color="#1e40af" />
+                  <Text style={s.scheduleItemLabel}>Hours/Day</Text>
+                  <Text style={s.scheduleItemValue}>{schedule.hours_in_day ? `${schedule.hours_in_day}h` : '—'}</Text>
+                </View>
+              </View>
+
+              <View style={s.scheduleRow}>
+                <Text style={s.scheduleRowLabel}>Working Days</Text>
+                <Text style={s.scheduleRowValue}>{formatWorkingDays(schedule.working_days)}</Text>
+              </View>
+              {schedule.payroll_period ? (
+                <View style={s.scheduleRow}>
+                  <Text style={s.scheduleRowLabel}>Payroll Period</Text>
+                  <Text style={s.scheduleRowValue}>{schedule.payroll_period}</Text>
+                </View>
+              ) : null}
+              {Number(schedule.night_diff) ? (
+                <View style={s.nightDiffBadge}>
+                  <Ionicons name="moon-outline" size={13} color="#7c3aed" />
+                  <Text style={s.nightDiffText}>
+                    Night Differential · {(Number(schedule.night_diff_rate) * 100).toFixed(0)}%
+                    {'  '}{fmt12(schedule.night_diff_start)} – {fmt12(schedule.night_diff_end)}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
+        </View>
+
         {/* App info */}
         <View style={s.card}>
           <Text style={s.cardTitle}>App</Text>
@@ -331,19 +444,28 @@ export default function SettingsScreen({ navigation, route }) {
       </Modal>
 
       {/* Change Password modal */}
-      <Modal visible={pwModal} transparent animationType="fade" onRequestClose={() => setPwModal(false)}>
+      <Modal visible={pwModal} transparent animationType="fade" onRequestClose={() => { if (!forceTempChange) setPwModal(false); }}>
         <KeyboardAvoidingView style={s.dialogBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, width: '100%' }} onPress={() => setPwModal(false)}>
+          <Pressable style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, width: '100%' }} onPress={() => { if (!forceTempChange) setPwModal(false); }}>
             <Pressable style={s.dialog} onPress={() => {}}>
               <View style={[s.dialogIconWrap, { backgroundColor: '#eff6ff' }]}>
                 <Ionicons name="lock-closed-outline" size={28} color="#1e40af" />
               </View>
               <Text style={s.dialogTitle}>Change Password</Text>
 
+              {forceTempChange && (
+                <View style={{ backgroundColor: '#fff7ed', borderRadius: 10, padding: 12, marginBottom: 14, width: '100%' }}>
+                  <Text style={{ color: '#c2410c', fontSize: 13, fontWeight: '700', marginBottom: 2 }}>Temporary Password</Text>
+                  <Text style={{ color: '#9a3412', fontSize: 12, lineHeight: 18 }}>
+                    You are using a temporary password. Please set a new permanent password to continue.
+                  </Text>
+                </View>
+              )}
+
               {[
-                { field: 'current', label: 'Current Password', returnKey: 'next',  onSubmit: () => pwNextRef.current?.focus(),    ref: null },
-                { field: 'next',    label: 'New Password',     returnKey: 'next',  onSubmit: () => pwConfirmRef.current?.focus(), ref: pwNextRef },
-                { field: 'confirm', label: 'Confirm New Password', returnKey: 'done', onSubmit: savePassword, ref: pwConfirmRef },
+                ...(!forceTempChange ? [{ field: 'current', label: 'Current Password', returnKey: 'next', onSubmit: () => pwNextRef.current?.focus(), ref: null }] : []),
+                { field: 'next',    label: 'New Password',         returnKey: 'next', onSubmit: () => pwConfirmRef.current?.focus(), ref: pwNextRef },
+                { field: 'confirm', label: 'Confirm New Password', returnKey: 'done', onSubmit: savePassword,                        ref: pwConfirmRef },
               ].map(({ field, label, returnKey, onSubmit, ref }) => (
                 <View key={field} style={s.pwInputWrap}>
                   <TextInput
@@ -371,11 +493,13 @@ export default function SettingsScreen({ navigation, route }) {
               {pwError ? <Text style={s.pwError}>{pwError}</Text> : null}
 
               <View style={s.dialogActions}>
-                <TouchableOpacity style={s.dialogCancel} onPress={() => setPwModal(false)}>
-                  <Text style={s.dialogCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[s.dialogConfirm, { backgroundColor: '#1e40af' }]} onPress={savePassword} disabled={pwSaving}>
-                  {pwSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.dialogConfirmText}>Save</Text>}
+                {!forceTempChange && (
+                  <TouchableOpacity style={s.dialogCancel} onPress={() => setPwModal(false)}>
+                    <Text style={s.dialogCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={[s.dialogConfirm, { backgroundColor: '#1e40af', flex: forceTempChange ? undefined : 1, paddingHorizontal: forceTempChange ? 48 : undefined }]} onPress={savePassword} disabled={pwSaving}>
+                  {pwSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.dialogConfirmText}>Save Password</Text>}
                 </TouchableOpacity>
               </View>
             </Pressable>
@@ -511,4 +635,22 @@ const s = StyleSheet.create({
     borderRadius: 14,
   },
   sheetCancelText: { flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: '#64748b' },
+
+  // Schedule card
+  scheduleCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  scheduleIconWrap: { width: 26, height: 26, borderRadius: 8, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
+  scheduleEmpty: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20, gap: 6 },
+  scheduleEmptyText: { fontSize: 14, fontWeight: '700', color: '#94a3b8' },
+  scheduleEmptyHint: { fontSize: 12, color: '#cbd5e1', textAlign: 'center', lineHeight: 18 },
+  templateBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginBottom: 12, backgroundColor: '#eff6ff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#bfdbfe', alignSelf: 'flex-start' },
+  templateBadgeText: { fontSize: 13, fontWeight: '700', color: '#1e40af' },
+  scheduleGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: 8, marginBottom: 4 },
+  scheduleItem: { flex: 1, minWidth: '44%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#e2e8f0' },
+  scheduleItemLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  scheduleItemValue: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  scheduleRowLabel: { fontSize: 13, color: '#475569', fontWeight: '500' },
+  scheduleRowValue: { fontSize: 13, color: '#0f172a', fontWeight: '700', maxWidth: '60%', textAlign: 'right' },
+  nightDiffBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginTop: 8, marginBottom: 12, backgroundColor: '#faf5ff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#e9d5ff' },
+  nightDiffText: { fontSize: 12, color: '#7c3aed', fontWeight: '600', flex: 1 },
 });

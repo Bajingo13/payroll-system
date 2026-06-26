@@ -1,5 +1,7 @@
 'use strict';
 
+const cloudStorage = require('./cloud_storage');
+
 // ── Philippine 201 File document catalog ─────────────────────────────────
 const CATALOG = [
   {
@@ -58,6 +60,21 @@ const MIME_MAP = {
   webp: 'image/webp',
   heic: 'image/heic',
 };
+
+function cloudRefFromFileUrl(fileUrl) {
+  const text = String(fileUrl || '').trim();
+  try {
+    const parsed = new URL(text, 'http://local.invalid');
+    const ref = parsed.searchParams.get('ref');
+    if (ref) return ref;
+  } catch {}
+  const marker = '/api/cloud-file/';
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex >= 0) {
+    return decodeURIComponent(text.slice(markerIndex + marker.length));
+  }
+  return cloudStorage.isCloudRef(text) ? text : null;
+}
 
 // ── Status computation ────────────────────────────────────────────────────
 function computeStatus(record) {
@@ -177,12 +194,17 @@ module.exports = function registerEmployeeDocumentRoutes(app, pool) {
     try {
       conn = await pool.getConnection();
       const [rows] = await conn.execute(
-        'SELECT file_name, file_data FROM employee_201_files WHERE id = ? LIMIT 1',
+        'SELECT file_name, file_url, file_data FROM employee_201_files WHERE id = ? LIMIT 1',
         [String(req.params.id || '').trim()]
       );
       if (!rows.length) return res.status(404).send('File not found.');
 
-      const { file_name, file_data } = rows[0];
+      const { file_name, file_url, file_data } = rows[0];
+      const cloudRef = cloudRefFromFileUrl(file_url);
+      if (cloudRef) {
+        return await cloudStorage.sendObjectToResponse(cloudRef, res, file_name);
+      }
+
       const ext    = String(file_name || '').split('.').pop().toLowerCase();
       const mime   = MIME_MAP[ext] || 'application/octet-stream';
       const buffer = Buffer.from(String(file_data), 'base64');
@@ -248,7 +270,21 @@ module.exports = function registerEmployeeDocumentRoutes(app, pool) {
       const base64 = String(file_data).includes(',')
         ? String(file_data).split(',').pop()
         : String(file_data);
-      const fileUrl = `/api/employee_documents/file/${id}`;
+      const buffer = Buffer.from(base64, 'base64');
+      let fileUrl = `/api/employee_documents/file/${id}`;
+      let storedData = base64;
+
+      if (cloudStorage.isConfigured()) {
+        const key = cloudStorage.buildObjectKey(
+          `employee-documents/${String(employee_id).trim()}`,
+          `${id}-${cloudStorage.safeName(file_name)}`
+        );
+        const ext = String(file_name || '').split('.').pop().toLowerCase();
+        const contentType = MIME_MAP[ext] || 'application/octet-stream';
+        const cloudRef = await cloudStorage.uploadBuffer({ key, buffer, contentType });
+        fileUrl = `/api/cloud-file?ref=${encodeURIComponent(cloudRef)}`;
+        storedData = '';
+      }
 
       await conn.execute(
         `INSERT INTO employee_201_files
@@ -264,7 +300,7 @@ module.exports = function registerEmployeeDocumentRoutes(app, pool) {
           expiry_date || null,
           String(file_name).trim(),
           fileUrl,
-          base64,
+          storedData,
         ]
       );
 
@@ -296,6 +332,12 @@ module.exports = function registerEmployeeDocumentRoutes(app, pool) {
     let conn;
     try {
       conn = await pool.getConnection();
+      const [rows] = await conn.execute(
+        'SELECT file_url FROM employee_201_files WHERE id = ? LIMIT 1',
+        [id]
+      );
+      const cloudRef = rows[0] ? cloudRefFromFileUrl(rows[0].file_url) : null;
+
       const [result] = await conn.execute(
         'DELETE FROM employee_201_files WHERE id = ?',
         [id]
@@ -303,6 +345,7 @@ module.exports = function registerEmployeeDocumentRoutes(app, pool) {
       if (result.affectedRows === 0) {
         return res.status(404).json({ success: false, message: 'Document not found.' });
       }
+      if (cloudRef) await cloudStorage.deleteObject(cloudRef);
       res.json({ success: true, message: 'Document deleted.' });
     } catch (err) {
       console.error('DOCUMENT DELETE ERROR:', err);

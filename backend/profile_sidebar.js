@@ -1,3 +1,13 @@
+const cloudStorage = require('./cloud_storage');
+
+function profilePhotoUrl(value) {
+    if (!value) return null;
+    if (cloudStorage.isCloudRef(value) || /^https?:\/\//i.test(String(value))) {
+        return cloudStorage.getFileUrl(value);
+    }
+    return `/uploads/profiles/${value}`;
+}
+
 module.exports = function (app, pool) {
     app.get('/api/profile', async (req, res) => {
     const userId = req.query.user_id;
@@ -31,7 +41,7 @@ module.exports = function (app, pool) {
     res.json({
         success: true,
         user,
-        profilePhotoUrl: user.profile_photo ? `/uploads/profiles/${user.profile_photo}` : null
+        profilePhotoUrl: profilePhotoUrl(user.profile_photo)
     });
     } catch (err) {
     console.error("Error fetching profile:", err);

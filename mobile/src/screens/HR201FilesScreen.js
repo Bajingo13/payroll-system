@@ -96,6 +96,13 @@ function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function getAssetUrl(path) {
+  if (!path) return '';
+  const text = String(path);
+  if (/^https?:/i.test(text)) return text;
+  return `${BASE_URL}${text.startsWith('/') ? text : `/${text}`}`;
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────
 export default function HR201FilesScreen({ navigation }) {
   const { user } = useAuth();
@@ -259,7 +266,7 @@ export default function HR201FilesScreen({ navigation }) {
       if (!data.success) throw new Error(data.message);
       showToast(`${uploadTarget.name} uploaded successfully.`);
       setUploadTarget(null);
-      setPendingImage(null);
+      setPendingFile(null);
       await loadDocuments(selected, true);
     } catch (err) {
       Alert.alert('Upload Failed', getApiMessage(err, 'Could not upload document.'));
@@ -282,7 +289,7 @@ export default function HR201FilesScreen({ navigation }) {
   }
 
   function viewDocument(fileUrl) {
-    const fullUrl = `${BASE_URL}${fileUrl}`;
+    const fullUrl = getAssetUrl(fileUrl);
     Linking.openURL(fullUrl).catch(() => Alert.alert('Error', 'Could not open document.'));
   }
 
