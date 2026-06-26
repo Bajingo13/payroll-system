@@ -9,7 +9,7 @@
 // Change ACTIVE_ENV below to switch.
 
 const ENV = {
-  local:      'http://192.168.68.122:12687/api',
+  local:      'http://192.168.68.136:12687/api',
   production: 'https://hris.astreablue.com/api',
 };
 

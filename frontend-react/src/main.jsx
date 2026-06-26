@@ -16,6 +16,8 @@ import LeaveManagementPage from './pages/LeaveManagementPage.jsx';
 import EmployeeLeaveRequestPage from './pages/EmployeeLeaveRequestPage.jsx';
 import OvertimeManagementPage from './pages/OvertimeManagementPage.jsx';
 import EmployeeOvertimeRequestPage from './pages/EmployeeOvertimeRequestPage.jsx';
+import EmployeeAttendanceCorrectionPage from './pages/EmployeeAttendanceCorrectionPage.jsx';
+import AttendanceCorrectionManagementPage from './pages/AttendanceCorrectionManagementPage.jsx';
 import EmployeePayrollInformationPage from './pages/EmployeePayrollInformationPage.jsx';
 import EmployeeSchedulePage from './pages/EmployeeSchedulePage.jsx';
 import PayrollComputationPage from './pages/PayrollComputationPage.jsx';
@@ -44,6 +46,8 @@ const FEATURE_HOME_ROUTES = {
   'personal-management': '/personal-management',
   'employee-leave-request': '/employee-leave-request',
   'employee-overtime-request': '/employee-overtime-request',
+  'employee-attendance-correction': '/employee-attendance-correction',
+  'attendance-correction-management': '/attendance-correction-management',
   'employee-payroll-information': '/employee-payroll-information',
   'employee-schedule': '/employee-schedule',
   'employee-management': '/employee-management',
@@ -186,6 +190,24 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['employee']} feature="employee-overtime-request">
               <EmployeeOvertimeRequestPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="employee-attendance-correction"
+          element={
+            <RoleRoute roles={['employee']} feature="employee-attendance-correction">
+              <EmployeeAttendanceCorrectionPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="attendance-correction-management"
+          element={
+            <RoleRoute roles={['admin', 'hr']} feature="attendance-correction-management">
+              <AttendanceCorrectionManagementPage />
             </RoleRoute>
           }
         />

@@ -467,6 +467,7 @@ if (useReactFrontend) {
     require('./backend/employee_profile_edit')(app, pool);
     require('./backend/employee_leave')(app, pool);
     require('./backend/overtime_requests')(app, pool);
+    require('./backend/attendance_correction')(app, pool);
     require('./backend/employee_management')(app, pool);
     require('./backend/loan_deductions')(app, pool);
     require('./backend/payroll_computation')(app, pool);

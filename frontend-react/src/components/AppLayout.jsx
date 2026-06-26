@@ -180,6 +180,7 @@ export default function AppLayout() {
     { to: '/personal-management', label: 'Personal Management', feature: 'personal-management' },
     { to: '/employee-leave-request', label: 'Leave Request', feature: 'employee-leave-request' },
     { to: '/employee-overtime-request', label: 'Overtime Request', feature: 'employee-overtime-request' },
+    { to: '/employee-attendance-correction', label: 'Attendance Correction', feature: 'employee-attendance-correction' },
     { to: '/employee-payroll-information', label: 'Payroll Information', feature: 'employee-payroll-information' },
     { to: '/employee-schedule', label: 'Schedule', feature: 'employee-schedule' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' }
@@ -190,6 +191,7 @@ export default function AppLayout() {
     { to: '/employee-documents', label: '201 Files', feature: 'employee-documents' },
     { to: '/organization-setup', label: 'Org Setup', feature: 'organization-setup' },
     { to: '/employee-attendance', label: 'Employee Attendance', feature: 'employee-attendance' },
+    { to: '/attendance-correction-management', label: 'Attendance Corrections', feature: 'attendance-correction-management' },
     { to: '/leave-management', label: 'Leave Management', feature: 'leave-management' },
     { to: '/overtime-management', label: 'Overtime Management', feature: 'overtime-management' },
     { to: '/schedule-management', label: 'Schedule Management', feature: 'schedule-management' },
