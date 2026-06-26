@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
 const cors = require('cors');
+const cloudStorage = require('./backend/cloud_storage');
 
 const app = express();
 
@@ -298,6 +299,27 @@ if (fs.existsSync(reactDistPath)) {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads', (_req, res) => {
   res.status(404).send('Uploaded file not found.');
+});
+
+async function serveCloudFileRef(ref, res) {
+  if (!cloudStorage.isCloudRef(ref)) {
+    return res.status(404).send('File not found.');
+  }
+
+  try {
+    return await cloudStorage.sendObjectToResponse(ref, res);
+  } catch (err) {
+    console.error('Cloud file serve error:', err.message);
+    return res.status(500).send('Error serving file.');
+  }
+}
+
+app.get('/api/cloud-file', async (req, res) => {
+  return serveCloudFileRef(String(req.query.ref || '').trim(), res);
+});
+
+app.get('/api/cloud-file/:ref', async (req, res) => {
+  return serveCloudFileRef(String(req.params.ref || '').trim(), res);
 });
 
 if (useReactFrontend) {
