@@ -100,7 +100,7 @@ export default function ProfileManagementPage() {
         const { data } = await api.get('/profile', {
           params: { user_id: user.user_id }
         });
-        const nextAvatar = data.profilePhotoUrl ? `${getAssetUrl(data.profilePhotoUrl)}?t=${Date.now()}` : '';
+        const nextAvatar = data.profilePhotoUrl ? getAssetUrl(data.profilePhotoUrl, true) : '';
         if (cancelled || !nextAvatar) return;
         localStorage.setItem(avatarStorageKey, nextAvatar);
         setAvatar(nextAvatar);
@@ -183,7 +183,7 @@ export default function ProfileManagementPage() {
         throw new Error(data.message || 'Unable to update profile picture.');
       }
 
-      const nextAvatar = `${getAssetUrl(data.url)}?t=${Date.now()}`;
+      const nextAvatar = getAssetUrl(data.url, true);
       localStorage.setItem(avatarStorageKey, nextAvatar);
       setAvatar(nextAvatar);
       window.dispatchEvent(new CustomEvent('profile-avatar-updated', { detail: nextAvatar }));
