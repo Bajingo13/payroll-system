@@ -336,15 +336,38 @@ module.exports = function (app, pool) {
     async function lookupSssContribution(conn, salaryBasis) {
         const [rows] = await conn.query(`
             SELECT
-                employee_value AS ee_share,
-                employer_value AS er_share,
-                0 AS ecc
+                employee_ss,
+                employer_ss,
+                employer_ec,
+                employee_mpf,
+                employer_mpf
             FROM sss_contribution_table
             WHERE salary_from <= ?
             AND (salary_to >= ? OR salary_to IS NULL)
-            ORDER BY bracket_order DESC
+            ORDER BY salary_from DESC
             LIMIT 1
         `, [salaryBasis, salaryBasis]);
+
+        if (!rows || rows.length === 0) {
+            return null;
+        }
+
+        const r = rows[0];
+
+        const ee_share =
+            toMoney(r.employee_ss) +
+            toMoney(r.employee_mpf);
+
+        const er_share =
+            toMoney(r.employer_ss) +
+            toMoney(r.employer_ec) +
+            toMoney(r.employer_mpf);
+
+        return {
+            ee_share: roundMoney(ee_share),
+            er_share: roundMoney(er_share),
+            ecc: roundMoney(toMoney(r.employer_ec))
+        };
     }
 
     async function lookupPagibigContribution(conn, salaryBasis) {
@@ -1944,29 +1967,47 @@ module.exports = function (app, pool) {
                 );
 
                 const normalizedPeriodSSS = normalizePayPeriod(effectivePayrollPeriod);
+
                 const periodDivisorSSS =
                     normalizedPeriodSSS === 'SEMI-MONTHLY' ? 2 :
                     normalizedPeriodSSS === 'WEEKLY' ? 4 : 1;
 
                 const [sssTableMatch] = await conn.query(
-                    `SELECT employee_value, employer_value
+                    `SELECT 
+                        employee_ss,
+                        employer_ss,
+                        employer_ec,
+                        employee_mpf,
+                        employer_mpf
                     FROM sss_contribution_table
                     WHERE ? BETWEEN salary_from AND salary_to
-                    ORDER BY bracket_order DESC
+                    AND effective_year = ?
                     LIMIT 1`,
-                    [monthlySalarySSS]
+                    [monthlySalarySSS, 2025]
                 );
 
                 if (sssTableMatch && sssTableMatch.length > 0) {
                     const match = sssTableMatch[0];
 
+                    // FULL monthly computation (IMPORTANT: sum all components)
+                    const monthlyEe =
+                        toMoney(match.employee_ss) +
+                        toMoney(match.employee_mpf);
+
+                    const monthlyEr =
+                        toMoney(match.employer_ss) +
+                        toMoney(match.employer_ec) +
+                        toMoney(match.employer_mpf);
+
+                    // convert to payroll period
                     const periodEeShare =
-                        Math.round(toMoney(match.employee_value) / periodDivisorSSS * 100) / 100;
+                        Math.round((monthlyEe / periodDivisorSSS) * 100) / 100;
 
                     const periodErShare =
-                        Math.round(toMoney(match.employer_value) / periodDivisorSSS * 100) / 100;
+                        Math.round((monthlyEr / periodDivisorSSS) * 100) / 100;
 
-                    const periodEcc = 0;
+                    const periodEcc =
+                        Math.round((toMoney(match.employer_ec) / periodDivisorSSS) * 100) / 100;
 
                     if (!sssRecord) {
                         contributions.push({
@@ -1990,7 +2031,12 @@ module.exports = function (app, pool) {
                     employee.payroll_rate,
                     employee
                 );
-                console.log("MC for Pag-IBIG computation:", MC);
+
+                const normalizedPeriod = normalizePayPeriod(effectivePayrollPeriod);
+
+                const periodDivisor =
+                    normalizedPeriod === 'SEMI-MONTHLY' ? 2 :
+                    normalizedPeriod === 'WEEKLY' ? 4 : 1;
 
                 const [rows] = await conn.query(`
                     SELECT
@@ -2009,16 +2055,17 @@ module.exports = function (app, pool) {
                 if (rows.length > 0) {
                     const rule = rows[0];
 
-                    // IMPORTANT: these are now RATE-based (not fixed cap logic here anymore)
-                    let ee = MC * toMoney(rule.employee_rate);
-                    let er = MC * toMoney(rule.employer_rate);
+                    // 1. compute MONTHLY contributions first
+                    let monthlyEe = MC * toMoney(rule.employee_rate);
+                    let monthlyEr = MC * toMoney(rule.employer_rate);
 
-                    // Apply cap ONLY if your DB does NOT already enforce it
-                    ee = Math.min(ee, toMoney(rule.employee_max));
-                    er = Math.min(er, toMoney(rule.employer_max));
+                    // 2. apply caps (still MONTHLY basis)
+                    monthlyEe = Math.min(monthlyEe, toMoney(rule.employee_max));
+                    monthlyEr = Math.min(monthlyEr, toMoney(rule.employer_max));
 
-                    ee = roundMoney(ee);
-                    er = roundMoney(er);
+                    // 3. convert to payroll period (LIKE SSS)
+                    const ee = roundMoney(monthlyEe / periodDivisor);
+                    const er = roundMoney(monthlyEr / periodDivisor);
 
                     if (!pagibigRecord) {
                         contributions.push({
