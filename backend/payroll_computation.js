@@ -356,29 +356,46 @@ module.exports = function (app, pool) {
 
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
         const normalizedPeriod = normalizePayPeriod(payPeriod);
-        const status = String(taxStatus || 'Z').trim().toUpperCase();
-        const params = [normalizedPeriod, status, taxableIncome, taxableIncome];
+
+        // 1. Get code from description
+        let status = 'Z'; // default fallback
+        if (taxStatus) {
+            const [statusRows] = await conn.query(
+                `SELECT code
+                FROM tax_exemptions_table
+                WHERE UPPER(description) = UPPER(?)`,
+                [String(taxStatus).trim()]
+            );
+
+            if (statusRows.length) {
+                status = String(statusRows[0].code).trim().toUpperCase();
+            }
+        }
+        console.log(`Status: ${status}, Period: ${normalizedPeriod}, Taxable Income: ${taxableIncome}`);
+
+        // 2. Query WITH status
         let [rows] = await conn.query(
             `SELECT tax_low, tax_high, percent_over, amount
-             FROM withholding_tax_table
-             WHERE UPPER(REPLACE(pay_period, ' ', '-')) = ?
-               AND UPPER(status) = ?
-               AND ? >= tax_low
-               AND (? <= tax_high OR tax_high = 0)
-             ORDER BY tax_low DESC
-             LIMIT 1`,
-            params
+            FROM withholding_tax_table
+            WHERE UPPER(REPLACE(pay_period, ' ', '-')) = ?
+            AND UPPER(status) = ?
+            AND ? >= tax_low
+            AND (? <= tax_high OR tax_high = 0)
+            ORDER BY tax_low DESC
+            LIMIT 1`,
+            [normalizedPeriod, status, taxableIncome, taxableIncome]
         );
 
+        // fallback without status
         if (!rows.length) {
             [rows] = await conn.query(
                 `SELECT tax_low, tax_high, percent_over, amount
-                 FROM withholding_tax_table
-                 WHERE UPPER(REPLACE(pay_period, ' ', '-')) = ?
-                   AND ? >= tax_low
-                   AND (? <= tax_high OR tax_high = 0)
-                 ORDER BY tax_low DESC
-                 LIMIT 1`,
+                FROM withholding_tax_table
+                WHERE UPPER(REPLACE(pay_period, ' ', '-')) = ?
+                AND ? >= tax_low
+                AND (? <= tax_high OR tax_high = 0)
+                ORDER BY tax_low DESC
+                LIMIT 1`,
                 [normalizedPeriod, taxableIncome, taxableIncome]
             );
         }
@@ -386,7 +403,11 @@ module.exports = function (app, pool) {
         const bracket = rows[0];
         if (!bracket) return { amount: 0, bracket: null };
 
-        const tax = toMoney(bracket.amount) + Math.max(0, taxableIncome - toMoney(bracket.tax_low)) * (toMoney(bracket.percent_over) / 100);
+        const tax =
+            toMoney(bracket.amount) +
+            Math.max(0, taxableIncome - toMoney(bracket.tax_low)) *
+            toMoney(bracket.percent_over);
+
         return { amount: roundMoney(tax), bracket };
     }
 
@@ -2038,7 +2059,9 @@ module.exports = function (app, pool) {
                         : 1;
                     const periodBasisWtax = Math.round(monthlySalaryWtax / periodDivisorWtax * 100) / 100;
                     const taxResult = await lookupWithholdingTax(conn, periodBasisWtax, effectivePayrollPeriod, employee.tax_status);
+                    console.log(`taxResult for employee ${employee.employee_id}: ${JSON.stringify(taxResult)} based on period basis ${periodBasisWtax}`);
                     wtaxRecord.ee_share = roundMoney(taxResult.amount);
+                    console.log(`Contribution ${employee.employee_id}: WTax formula "${wtaxFormula}" computed as ${wtaxRecord.ee_share} for period basis ${periodBasisWtax}`);
                 } else if (wtaxFormula === 'ewt') {
                     // No EWT rate/table is configured yet; keep the admin-entered figure
                     // rather than guessing a percentage.
@@ -2918,11 +2941,11 @@ module.exports = function (app, pool) {
                 console.log("Number(ytd_gross || 0):", Number(ytd_gross || 0));
 
                 // Compute current YTD
-                const currentYtdSss = Number(ytd_sss || 0) + Number(p.sss_employee || 0);
-                const currentYtdWtax = Number(ytd_wtax || 0) + Number(p.tax_withheld || 0);
-                const currentYtdPhilhealth = Number(ytd_philhealth || 0) + Number(p.philhealth_employee || 0);
-                const currentYtdPagibig = Number(ytd_pagibig || 0) + Number(p.pagibig_employee || 0);
-                const currentYtdGsis = Number(ytd_gsis || 0) + Number(gsis_employee || 0);
+                const currentYtdSss = Number(ytd_sss || 0);
+                const currentYtdWtax = Number(ytd_wtax || 0);
+                const currentYtdPhilhealth = Number(ytd_philhealth || 0);
+                const currentYtdPagibig = Number(ytd_pagibig || 0);
+                const currentYtdGsis = Number(ytd_gsis || 0);
 
                 // gross YTD uses grossPay
                 const currentYtdGross = Number(ytd_gross || 0) + Number(grossPay || 0);
