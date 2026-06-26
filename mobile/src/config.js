@@ -14,6 +14,6 @@ const ENV = {
 };
 
 // Set to 'production' before building the APK
-const ACTIVE_ENV = 'local';
+const ACTIVE_ENV = 'production';
 
 export const API_BASE_URL = ENV[ACTIVE_ENV];
