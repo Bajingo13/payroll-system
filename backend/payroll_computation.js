@@ -158,7 +158,6 @@ module.exports = function (app, pool) {
         const period = String(value || '').trim().toUpperCase();
         if (period.includes('SEMI')) return 'SEMI-MONTHLY';
         if (period.includes('WEEK')) return 'WEEKLY';
-        if (period.includes('DAY')) return 'DAILY';
         return 'MONTHLY';
     }
 
@@ -210,7 +209,9 @@ module.exports = function (app, pool) {
         if (rate === 'DAILY')  return roundMoney(amount * daysInYear / 12);
         if (rate === 'HOURLY') return roundMoney(amount * hoursInDay * daysInYear / 12);
         if (rate === 'WEEKLY') return roundMoney(amount * weekInYear / 12);
-        return roundMoney(amount); // MONTHLY or PIECE RATE
+        const result = roundMoney(amount); // MONTHLY or PIECE RATE
+        console.log(`Computed monthly salary from main_computation=${mainComputation}, payroll_rate=${payrollRate}, rate=${rate} => ${result}`);
+        return result;
     }
 
     // Compute the period salary from main_computation, respecting payroll_rate.
@@ -291,28 +292,6 @@ module.exports = function (app, pool) {
         }
     }
 
-    async function lookupContribution(conn, tableName, salaryBasis) {
-        const allowedTables = new Set([
-            'sss_contribution_table',
-            'pagibig_contribution_table',
-            'philhealth_contribution_table'
-        ]);
-        if (!allowedTables.has(tableName)) return null;
-
-        const eccSelect = tableName === 'sss_contribution_table' ? 'COALESCE(ecc, 0)' : '0';
-        const [rows] = await conn.query(
-            `SELECT ee_share, er_share, ${eccSelect} AS ecc
-             FROM ${tableName}
-             WHERE ? BETWEEN salary_low AND salary_high
-               AND COALESCE(is_active, 1) = 1
-             ORDER BY date_effective DESC
-             LIMIT 1`,
-            [salaryBasis]
-        );
-
-        return rows[0] || null;
-    }
-
     // GSIS (RA 8291) contributes a flat percentage of the revised basic salary,
     // with no salary cap — unlike SSS's bracket table — so it is stored as a rate, not brackets.
     async function ensureGsisContributionTable(conn) {
@@ -352,6 +331,87 @@ module.exports = function (app, pool) {
             er_share: roundMoney(salaryBasis * (Number(rate.er_rate_percent) / 100)),
             ecc: 0
         };
+    }
+
+    async function lookupSssContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(`
+            SELECT
+                employee_ss,
+                employer_ss,
+                employer_ec,
+                employee_mpf,
+                employer_mpf
+            FROM sss_contribution_table
+            WHERE salary_from <= ?
+            AND (salary_to >= ? OR salary_to IS NULL)
+            ORDER BY salary_from DESC
+            LIMIT 1
+        `, [salaryBasis, salaryBasis]);
+
+        if (!rows || rows.length === 0) {
+            return null;
+        }
+
+        const r = rows[0];
+
+        const ee_share =
+            toMoney(r.employee_ss) +
+            toMoney(r.employee_mpf);
+
+        const er_share =
+            toMoney(r.employer_ss) +
+            toMoney(r.employer_ec) +
+            toMoney(r.employer_mpf);
+
+        return {
+            ee_share: roundMoney(ee_share),
+            er_share: roundMoney(er_share),
+            ecc: roundMoney(toMoney(r.employer_ec))
+        };
+    }
+
+    async function lookupPagibigContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(`
+            SELECT
+                employee_rate,
+                employer_rate,
+                employee_max,
+                employer_max
+            FROM pagibig_contribution_table
+            WHERE is_active = 1
+            ORDER BY effective_date DESC
+            LIMIT 1
+        `);
+
+        if (!rows.length) return null;
+
+        const rule = rows[0];
+
+        return {
+            ee_share: Math.min(
+                salaryBasis * Number(rule.employee_rate),
+                Number(rule.employee_max)
+            ),
+
+            er_share: Math.min(
+                salaryBasis * Number(rule.employer_rate),
+                Number(rule.employer_max)
+            ),
+
+            ecc: 0
+        };
+    }
+
+    async function lookupPhilhealthContribution(conn) {
+        const [rows] = await conn.query(`
+            SELECT rate, min_base, max_base
+            FROM philhealth_contribution_table
+            WHERE is_active = 1
+            ORDER BY effective_date DESC
+            LIMIT 1
+        `);
+
+        return rows[0] || null;
     }
 
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
@@ -432,23 +492,20 @@ module.exports = function (app, pool) {
         // GSIS (government employees) and SSS (private employees) are mutually exclusive.
         const isGovernmentEmployee = Boolean(input.is_government_employee || input.gsis_no);
         await ensureGsisContributionTable(conn);
-        const sss = isGovernmentEmployee ? null : await lookupContribution(conn, 'sss_contribution_table', salaryBasis);
         const gsis = isGovernmentEmployee ? await lookupGsisContribution(conn, salaryBasis) : null;
-        const pagibig = await lookupContribution(conn, 'pagibig_contribution_table', salaryBasis);
-        const philhealth = await lookupContribution(conn, 'philhealth_contribution_table', salaryBasis);
-
+        const sss = isGovernmentEmployee
+            ? null
+            : await lookupSssContribution(conn, salaryBasis);
+        const pagibig = await lookupPagibigContribution(conn, salaryBasis);
+        const philhealth = await lookupPhilhealthContribution(conn);
         const sssEmployee = roundMoney(sss?.ee_share || 0);
         const gsisEmployee = roundMoney(gsis?.ee_share || 0);
         const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
         const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
         const statutoryEmployee = sssEmployee + gsisEmployee + pagibigEmployee + philhealthEmployee;
-        console.log("computePayrollAutomation: salaryBasis =", salaryBasis, "sssEmployee =", sssEmployee, "gsisEmployee =", gsisEmployee, "pagibigEmployee =", pagibigEmployee, "philhealthEmployee =", philhealthEmployee, "statutoryEmployee =", statutoryEmployee);
         const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
-        console.log("computePayrollAutomation: taxableIncome =", taxableIncome, "basicSalary =", basicSalary, "overtime =", overtime, "holidayPay =", holidayPay, "taxableAllowances =", taxableAllowances, "adjComp =", adjComp, "absenceDeduction =", absenceDeduction, "lateDeduction =", lateDeduction, "undertimeDeduction =", undertimeDeduction, "statutoryEmployee =", statutoryEmployee);
         const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
         const taxWithheld = roundMoney(taxResult.amount);
-        console.log("computePayrollAutomation: taxWithheld =", taxWithheld, "taxResult =", taxResult);
-
         const grossPay = roundMoney(
             basicSalary -
             absenceDeduction -
@@ -1892,28 +1949,6 @@ module.exports = function (app, pool) {
                 return record && (record.type_option || "").toLowerCase() === "computed";
             }
 
-            // The Pag-IBIG "Computation" formulas encode their own rate/cap in the label,
-            // so they can be evaluated directly from the employee's Amount Rate (MC)
-            // instead of going through the salary-bracket table.
-            function computePagibigFormula(formula, mc) {
-                const f = String(formula || '').trim().toLowerCase();
-                const MC = toMoney(mc);
-                if (f === 'ee (2% of mc) max 100 & er (2% of mc) max 100') {
-                    return { ee_share: Math.min(roundMoney(MC * 0.02), 100), er_share: Math.min(roundMoney(MC * 0.02), 100) };
-                }
-                if (f === 'ee (2% of mc) & er (fix 100)') {
-                    return { ee_share: roundMoney(MC * 0.02), er_share: 100 };
-                }
-                if (f === 'ee (2% of mc + er - 100) & er (fix 100)') {
-                    const er = 100;
-                    return { ee_share: roundMoney(0.02 * (MC + er - 100)), er_share: er };
-                }
-                if (f === 'ee & er (2% of mc)') {
-                    return { ee_share: roundMoney(MC * 0.02), er_share: roundMoney(MC * 0.02) };
-                }
-                return null;
-            }
-
             const sssRecord = getContributionRecord(contributions, 1);
             const pagibigRecord = getContributionRecord(contributions, 2);
             const philhealthRecord = getContributionRecord(contributions, 3);
@@ -1924,37 +1959,55 @@ module.exports = function (app, pool) {
             const computePhilhealth = shouldCompute(philhealthRecord);
             const computeWtax = shouldCompute(wtaxRecord);
 
-            // "Fix" means the admin-entered figures on the contribution row ARE the
-            // amount to use, so the bracket-table lookup is skipped for that column.
-            const sssIsFix = computeSSS && String(sssRecord.computation || '').toLowerCase() === 'fix';
-            const pagibigFormula = computePagibig ? computePagibigFormula(pagibigRecord.computation, employee.main_computation) : null;
-            const pagibigIsFix = computePagibig && String(pagibigRecord.computation || '').toLowerCase() === 'fix';
-            const philhealthIsFix = computePhilhealth && String(philhealthRecord.computation || '').toLowerCase() === 'fix';
-
-            if (computeSSS && !sssIsFix) {
+            if (computeSSS) {
                 const monthlySalarySSS = computeMonthlySalaryFromRate(
-                    employee.main_computation, employee.payroll_rate, employee
+                    employee.main_computation,
+                    employee.payroll_rate,
+                    employee
                 );
-                const normalizedPeriodSSS = normalizePayPeriod(effectivePayrollPeriod);
-                const periodDivisorSSS = normalizedPeriodSSS === 'SEMI-MONTHLY' ? 2
-                    : normalizedPeriodSSS === 'WEEKLY' ? 4
-                    : 1;
 
-                // Look up SSS using monthly salary so the correct bracket is used,
-                // then divide the monthly contribution amount by the number of pay periods.
+                const normalizedPeriodSSS = normalizePayPeriod(effectivePayrollPeriod);
+
+                const periodDivisorSSS =
+                    normalizedPeriodSSS === 'SEMI-MONTHLY' ? 2 :
+                    normalizedPeriodSSS === 'WEEKLY' ? 4 : 1;
+
                 const [sssTableMatch] = await conn.query(
-                    `SELECT ee_share, er_share, ecc
+                    `SELECT 
+                        employee_ss,
+                        employer_ss,
+                        employer_ec,
+                        employee_mpf,
+                        employer_mpf
                     FROM sss_contribution_table
-                    WHERE ? BETWEEN salary_low AND salary_high
+                    WHERE ? BETWEEN salary_from AND salary_to
+                    AND effective_year = ?
                     LIMIT 1`,
-                    [monthlySalarySSS]
+                    [monthlySalarySSS, 2025]
                 );
 
                 if (sssTableMatch && sssTableMatch.length > 0) {
                     const match = sssTableMatch[0];
-                    const periodEeShare = Math.round(toMoney(match.ee_share) / periodDivisorSSS * 100) / 100;
-                    const periodErShare = Math.round(toMoney(match.er_share) / periodDivisorSSS * 100) / 100;
-                    const periodEcc    = Math.round(toMoney(match.ecc)      / periodDivisorSSS * 100) / 100;
+
+                    // FULL monthly computation (IMPORTANT: sum all components)
+                    const monthlyEe =
+                        toMoney(match.employee_ss) +
+                        toMoney(match.employee_mpf);
+
+                    const monthlyEr =
+                        toMoney(match.employer_ss) +
+                        toMoney(match.employer_ec) +
+                        toMoney(match.employer_mpf);
+
+                    // convert to payroll period
+                    const periodEeShare =
+                        Math.round((monthlyEe / periodDivisorSSS) * 100) / 100;
+
+                    const periodErShare =
+                        Math.round((monthlyEr / periodDivisorSSS) * 100) / 100;
+
+                    const periodEcc =
+                        Math.round((toMoney(match.employer_ec) / periodDivisorSSS) * 100) / 100;
 
                     if (!sssRecord) {
                         contributions.push({
@@ -1967,71 +2020,109 @@ module.exports = function (app, pool) {
                     } else {
                         sssRecord.ee_share = periodEeShare;
                         sssRecord.er_share = periodErShare;
-                        sssRecord.ecc      = periodEcc;
+                        sssRecord.ecc = periodEcc;
                     }
                 }
             }
 
-            if (computePagibig && pagibigFormula) {
-                pagibigRecord.ee_share = pagibigFormula.ee_share;
-                pagibigRecord.er_share = pagibigFormula.er_share;
-            } else if (computePagibig && !pagibigIsFix) {
-                const monthlySalaryPagibig = computeMonthlySalaryFromRate(
-                    employee.main_computation, employee.payroll_rate, employee
+            if (computePagibig) {
+                const MC = computeMonthlySalaryFromRate(
+                    employee.main_computation,
+                    employee.payroll_rate,
+                    employee
                 );
-                const normalizedPeriodPagibig = normalizePayPeriod(effectivePayrollPeriod);
-                const periodDivisorPagibig = normalizedPeriodPagibig === 'SEMI-MONTHLY' ? 2
-                    : normalizedPeriodPagibig === 'WEEKLY' ? 4
-                    : 1;
 
-                const [pagibigTableMatch] = await conn.query(
-                    `SELECT ee_share, er_share
+                const normalizedPeriod = normalizePayPeriod(effectivePayrollPeriod);
+
+                const periodDivisor =
+                    normalizedPeriod === 'SEMI-MONTHLY' ? 2 :
+                    normalizedPeriod === 'WEEKLY' ? 4 : 1;
+
+                const [rows] = await conn.query(`
+                    SELECT
+                        employee_rate,
+                        employer_rate,
+                        employee_max,
+                        employer_max
                     FROM pagibig_contribution_table
-                    WHERE ? BETWEEN salary_low AND salary_high
-                    LIMIT 1`,
-                    [monthlySalaryPagibig]
-                );
+                    WHERE salary_from <= ?
+                    AND (salary_to >= ? OR salary_to IS NULL)
+                    AND is_active = 1
+                    ORDER BY effective_date DESC
+                    LIMIT 1
+                `, [MC, MC]);
 
-                if (pagibigTableMatch && pagibigTableMatch.length > 0) {
-                    const match = pagibigTableMatch[0];
-                    const periodEeShare = Math.round(toMoney(match.ee_share) / periodDivisorPagibig * 100) / 100;
-                    const periodErShare = Math.round(toMoney(match.er_share) / periodDivisorPagibig * 100) / 100;
+                if (rows.length > 0) {
+                    const rule = rows[0];
+
+                    // 1. compute MONTHLY contributions first
+                    let monthlyEe = MC * toMoney(rule.employee_rate);
+                    let monthlyEr = MC * toMoney(rule.employer_rate);
+
+                    // 2. apply caps (still MONTHLY basis)
+                    monthlyEe = Math.min(monthlyEe, toMoney(rule.employee_max));
+                    monthlyEr = Math.min(monthlyEr, toMoney(rule.employer_max));
+
+                    // 3. convert to payroll period (LIKE SSS)
+                    const ee = roundMoney(monthlyEe / periodDivisor);
+                    const er = roundMoney(monthlyEr / periodDivisor);
 
                     if (!pagibigRecord) {
                         contributions.push({
                             contribution_type_id: 2,
                             type_option: "Computed",
-                            ee_share: periodEeShare,
-                            er_share: periodErShare
+                            ee_share: ee,
+                            er_share: er
                         });
-                    } else if (pagibigRecord.type_option === "Computed") {
-                        pagibigRecord.ee_share = periodEeShare;
-                        pagibigRecord.er_share = periodErShare;
+                    } else {
+                        pagibigRecord.ee_share = ee;
+                        pagibigRecord.er_share = er;
                     }
                 }
             }
 
-            if (computePhilhealth && !philhealthIsFix) {
-                const monthlySalaryPH = computeMonthlySalaryFromRate(
-                    employee.main_computation, employee.payroll_rate, employee
+            if (computePhilhealth) {
+                const MC = computeMonthlySalaryFromRate(
+                    employee.main_computation,
+                    employee.payroll_rate,
+                    employee
                 );
+
                 const normalizedPeriodPH = normalizePayPeriod(effectivePayrollPeriod);
-                const periodDivisorPH = normalizedPeriodPH === 'SEMI-MONTHLY' ? 2
-                    : normalizedPeriodPH === 'WEEKLY' ? 4
-                    : 1;
 
-                const [philhealthTableMatch] = await conn.query(
-                    `SELECT ee_share, er_share
+                const periodDivisorPH =
+                    normalizedPeriodPH === 'SEMI-MONTHLY' ? 2 :
+                    normalizedPeriodPH === 'WEEKLY' ? 4 :
+                    1;
+
+                // 👇 fetch rate config instead of bracket
+                const [rows] = await conn.query(
+                    `SELECT rate, min_base, max_base
                     FROM philhealth_contribution_table
-                    WHERE ? BETWEEN salary_low AND salary_high
-                    LIMIT 1`,
-                    [monthlySalaryPH]
+                    WHERE is_active = 1
+                    ORDER BY effective_date DESC
+                    LIMIT 1`
                 );
 
-                if (philhealthTableMatch && philhealthTableMatch.length > 0) {
-                    const match = philhealthTableMatch[0];
-                    const periodEeShare = Math.round(toMoney(match.ee_share) / periodDivisorPH * 100) / 100;
-                    const periodErShare = Math.round(toMoney(match.er_share) / periodDivisorPH * 100) / 100;
+                if (rows.length > 0) {
+                    const rule = rows[0];
+
+                    // apply base limits (optional but correct)
+                    const minBase = Number(rule.min_base) || 0;
+                    const maxBase = Number(rule.max_base) || Infinity;
+
+                    const base = Math.min(
+                        Math.max(MC, minBase),
+                        maxBase
+                    );
+
+                    // STEP 1: monthly computation
+                    let monthlyEe = base * toMoney(rule.rate);
+                    let monthlyEr = base * toMoney(rule.rate);
+
+                    // STEP 2: split per payroll period
+                    let periodEeShare = roundMoney(monthlyEe / periodDivisorPH);
+                    let periodErShare = roundMoney(monthlyEr / periodDivisorPH);
 
                     if (!philhealthRecord) {
                         contributions.push({

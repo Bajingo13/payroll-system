@@ -1170,14 +1170,6 @@ export default function PayrollComputationPage() {
       const payrolls = filteredEmps.map(emp => {
         const d = cache[emp.employee_id];
         const p = d.payroll;
-          console.log('YTD values for employee', emp.employee_id, {
-    ytd_sss: p.ytd_sss,
-    ytd_wtax: p.ytd_wtax,
-    ytd_philhealth: p.ytd_philhealth,
-    ytd_gsis: p.ytd_gsis,
-    ytd_pagibig: p.ytd_pagibig,
-    ytd_gross: p.ytd_gross,
-  });
         const allowTotals = effectiveAllowanceTotals(p, d.allowances);
         const rowDeductions = effectiveDeductionTotal(p, d.deductions);
         const gross = toNum(p.basic_salary)-toNum(p.absence_deduction)-toNum(p.late_deduction)-toNum(p.undertime_deduction)+toNum(p.overtime)+toNum(p.holiday_pay)+allowTotals.taxable+allowTotals.nontaxable+toNum(p.adj_comp)+toNum(p.adj_non_comp)+toNum(p.total_leaves_used);
