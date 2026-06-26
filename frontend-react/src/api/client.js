@@ -21,11 +21,13 @@ export function getApiMessage(error, fallback = 'Request failed.') {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
-export function getAssetUrl(path) {
+export function getAssetUrl(path, cacheBust = false) {
   if (!path) return '';
   const text = String(path);
-  if (/^(https?:|data:|blob:)/i.test(text)) return text;
+  if (/^(https?:|data:|blob:)/i.test(text)) return cacheBust ? `${text}${text.includes('?') ? '&' : '?'}t=${Date.now()}` : text;
 
   const apiBase = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/, '');
-  return `${apiBase}${text.startsWith('/') ? text : `/${text}`}`;
+  const url = `${apiBase}${text.startsWith('/') ? text : `/${text}`}`;
+  if (!cacheBust) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
 }
