@@ -22,6 +22,7 @@ import HRAuditingScreen from '../screens/HRAuditingScreen';
 import HRCalendarScreen from '../screens/HRCalendarScreen';
 import HRUtilitiesScreen from '../screens/HRUtilitiesScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
+import AttendanceCorrectionScreen from '../screens/AttendanceCorrectionScreen';
 import LeaveScreen from '../screens/LeaveScreen';
 import OvertimeScreen from '../screens/OvertimeScreen';
 import PayrollScreen from '../screens/PayrollScreen';
@@ -198,6 +199,7 @@ export default function AppNavigator() {
             options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="AttendanceCorrection" component={AttendanceCorrectionScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="HREmployeeFile" component={HREmployeeFileScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="HR201Files"    component={HR201FilesScreen}    options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="HROrgSetup"    component={HROrgSetupScreen}    options={{ animation: 'slide_from_right' }} />

@@ -10,9 +10,16 @@
 
 /* Body */
 body {
-    background-color: #f4f7fb;
-    color: #333;
+    background-color: #eef4f9;
+    color: #122032;
     overflow: hidden;
+}
+
+:root {
+  --legacy-brand-gradient: linear-gradient(135deg, #155fb8 0%, #1583b8 54%, #5d4db8 100%);
+  --legacy-surface-gradient: linear-gradient(160deg, rgba(255, 255, 255, 0.96) 0%, rgba(243, 249, 253, 0.94) 52%, rgba(238, 244, 252, 0.92) 100%);
+  --legacy-border-gradient: linear-gradient(135deg, rgba(21, 95, 184, 0.3), rgba(21, 131, 184, 0.18), rgba(93, 77, 184, 0.22));
+  --legacy-panel-accent: linear-gradient(90deg, rgba(21, 95, 184, 0.68), rgba(21, 131, 184, 0.52), rgba(93, 77, 184, 0.58));
 }
 
 /* Layout Container */
@@ -35,14 +42,21 @@ body {
     left: 0;
     bottom: 0;
     background:
-      linear-gradient(180deg, rgba(25, 135, 84, 0.12), transparent 190px),
-      #171b22;
-    color: white;
+      linear-gradient(145deg, rgba(249, 253, 255, 0.94) 0%, rgba(230, 244, 251, 0.88) 46%, rgba(235, 239, 250, 0.84) 100%),
+      repeating-linear-gradient(0deg, rgba(21, 95, 184, 0.035) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, rgba(21, 95, 184, 0.026) 0 1px, transparent 1px 24px),
+      linear-gradient(32deg, rgba(21, 95, 184, 0.14) 0%, transparent 42%),
+      linear-gradient(210deg, rgba(93, 77, 184, 0.11) 0%, transparent 48%),
+      linear-gradient(180deg, #f7fbfd, #edf7fb);
+    color: #183247;
     display: flex;
     flex-direction: column;
     padding: 10px 12px 16px;
     z-index: 100;
-    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    border-right: 1px solid rgba(129, 161, 184, 0.28);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 8px 0 26px rgba(18, 32, 50, 0.065), inset -1px 0 0 rgba(255, 255, 255, 0.68);
 }
 
 .profile {
@@ -65,18 +79,22 @@ body {
   position: relative;
   margin: 0;
   padding: 10px 12px 22px 46px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(140, 166, 190, 0.28);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)),
-    rgba(255, 255, 255, 0.035);
-  color: #f8fafc;
+    linear-gradient(115deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.42) 34%, transparent 35%),
+    linear-gradient(155deg, rgba(21, 95, 184, 0.07) 0%, transparent 44%),
+    linear-gradient(330deg, rgba(93, 77, 184, 0.07) 0%, transparent 42%),
+    repeating-linear-gradient(90deg, rgba(21, 95, 184, 0.035) 0 1px, transparent 1px 18px),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98) 0%, rgba(242, 248, 252, 0.95) 50%, rgba(245, 246, 252, 0.93) 100%);
+  color: #183247;
   font-family: "Inter", Arial, sans-serif;
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.2;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 24px rgba(29, 78, 120, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  overflow: hidden;
 }
 
 .profile .logo::before {
@@ -89,7 +107,7 @@ body {
   display: grid;
   place-items: center;
   border-radius: 7px;
-  background: linear-gradient(135deg, #5ab75a, #2f80ed);
+  background: linear-gradient(135deg, #116edb, #8752d9);
   color: #ffffff;
   font-size: 11px;
   font-weight: 900;
@@ -101,7 +119,7 @@ body {
   position: absolute;
   left: 46px;
   bottom: 8px;
-  color: #9fb0c5;
+  color: #207c98;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -163,7 +181,7 @@ body {
 
 .profile p {
     font-size: 12px;
-    color: #bbb;
+    color: #688196;
 }
 
 .sidebar .profile .profile-avatar-button,
@@ -186,7 +204,7 @@ body {
 
 .sidebar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: rgba(104, 129, 150, 0.38) transparent;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -194,7 +212,7 @@ body {
 }
 
 .sidebar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(104, 129, 150, 0.38);
   border-radius: 999px;
 }
 
@@ -214,7 +232,7 @@ body {
 .nav-section-label {
   margin: 8px 0 3px;
   padding: 0 9px;
-  color: #7f91a9;
+  color: #688196;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -223,7 +241,7 @@ body {
 
 .sidebar nav ul li a {
     text-decoration: none;
-    color: #cbd5e1;
+    color: #183247;
     font-size: 13px;
     font-weight: 600;
     padding: 8px 10px;
@@ -235,17 +253,18 @@ body {
 /* Sidebar links active + hover */
 .sidebar nav ul li.active > a,
 .sidebar nav ul li a:hover {
-  background: rgba(90, 183, 90, 0.16);
-  color: #fff;
+  background: rgba(17, 110, 219, 0.09);
+  color: #0b5bd3;
   transform: translateX(2px);
+  box-shadow: inset 0 0 0 1px rgba(17, 110, 219, 0.14);
 }
 
 .sidebar nav ul li.active > a,
 .sidebar nav ul li a.active,
 .sidebar ul li .dropdown-menu a.sub-active {
-  background: linear-gradient(135deg, rgba(90, 183, 90, 0.95), rgba(49, 151, 149, 0.92));
+  background: var(--legacy-brand-gradient);
   color: #fff;
-  box-shadow: 0 8px 18px rgba(20, 184, 166, 0.18);
+  box-shadow: 0 12px 24px rgba(17, 110, 219, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 /* Dropdown Styling */
@@ -254,46 +273,54 @@ body {
 }
 
 .sidebar ul li .dropdown-menu {
-  display: none;
+  display: flex;
   flex-direction: column;
-  background-color: rgba(255, 255, 255, 0.035);
+  background-color: rgba(255, 255, 255, 0.48);
   padding: 4px 0 4px 8px;
   margin-top: 4px;
-  border-left: 1px solid rgba(52, 152, 219, 0.45);
+  border-left: 1px solid rgba(17, 110, 219, 0.28);
   border-radius: 8px;
   box-shadow: none;
   z-index: 200;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 
-/* Show dropdown when clicked open or active submenu exists */
-.sidebar ul li.dropdown.open .dropdown-menu,
-.sidebar ul li.dropdown:has(.sub-active) .dropdown-menu {
+/* Show dropdown while hovered or keyboard-focused */
+.sidebar ul li.dropdown:hover .dropdown-menu,
+.sidebar ul li.dropdown:focus-within .dropdown-menu {
   display: flex;
+  max-height: 320px;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .sidebar ul li .dropdown-menu a {
-  color: #b9c5d4;
+  color: #385166;
   font-size: 12px;
   text-decoration: none;
   padding: 7px 9px;
   border-radius: 7px;
 }
 
-.sidebar ul li.dropdown.open > a,
-.sidebar ul li.dropdown:has(.sub-active) > a {
-    background-color: rgba(255, 255, 255, 0.07);
-    color: #fff;
+.sidebar ul li.dropdown:hover > a,
+.sidebar ul li.dropdown:focus-within > a {
+    background-color: rgba(17, 110, 219, 0.09);
+    color: #0b5bd3;
 }
 
 /* Hover for submenu links */
 .sidebar ul li .dropdown-menu a:hover {
-  color: #fff;
-  background-color: rgba(90, 183, 90, 0.14);
+  color: #0b5bd3;
+  background-color: rgba(17, 110, 219, 0.08);
 }
 
 /* Highlight only Employee File */
 .sidebar ul li .dropdown-menu a.sub-active {
-  background: linear-gradient(135deg, rgba(90, 183, 90, 0.95), rgba(49, 151, 149, 0.92));
+  background: var(--legacy-brand-gradient);
   color: #fff;
 }
 
@@ -302,16 +329,16 @@ body {
   content: '';
   display: inline-block;
   margin-left: 8px;
-  border-top: 5px solid #fff;
+  border-top: 5px solid currentColor;
   border-right: 5px solid transparent;
   border-left: 5px solid transparent;
   transform: rotate(270deg);
   transition: transform 0.2s ease;
 }
 
-/* Rotate arrow when clicked open or when submenu has active item */
-.sidebar ul li.dropdown.open .dropdown-toggle::after,
-.sidebar ul li.dropdown:has(.sub-active) .dropdown-toggle::after {
+/* Rotate arrow while the submenu is open */
+.sidebar ul li.dropdown:hover .dropdown-toggle::after,
+.sidebar ul li.dropdown:focus-within .dropdown-toggle::after {
   transform: rotate(0deg);
 }
 
@@ -328,8 +355,11 @@ body {
     display: block;
     position: relative;
     background:
-      linear-gradient(180deg, rgba(37, 99, 235, 0.06), transparent 240px),
-      #f4f7fb;
+      repeating-linear-gradient(0deg, rgba(21, 95, 184, 0.032) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, rgba(21, 95, 184, 0.024) 0 1px, transparent 1px 28px),
+      linear-gradient(135deg, rgba(21, 95, 184, 0.085) 0%, rgba(21, 131, 184, 0.052) 38%, rgba(93, 77, 184, 0.06) 72%, transparent 100%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 340px),
+      #eef4f9;
 }
 
 .section h3 {
@@ -355,10 +385,14 @@ body {
   align-items: center;
   gap: 10px;
   padding: 6px 10px 6px 6px;
-  border: 1px solid #dbe4ef;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 250, 255, 0.82)) padding-box,
+    var(--legacy-border-gradient) border-box;
+  box-shadow:
+    0 14px 28px rgba(15, 23, 42, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
   cursor: pointer;
   list-style: none;
 }
@@ -510,17 +544,34 @@ body {
 }
 
 .card {
-    background: linear-gradient(180deg, #ffffff, #f9fbff);
+    background:
+      linear-gradient(128deg, rgba(255, 255, 255, 0.72), transparent 38%),
+      var(--legacy-surface-gradient) padding-box,
+      var(--legacy-border-gradient) border-box;
     padding: 18px;
-    border: 1px solid #e7edf5;
+    border: 1px solid transparent;
     border-radius: 8px;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
     text-align: left;
     transition: 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before,
+.modern-panel::before,
+.table-section::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--legacy-panel-accent);
+    opacity: 0.68;
 }
 
 .card:hover {
     transform: translateY(-2px);
+    box-shadow: 0 20px 42px rgba(17, 110, 219, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .card span {
@@ -544,12 +595,17 @@ body {
 }
 
 .modern-panel {
-  background: #fff;
-  border: 1px solid #e7edf5;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 44%),
+    var(--legacy-surface-gradient) padding-box,
+    var(--legacy-border-gradient) border-box;
+  border: 1px solid transparent;
   border-radius: 8px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.86);
   padding: 18px;
   min-width: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 .wide-panel {
@@ -1457,10 +1513,15 @@ select
 
 /* Table Section */
 .table-section {
-  background-color: white;
+  background:
+    var(--legacy-surface-gradient) padding-box,
+    var(--legacy-border-gradient) border-box;
+  border: 1px solid transparent;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
   padding: 15px;
+  position: relative;
+  overflow: hidden;
 }
 
 .table-section h3 {
@@ -2920,4 +2981,42 @@ th {
     margin-left: 0;
     flex-direction: column;
   }
+}
+
+/* Final dashboard theme layer: intentionally visible, professional, and logo-friendly. */
+.container .sidebar {
+  background:
+    linear-gradient(150deg, rgba(246, 252, 255, 0.95), rgba(222, 239, 249, 0.9) 48%, rgba(229, 234, 249, 0.9)),
+    repeating-linear-gradient(0deg, rgba(21, 95, 184, 0.06) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, rgba(21, 95, 184, 0.045) 0 1px, transparent 1px 22px) !important;
+  border-right-color: rgba(66, 118, 160, 0.28) !important;
+  box-shadow: 10px 0 30px rgba(20, 53, 82, 0.12) !important;
+}
+
+.container .profile .logo {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.96), rgba(229, 245, 255, 0.88) 48%, rgba(238, 239, 255, 0.9)),
+    repeating-linear-gradient(90deg, rgba(21, 95, 184, 0.045) 0 1px, transparent 1px 16px) !important;
+  border-color: rgba(74, 128, 170, 0.34) !important;
+}
+
+.container .section {
+  background:
+    linear-gradient(135deg, rgba(20, 93, 156, 0.14), rgba(24, 144, 179, 0.08) 44%, rgba(93, 77, 184, 0.1)),
+    repeating-linear-gradient(0deg, rgba(21, 95, 184, 0.052) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(21, 95, 184, 0.038) 0 1px, transparent 1px 28px),
+    #eaf2f8 !important;
+}
+
+.container .card,
+.container .modern-panel,
+.container .table-section {
+  background:
+    linear-gradient(90deg, #155fb8, #1583b8 52%, #5d4db8) top / 100% 4px no-repeat,
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 252, 0.92) 54%, rgba(237, 241, 250, 0.92)) padding-box,
+    linear-gradient(135deg, rgba(21, 95, 184, 0.34), rgba(21, 131, 184, 0.22), rgba(93, 77, 184, 0.28)) border-box !important;
+  border: 1px solid transparent !important;
+  box-shadow:
+    0 18px 40px rgba(20, 53, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
 }

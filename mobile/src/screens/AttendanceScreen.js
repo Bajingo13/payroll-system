@@ -160,6 +160,17 @@ export default function AttendanceScreen({ navigation }) {
           ))}
         </View>
 
+        {/* Correction request shortcut */}
+        <TouchableOpacity
+          style={s.correctionBanner}
+          onPress={() => navigation.navigate('AttendanceCorrection')}
+          activeOpacity={0.82}
+        >
+          <Ionicons name="create-outline" size={16} color="#1d4ed8" />
+          <Text style={s.correctionBannerText}>Request Attendance Correction</Text>
+          <Ionicons name="chevron-forward" size={15} color="#60a5fa" />
+        </TouchableOpacity>
+
         {/* Date filter */}
         <View style={s.filterRow}>
           <TouchableOpacity style={s.filterInput} onPress={() => setActivePicker('from')}>
@@ -307,6 +318,8 @@ const s = StyleSheet.create({
   summaryPill: { flex: 1, alignItems: 'center', borderRadius: 14, paddingVertical: 10, gap: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   summaryCount: { fontSize: 18, fontWeight: '900' },
   summaryLabel: { fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.4 },
+  correctionBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.13)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', marginBottom: 10 },
+  correctionBannerText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#bfdbfe' },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   filterInput: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   filterText: { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600', marginLeft: 6 },
