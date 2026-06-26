@@ -728,27 +728,54 @@ export default function PayrollComputationPage() {
   }
 
   async function getPayrollRunEmployeeState(rid) {
-    const selectedGrp = meta.payrollGroups.find(g => String(g.group_id) === String(filters.payroll_group));
-    const [{ data:empCheck }, { data:empData }] = await Promise.all([
+    const selectedGrp = meta.payrollGroups.find(
+      g => String(g.group_id) === String(filters.payroll_group)
+    );
+
+    const [{ data: empCheck }, { data: empData }] = await Promise.all([
       rid
         ? api.get(`/payroll_runs/${rid}/employees`)
         : Promise.resolve({ data: { employees: [] } }),
+
       api.get('/employees_for_payroll', {
         params: {
-          option:'active',
-          company:filters.company||'', location:filters.location||'',
-          branch:filters.branch||'', division:filters.division||'',
-          department:filters.department||'', class:filters.class||'',
-          position:filters.position||'', empType:filters.empType||'',
-          salaryType:filters.salaryType||'', payroll_period: selectedGrp?.group_name || '',
+          option: 'active',
+          company: filters.company || '',
+          location: filters.location || '',
+          branch: filters.branch || '',
+          division: filters.division || '',
+          department: filters.department || '',
+          class: filters.class || '',
+          position: filters.position || '',
+          empType: filters.empType || '',
+          salaryType: filters.salaryType || '',
+          payroll_period: selectedGrp?.group_name || '',
           period_start: payrollPeriodBounds.start || '',
           period_end: payrollPeriodBounds.end || ''
         }
       })
     ]);
-    const existingRunEmpIds = new Set((empCheck.employees || []).map(emp => String(emp.employee_id)));
-    const missing = (empData.employees || []).filter(emp => !existingRunEmpIds.has(String(emp.employee_id)));
-    return { existing: empCheck.employees || [], missing };
+
+    const uniqueEmployees = (list) =>
+      Array.from(
+        new Map((list || []).map(e => [e.employee_id, e])).values()
+      );
+
+    empData.employees = uniqueEmployees(empData.employees);
+    empCheck.employees = uniqueEmployees(empCheck.employees);
+
+    const existingRunEmpIds = new Set(
+      empCheck.employees.map(emp => String(emp.employee_id))
+    );
+
+    const missing = empData.employees.filter(
+      emp => !existingRunEmpIds.has(String(emp.employee_id))
+    );
+
+    return {
+      existing: empCheck.employees,
+      missing
+    };
   }
 
   async function proceedToComputation() {

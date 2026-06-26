@@ -210,7 +210,6 @@ module.exports = function (app, pool) {
         if (rate === 'HOURLY') return roundMoney(amount * hoursInDay * daysInYear / 12);
         if (rate === 'WEEKLY') return roundMoney(amount * weekInYear / 12);
         const result = roundMoney(amount); // MONTHLY or PIECE RATE
-        console.log(`Computed monthly salary from main_computation=${mainComputation}, payroll_rate=${payrollRate}, rate=${rate} => ${result}`);
         return result;
     }
 
@@ -1156,7 +1155,6 @@ module.exports = function (app, pool) {
             "INSERT INTO audit_logs (user_id, admin_name, action, status) VALUES (?, ?, ?, ?)",
             [user_id, admin_name, action, status]
             );
-            console.log(`Audit logged: ${admin_name} → ${action}`);
         } catch (err) {
             console.error("Failed to log audit:", err.message);
         } finally {
