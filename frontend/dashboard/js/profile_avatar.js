@@ -176,13 +176,8 @@ function setupProfilePictureManager() {
 function setupSidebarDropdownClicks() {
   document.querySelectorAll('.sidebar .dropdown > .dropdown-toggle').forEach((toggle) => {
     const dropdown = toggle.closest('.dropdown');
-    if (!dropdown || toggle.dataset.clickToggleReady === 'true') return;
-
-    toggle.dataset.clickToggleReady = 'true';
-    toggle.addEventListener('click', (event) => {
-      event.preventDefault();
-      dropdown.classList.toggle('open');
-    });
+    dropdown?.classList.remove('open');
+    toggle.removeAttribute('data-click-toggle-ready');
   });
 }
 

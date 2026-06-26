@@ -564,18 +564,8 @@ function setupFeatureNavigation() {
 function setupSidebarDropdownClicks() {
   document.querySelectorAll(".sidebar .dropdown > .dropdown-toggle").forEach((toggle) => {
     const dropdown = toggle.closest(".dropdown");
-    if (!dropdown || toggle.dataset.clickToggleReady === "true") return;
-
-    toggle.dataset.clickToggleReady = "true";
-    toggle.addEventListener("click", (event) => {
-      event.preventDefault();
-      document.querySelectorAll(".sidebar .dropdown.open").forEach((openDropdown) => {
-        if (openDropdown !== dropdown) {
-          openDropdown.classList.remove("open");
-        }
-      });
-      dropdown.classList.toggle("open");
-    });
+    dropdown?.classList.remove("open");
+    toggle.removeAttribute("data-click-toggle-ready");
   });
 }
 

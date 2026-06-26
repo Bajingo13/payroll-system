@@ -175,26 +175,6 @@ export default function AppLayout() {
     .map((part) => part[0])
     .join('')
     .toUpperCase() || 'U';
-  const isEmployeeManagementPath = location.pathname.startsWith('/employee-') ||
-    location.pathname === '/organization-setup' ||
-    location.pathname === '/leave-management' ||
-    location.pathname === '/overtime-management' ||
-    location.pathname === '/schedule-management' ||
-    location.pathname === '/performance-management';
-  const isPayrollReportPath = location.pathname.startsWith('/reports') ||
-    location.pathname === '/government-reports' ||
-    location.pathname === '/report-builder' ||
-    location.pathname === '/year-end-payroll' ||
-    location.pathname === '/loan-deduction-management';
-  const isAdvancedModulesPath = [
-    '/advanced-modules',
-    '/security-backup',
-    '/leave-calendar',
-    '/company-settings',
-    '/system-config',
-    '/user-settings'
-  ].includes(location.pathname);
-
   const employeeNav = [
     { to: '/dashboard', label: 'Dashboard', feature: 'dashboard' },
     { to: '/personal-management', label: 'Personal Management', feature: 'personal-management' },
@@ -245,20 +225,19 @@ export default function AppLayout() {
   const visibleAdminReportNav = adminReportNav.filter((item) => hasFeature(item.feature));
   const visibleAdminToolsNav = adminToolsNav.filter((item) => hasFeature(item.feature));
 
-  useEffect(() => {
-    setOpenGroups((current) => ({
-      ...current,
-      employeeManagement: isEmployeeManagementPath ? true : current.employeeManagement,
-      payrollReports: isPayrollReportPath ? true : current.payrollReports,
-      advancedModules: isAdvancedModulesPath ? true : current.advancedModules
-    }));
-  }, [isEmployeeManagementPath, isPayrollReportPath, isAdvancedModulesPath]);
-
   function toggleGroup(groupKey) {
     setOpenGroups((current) => ({
       ...current,
       [groupKey]: !current[groupKey]
     }));
+  }
+
+  function openGroup(groupKey) {
+    setOpenGroups((current) => ({ ...current, [groupKey]: true }));
+  }
+
+  function closeGroup(groupKey) {
+    setOpenGroups((current) => ({ ...current, [groupKey]: false }));
   }
 
   return (
@@ -309,7 +288,11 @@ export default function AppLayout() {
                 {visibleHrWorkforceNav.length ? (
                   <>
                     <li className="nav-section-label">HRIS</li>
-                    <li className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}>
+                    <li
+                      className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}
+                      onMouseEnter={() => openGroup('employeeManagement')}
+                      onMouseLeave={() => closeGroup('employeeManagement')}
+                    >
                       <button
                         type="button"
                         className="sidebar-group-trigger"
@@ -337,7 +320,11 @@ export default function AppLayout() {
                 <li><NavLink to="/dashboard">Dashboard</NavLink></li>
 
                 <li className="nav-section-label">HRIS</li>
-                <li className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}>
+                <li
+                  className={`nav-group ${openGroups.employeeManagement ? 'open' : ''}`}
+                  onMouseEnter={() => openGroup('employeeManagement')}
+                  onMouseLeave={() => closeGroup('employeeManagement')}
+                >
                   <button
                     type="button"
                     className="sidebar-group-trigger"
@@ -357,7 +344,11 @@ export default function AppLayout() {
                 <li><NavLink to="/year-end-payroll">Year-End Payroll</NavLink></li>
                 <li><NavLink to="/loan-deduction-management">Loan Deductions</NavLink></li>
                 {visibleAdminReportNav.length ? (
-                  <li className={`nav-group ${openGroups.payrollReports ? 'open' : ''}`}>
+                  <li
+                    className={`nav-group ${openGroups.payrollReports ? 'open' : ''}`}
+                    onMouseEnter={() => openGroup('payrollReports')}
+                    onMouseLeave={() => closeGroup('payrollReports')}
+                  >
                     <button
                       type="button"
                       className="sidebar-group-trigger"

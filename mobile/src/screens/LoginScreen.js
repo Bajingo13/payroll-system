@@ -189,12 +189,12 @@ export default function LoginScreen() {
 
   return (
     <>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
-        {/* Mid-tone blue gradient */}
+        {/* Light background */}
         <LinearGradient
-          colors={['#0f2044', '#163370', '#1a4090']}
+          colors={['#f4f8ff', '#eef4fd', '#e8f0fc']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -222,6 +222,7 @@ export default function LoginScreen() {
               <View style={s.pillDot} />
               <Text style={s.pillText}>HRIS Mobile</Text>
             </View>
+
           </View>
 
           {/* ── White Card ── */}
@@ -247,7 +248,7 @@ export default function LoginScreen() {
                     <TextInput
                       style={s.input}
                       placeholder="Enter your username"
-                      placeholderTextColor="#cbd5e1"
+                      placeholderTextColor="#94a3b8"
                       value={username}
                       onChangeText={v => { setUsername(v); setError(''); setAttemptsLeft(null); }}
                       autoCapitalize="none" autoCorrect={false}
@@ -270,7 +271,7 @@ export default function LoginScreen() {
                       ref={passwordRef}
                       style={[s.input, { flex: 1 }]}
                       placeholder="Enter your password"
-                      placeholderTextColor="#cbd5e1"
+                      placeholderTextColor="#94a3b8"
                       value={password}
                       onChangeText={v => { setPassword(v); setError(''); setAttemptsLeft(null); }}
                       secureTextEntry={!showPassword}
@@ -346,7 +347,7 @@ export default function LoginScreen() {
                     <TextInput
                       style={[s.input, s.otpInput]}
                       placeholder="000000"
-                      placeholderTextColor="#64748b"
+                      placeholderTextColor="#94a3b8"
                       value={otp}
                       onChangeText={v => { setOtp(v.replace(/\D/g, '').slice(0, 6)); setError(''); }}
                       keyboardType="number-pad"
@@ -496,18 +497,18 @@ export default function LoginScreen() {
 const s = StyleSheet.create({
   scroll: { flexGrow: 1, paddingBottom: 0 },
 
-  // Decorative circles on blue bg
+  // Decorative circles — soft blue tints on light bg
   circle1: {
-    position: 'absolute', width: 300, height: 300, borderRadius: 150,
-    backgroundColor: 'rgba(255,255,255,0.07)', top: -80, right: -80,
+    position: 'absolute', width: 320, height: 320, borderRadius: 160,
+    backgroundColor: 'rgba(17,110,219,0.07)', top: -100, right: -80,
   },
   circle2: {
-    position: 'absolute', width: 180, height: 180, borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.05)', top: 160, left: -60,
+    position: 'absolute', width: 200, height: 200, borderRadius: 100,
+    backgroundColor: 'rgba(93,77,184,0.06)', top: 180, left: -70,
   },
   circle3: {
-    position: 'absolute', width: 120, height: 120, borderRadius: 60,
-    backgroundColor: 'rgba(255,255,255,0.06)', top: 80, left: SW * 0.6,
+    position: 'absolute', width: 130, height: 130, borderRadius: 65,
+    backgroundColor: 'rgba(14,165,233,0.07)', top: 90, left: SW * 0.6,
   },
 
   // Hero
@@ -515,81 +516,81 @@ const s = StyleSheet.create({
   logo: { width: 240, height: 78 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(17,110,219,0.1)',
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1, borderColor: 'rgba(17,110,219,0.18)',
   },
-  pillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' },
-  pillText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  pillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' },
+  pillText: { color: '#1460b8', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
-  // Mid-dark card
+  // White card
   card: {
-    backgroundColor: '#122040',
+    backgroundColor: '#ffffff',
     borderTopLeftRadius: 36, borderTopRightRadius: 36,
     paddingHorizontal: 28, paddingTop: 10, paddingBottom: 40,
     flex: 1,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderBottomWidth: 0,
-    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 24, elevation: 18,
+    borderWidth: 1, borderColor: 'rgba(17,110,219,0.1)', borderBottomWidth: 0,
+    shadowColor: '#1155cc', shadowOpacity: 0.12, shadowRadius: 24, elevation: 12,
   },
   accentLine: { height: 3, width: 60, borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
-  title: { fontSize: 26, fontWeight: '900', color: '#f1f5f9', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#94a3b8', marginBottom: 28 },
+  title: { fontSize: 26, fontWeight: '900', color: '#0f172a', marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#64748b', marginBottom: 28 },
 
   // Fields
   fieldWrap: { marginBottom: 18 },
   label: {
-    fontSize: 12, fontWeight: '700', color: '#7ea8d4',
+    fontSize: 12, fontWeight: '700', color: '#475569',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8,
   },
   field: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0d1a30', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#1e3a5f', height: 56,
+    backgroundColor: '#f8fafc', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#e2e8f0', height: 56,
   },
   fieldOn: {
-    borderColor: '#3b82f6', backgroundColor: '#0f2248',
-    shadowColor: '#3b82f6', shadowOpacity: 0.2, shadowRadius: 8, elevation: 3,
+    borderColor: '#3b82f6', backgroundColor: '#ffffff',
+    shadowColor: '#3b82f6', shadowOpacity: 0.15, shadowRadius: 8, elevation: 3,
   },
   iconBox: {
     width: 36, height: 36, borderRadius: 10, margin: 10,
-    backgroundColor: '#1e3a5f', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center',
   },
   iconBoxOn: { backgroundColor: '#3b82f6' },
-  input: { flex: 1, fontSize: 15, color: '#e2e8f0', fontWeight: '500' },
+  input: { flex: 1, fontSize: 15, color: '#0f172a', fontWeight: '500' },
   eye: { padding: 14 },
 
   toast: { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#bbf7d0', elevation: 6, zIndex: 99 },
-  toastText: { color: '#34d399', fontWeight: '700', fontSize: 13 },
+  toastText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
 
-  // Error
+  // Error / warning
   errBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+    backgroundColor: '#fef2f2', borderRadius: 12,
+    borderWidth: 1, borderColor: '#fecaca',
     paddingHorizontal: 14, paddingVertical: 10, marginBottom: 18,
   },
-  errText: { color: '#f87171', fontSize: 13, flex: 1 },
+  errText: { color: '#b91c1c', fontSize: 13, flex: 1 },
   warnBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(245,158,11,0.28)',
+    backgroundColor: '#fffbeb', borderRadius: 12,
+    borderWidth: 1, borderColor: '#fde68a',
     paddingHorizontal: 14, paddingVertical: 10, marginBottom: 18,
   },
-  warnText: { color: '#fbbf24', fontSize: 13, flex: 1 },
+  warnText: { color: '#92400e', fontSize: 13, flex: 1 },
   verifyHeader: { alignItems: 'center', marginBottom: 22 },
   verifyIcon: {
     width: 48, height: 48, borderRadius: 14,
-    backgroundColor: '#0f2248', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#1e3a5f', marginBottom: 12,
+    backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#bfdbfe', marginBottom: 12,
   },
-  verifyTitle: { color: '#f1f5f9', fontSize: 18, fontWeight: '900', marginBottom: 8 },
-  verifyCopy: { color: '#94a3b8', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  verifyTitle: { color: '#0f172a', fontSize: 18, fontWeight: '900', marginBottom: 8 },
+  verifyCopy: { color: '#64748b', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   otpInput: { textAlign: 'center', letterSpacing: 8, fontSize: 18, fontWeight: '900' },
   verifyActions: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginTop: -10, marginBottom: 20,
   },
-  disabledLink: { color: '#64748b' },
+  disabledLink: { color: '#94a3b8' },
 
   // Button
   btnWrap: { borderRadius: 16, overflow: 'hidden', marginBottom: 28, marginTop: 4 },
@@ -600,45 +601,45 @@ const s = StyleSheet.create({
   btnText: { color: '#fff', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
   btnArrow: {
     width: 30, height: 30, borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
   },
 
   // Forgot password link
   forgotBtn: { alignSelf: 'center', marginBottom: 20, marginTop: -10 },
-  forgotText: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+  forgotText: { color: '#2563eb', fontSize: 13, fontWeight: '700' },
 
   // Footer
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  footerLine: { flex: 1, height: 1, backgroundColor: '#1e3a5f', opacity: 0.6 },
-  footerText: { fontSize: 10, color: '#64748b', fontWeight: '500' },
+  footerLine: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
+  footerText: { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
 
   // Forgot password modal
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    flex: 1, backgroundColor: 'rgba(15,23,42,0.45)',
     alignItems: 'center', justifyContent: 'center',
   },
   modalKAV: { width: '90%', maxWidth: 380 },
   modalCard: {
-    backgroundColor: '#122040',
+    backgroundColor: '#ffffff',
     borderRadius: 24, padding: 24,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 24, elevation: 20,
+    borderWidth: 1, borderColor: 'rgba(17,110,219,0.12)',
+    shadowColor: '#1155cc', shadowOpacity: 0.15, shadowRadius: 24, elevation: 20,
   },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: 12,
   },
-  modalTitle: { fontSize: 20, fontWeight: '900', color: '#f1f5f9' },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a' },
   modalClose: {
     width: 32, height: 32, borderRadius: 10,
-    backgroundColor: '#1e3a5f', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center',
   },
-  modalIntro: { fontSize: 13, color: '#94a3b8', marginBottom: 20, lineHeight: 19 },
+  modalIntro: { fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 19 },
   successBox: {
-    backgroundColor: 'rgba(22,163,74,0.1)',
-    borderColor: 'rgba(22,163,74,0.25)',
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
   },
-  successText: { color: '#4ade80' },
+  successText: { color: '#15803d' },
   cancelBtn: { alignSelf: 'center', marginTop: 10 },
   cancelText: { color: '#64748b', fontSize: 13, fontWeight: '600' },
 });
