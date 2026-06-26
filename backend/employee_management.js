@@ -1,9 +1,57 @@
 const { createNotification } = require('./notificationHelper');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+const { buildEmail } = require('./emailTemplate');
 
 module.exports = function (app, pool) {
     const puppeteer = require('puppeteer');
     const bcrypt = require('bcryptjs');
     const allowedSystemAccountRoles = ['Employee', 'HR', 'Admin'];
+
+    function generateTempPassword() {
+        const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+        return Array.from({ length: 10 }, () => chars[crypto.randomInt(0, chars.length)]).join('');
+    }
+
+    function maskEmail(email) {
+        const [local, domain] = String(email || '').split('@');
+        if (!domain) return '***';
+        const visible = local.length <= 2
+            ? '*'.repeat(local.length)
+            : local[0] + '*'.repeat(Math.min(local.length - 2, 4)) + local[local.length - 1];
+        return `${visible}@${domain}`;
+    }
+
+    async function sendNewAccountEmail(email, fullName, username, tempPassword) {
+        const gmailUser = process.env.GMAIL_USER || process.env.SMTP_USER;
+        const gmailPass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS;
+        if (!gmailUser || !gmailPass || !email) return false;
+        try {
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: { user: gmailUser, pass: gmailPass },
+            });
+            await transporter.sendMail({
+                from: { name: process.env.MAIL_FROM_NAME || 'Astreablue Intelligence Inc.', address: gmailUser },
+                to: String(email).trim(),
+                subject: 'Your Account Has Been Created — AstreaBlue HRIS',
+                html: buildEmail({
+                    title: 'Welcome to AstreaBlue HRIS',
+                    recipientName: fullName || username || 'there',
+                    intro: 'An account has been created for you on the AstreaBlue HRIS system. Use the credentials below to log in. You will be required to change your password on first login.',
+                    rows: [
+                        { label: 'Username',           value: username },
+                        { label: 'Temporary Password', value: `<strong style="font-size:1.1rem;letter-spacing:0.1em">${tempPassword}</strong>`, isStatus: true },
+                    ],
+                    closing: 'For security, please change your password immediately after logging in.',
+                }),
+            });
+            return true;
+        } catch (e) {
+            console.error('New account email error:', e.message);
+            return false;
+        }
+    }
 
     function canManageSystemAccounts(role) {
         const value = String(role || '').trim().toLowerCase();
@@ -213,12 +261,6 @@ module.exports = function (app, pool) {
             throw err;
         }
 
-        if (!account.userId && !account.password) {
-            const err = new Error('Password is required for the employee system account.');
-            err.statusCode = 400;
-            throw err;
-        }
-
         if (account.password && account.password.length < 8) {
             const err = new Error('Password must be at least 8 characters.');
             err.statusCode = 400;
@@ -276,17 +318,28 @@ module.exports = function (app, pool) {
         }
 
         const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
-        const hashedPassword = await bcrypt.hash(account.password, bcryptRounds);
+        const isTempPassword = !account.password;
+        const finalPassword = account.password || generateTempPassword();
+        const hashedPassword = await bcrypt.hash(finalPassword, bcryptRounds);
         const [result] = await conn.execute(
-            "INSERT INTO users (username, password, full_name, role, email, account_status) VALUES (?, ?, ?, ?, ?, 'Active')",
-            [account.username, hashedPassword, account.fullName, account.role, account.email]
+            "INSERT INTO users (username, password, full_name, role, email, account_status, is_temp_password) VALUES (?, ?, ?, ?, ?, 'Active', ?)",
+            [account.username, hashedPassword, account.fullName, account.role, account.email, isTempPassword ? 1 : 0]
         );
+
+        let emailSent = false;
+        let tempPasswordForAdmin = null;
+        if (isTempPassword) {
+            emailSent = await sendNewAccountEmail(account.email, account.fullName, account.username, finalPassword);
+            if (!emailSent) tempPasswordForAdmin = finalPassword;
+        }
 
         return {
             user_id: result.insertId,
             username: account.username,
             role: account.role,
-            account_status: 'Active'
+            account_status: 'Active',
+            emailSent,
+            tempPassword: tempPasswordForAdmin,
         };
     }
 
@@ -866,12 +919,19 @@ module.exports = function (app, pool) {
             const adminName = req.body.admin_name || "Unknown";
             await logAudit(pool, userId, adminName, `Added Employee ${emp_code}`, "Success");
 
+            const acctMsg = systemAccountResult?.emailSent === true
+                ? ` Temporary password sent to ${maskEmail(systemAccountResult.email || email)}.`
+                : systemAccountResult?.tempPassword
+                    ? ` No email on record — temporary password: ${systemAccountResult.tempPassword}`
+                    : '';
+
             res.json({
                 success: true,
-                message: "Employee added successfully",
+                message: `Employee added successfully.${acctMsg}`,
                 emp_code,
                 systemAccount: systemAccountResult,
-                systemAccountUserId: systemAccountResult?.user_id || null
+                systemAccountUserId: systemAccountResult?.user_id || null,
+                tempPassword: systemAccountResult?.tempPassword || null,
             });
         } catch (err) {
             await conn.rollback().catch(() => {});

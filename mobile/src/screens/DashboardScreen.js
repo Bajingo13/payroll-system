@@ -124,6 +124,7 @@ export default function DashboardScreen({ navigation }) {
   const employee = data?.employee || {};
   const payrollSummary = data?.payrollSummary || null;
   const profilePhotoUrl = getAssetUrl(data?.profilePhotoUrl);
+  const shiftHours = Number(data?.payrollSettings?.hours_in_day) || 8;
 
   const workedSeconds = useMemo(() => {
     const timeIn = parseDateTime(todayState.timeIn);
@@ -153,7 +154,7 @@ export default function DashboardScreen({ navigation }) {
     : 'Not Started';
 
   const statusColor = isClockedIn ? '#15803d' : isOnBreak ? '#d97706' : '#64748b';
-  const progressPercent = Math.min(100, Math.round((workedSeconds / (8 * 3600)) * 100));
+  const progressPercent = Math.min(100, Math.round((workedSeconds / (shiftHours * 3600)) * 100));
 
   const timeButtons = useMemo(() => {
     const { hasTimeIn, hasBreakOut, hasBreakIn, hasTimeOut } = todayState;
@@ -297,7 +298,7 @@ export default function DashboardScreen({ navigation }) {
         <View style={s.progressBg}>
           <View style={[s.progressFill, { width: `${progressPercent}%` }]} />
         </View>
-        <Text style={s.progressLabel}>{progressPercent}% of 8-hour shift</Text>
+        <Text style={s.progressLabel}>{progressPercent}% of {shiftHours}-hour shift</Text>
       </View>
 
       {/* ── Body ── */}
@@ -344,8 +345,8 @@ export default function DashboardScreen({ navigation }) {
           <View style={s.otRow}>
             <Ionicons name="time-outline" size={14} color="#94a3b8" />
             <Text style={s.otLabel}>Overtime Today</Text>
-            <Text style={[s.otValue, { color: workedSeconds > 28800 ? '#15803d' : '#94a3b8' }]}>
-              {formatDuration(Math.max(0, workedSeconds - 28800))}
+            <Text style={[s.otValue, { color: workedSeconds > shiftHours * 3600 ? '#15803d' : '#94a3b8' }]}>
+              {formatDuration(Math.max(0, workedSeconds - shiftHours * 3600))}
             </Text>
           </View>
         </View>

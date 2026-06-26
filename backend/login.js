@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const https  = require('https');
 const nodemailer = require('nodemailer');
 const { buildEmail } = require('./emailTemplate');
+const { createNotificationsForAdminHr } = require('./notificationHelper');
 
 const MAX_ATTEMPTS = 3;
 const OTP_EXPIRY_MINUTES = Number(process.env.LOGIN_OTP_EXPIRY_MINUTES || 5);
@@ -69,6 +70,25 @@ module.exports = function (app, pool) {
     if (!existing.has('locked_at'))        await conn.execute('ALTER TABLE users ADD COLUMN locked_at DATETIME NULL');
     if (!existing.has('phone'))            await conn.execute('ALTER TABLE users ADD COLUMN phone VARCHAR(30) NULL');
     if (!existing.has('is_temp_password')) await conn.execute('ALTER TABLE users ADD COLUMN is_temp_password TINYINT(1) NOT NULL DEFAULT 0');
+
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS account_unlock_requests (
+        request_id    INT NOT NULL AUTO_INCREMENT,
+        user_id       INT NOT NULL,
+        username      VARCHAR(100) NOT NULL,
+        full_name     VARCHAR(150) NULL,
+        reason        TEXT NULL,
+        status        VARCHAR(20) NOT NULL DEFAULT 'pending',
+        requested_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        resolved_at   DATETIME NULL,
+        resolved_by   VARCHAR(150) NULL,
+        PRIMARY KEY (request_id),
+        KEY idx_unlock_req_user   (user_id),
+        KEY idx_unlock_req_status (status),
+        CONSTRAINT fk_unlock_req_user
+          FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
 
     // Back-fill email from employee_contacts for existing users
     await conn.execute(`
@@ -488,6 +508,96 @@ module.exports = function (app, pool) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // REQUEST UNLOCK (no auth — user is locked out)
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.post('/api/login/request-unlock', async (req, res) => {
+    await initReady;
+    const username = String(req.body?.username || '').trim();
+    const reason   = String(req.body?.reason   || '').trim().slice(0, 500);
+    if (!username) return res.status(400).json({ success: false, message: 'Username is required.' });
+
+    let conn;
+    try {
+      conn = await pool.getConnection();
+
+      const [rows] = await conn.execute(
+        "SELECT user_id, username, full_name, account_status FROM users WHERE username = ? LIMIT 1",
+        [username]
+      );
+      if (!rows.length) {
+        return res.status(404).json({ success: false, message: 'Username not found.' });
+      }
+      const user = rows[0];
+
+      if (user.account_status !== 'Locked') {
+        return res.status(400).json({ success: false, message: 'This account is not currently locked.' });
+      }
+
+      // Check for existing pending request
+      const [existing] = await conn.execute(
+        "SELECT request_id FROM account_unlock_requests WHERE user_id = ? AND status = 'pending' LIMIT 1",
+        [user.user_id]
+      );
+      if (existing.length) {
+        return res.json({ success: true, alreadyRequested: true, message: 'An unlock request has already been submitted for this account. Please wait for admin review.' });
+      }
+
+      await conn.execute(
+        "INSERT INTO account_unlock_requests (user_id, username, full_name, reason) VALUES (?, ?, ?, ?)",
+        [user.user_id, user.username, user.full_name, reason || null]
+      );
+
+      // In-app notification to all admins/HR
+      await createNotificationsForAdminHr(
+        pool,
+        'account_unlock',
+        'Account Unlock Request',
+        `${user.full_name || user.username} is requesting to unlock their locked account.${reason ? ` Reason: ${reason}` : ''}`
+      );
+
+      // Email notification to admins (best-effort)
+      try {
+        const transporter = getTransporter();
+        const cfg = getMailConfig();
+        if (transporter && cfg) {
+          const [admins] = await conn.execute(
+            `SELECT email, full_name FROM users
+             WHERE (LOWER(role) LIKE '%admin%' OR LOWER(role) LIKE '%hr%' OR LOWER(role) LIKE '%human resource%')
+               AND email IS NOT NULL AND email != ''
+               AND (account_status IS NULL OR LOWER(account_status) NOT IN ('deactivated','deleted'))
+             LIMIT 20`
+          );
+          for (const admin of admins) {
+            await transporter.sendMail({
+              from: cfg.from,
+              to: String(admin.email).trim(),
+              subject: 'Account Unlock Request — AstreaBlue HRIS',
+              html: buildEmail({
+                title: 'Account Unlock Request',
+                recipientName: admin.full_name || 'Admin',
+                intro: 'An employee is requesting to have their locked account unlocked.',
+                rows: [
+                  { label: 'Username',   value: user.username },
+                  { label: 'Full Name',  value: user.full_name || '—' },
+                  ...(reason ? [{ label: 'Reason', value: reason }] : []),
+                ],
+                closing: 'Please log in to the admin panel to review and unlock this account.',
+              }),
+            }).catch(() => {});
+          }
+        }
+      } catch (_) { /* non-critical */ }
+
+      return res.json({ success: true, message: 'Your unlock request has been sent to the administrator. You will be contacted once your account is reactivated.' });
+    } catch (err) {
+      console.error('REQUEST UNLOCK ERROR:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Server error.' });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // LOGOUT
   // ═══════════════════════════════════════════════════════════════════════════
   app.post('/api/logout', (req, res) => {
@@ -508,11 +618,17 @@ module.exports = function (app, pool) {
     try {
       conn = await pool.getConnection();
       const [rows] = await conn.execute(
-        `SELECT user_id, username, full_name, role, email, phone,
-                failed_attempts, locked_at, account_status
-         FROM users
-         WHERE account_status IN ('Locked','Deactivated')
-         ORDER BY locked_at DESC`
+        `SELECT u.user_id, u.username, u.full_name, u.role, u.email, u.phone,
+                u.failed_attempts, u.locked_at, u.account_status,
+                (SELECT r.reason FROM account_unlock_requests r
+                 WHERE r.user_id = u.user_id AND r.status = 'pending'
+                 ORDER BY r.requested_at DESC LIMIT 1) AS unlock_request_reason,
+                (SELECT r.requested_at FROM account_unlock_requests r
+                 WHERE r.user_id = u.user_id AND r.status = 'pending'
+                 ORDER BY r.requested_at DESC LIMIT 1) AS unlock_requested_at
+         FROM users u
+         WHERE u.account_status IN ('Locked','Deactivated')
+         ORDER BY u.locked_at DESC`
       );
       res.json({ success: true, data: rows });
     } catch (err) {
@@ -545,6 +661,13 @@ module.exports = function (app, pool) {
         "UPDATE users SET account_status='Active', failed_attempts=0, locked_at=NULL, password=?, is_temp_password=1 WHERE user_id=?",
         [hashed, targetUserId]
       );
+
+      // Resolve any pending unlock requests for this user
+      const adminName = req.session?.user?.full_name || 'Admin';
+      await conn.execute(
+        "UPDATE account_unlock_requests SET status='approved', resolved_at=NOW(), resolved_by=? WHERE user_id=? AND status='pending'",
+        [adminName, targetUserId]
+      ).catch(() => {});
 
       await conn.execute(
         "INSERT INTO audit_logs (user_id, admin_name, action, status) VALUES (?, ?, 'Account Unlock', 'Success')",
@@ -726,7 +849,7 @@ module.exports = function (app, pool) {
     if (sessionUserId && requestUserId && sessionUserId !== requestUserId) {
       return res.status(403).json({ success: false, message: 'Session user does not match the requested account.' });
     }
-    if (!currentPassword || !newPassword || !confirmPassword) return res.status(400).json({ success: false, message: 'All password fields are required.' });
+    if (!newPassword || !confirmPassword) return res.status(400).json({ success: false, message: 'New password and confirmation are required.' });
     if (newPassword !== confirmPassword) return res.status(400).json({ success: false, message: 'New password and confirmation do not match.' });
     if (newPassword.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
 
@@ -739,13 +862,19 @@ module.exports = function (app, pool) {
       }
       if (!userId) return res.status(401).json({ success: false, message: 'Please sign in again before changing your password.' });
 
-      const [rows] = await conn.execute('SELECT user_id, password FROM users WHERE user_id = ? LIMIT 1', [userId]);
+      const [rows] = await conn.execute('SELECT user_id, password, is_temp_password FROM users WHERE user_id = ? LIMIT 1', [userId]);
       if (!rows.length) return res.status(404).json({ success: false, message: 'User not found.' });
 
-      const stored = rows[0].password || '';
-      const isBcrypt = ['$2a$','$2b$','$2x$','$2y$'].some(p => stored.startsWith(p));
-      const match = isBcrypt ? await bcrypt.compare(currentPassword, stored) : stored === currentPassword;
-      if (!match) return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+      const isTempPw = Boolean(rows[0].is_temp_password);
+
+      if (!isTempPw) {
+        // Normal account: current password is required
+        if (!currentPassword) return res.status(400).json({ success: false, message: 'Current password is required.' });
+        const stored = rows[0].password || '';
+        const isBcrypt = ['$2a$','$2b$','$2x$','$2y$'].some(p => stored.startsWith(p));
+        const match = isBcrypt ? await bcrypt.compare(currentPassword, stored) : stored === currentPassword;
+        if (!match) return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+      }
 
       const hashed = await bcrypt.hash(newPassword, parseInt(process.env.BCRYPT_ROUNDS, 10) || 12);
       await conn.execute('UPDATE users SET password = ?, is_temp_password = 0 WHERE user_id = ?', [hashed, userId]);
@@ -800,10 +929,13 @@ module.exports = function (app, pool) {
   // ═══════════════════════════════════════════════════════════════════════════
   app.post('/api/register', async (req, res) => {
     await initReady;
-    const { username, password, full_name, role } = req.body || {};
-    if (!username || !password || !full_name || !role) return res.status(400).json({ success: false, message: 'All fields are required.' });
+    const { username, password, full_name, role, email } = req.body || {};
+    if (!username || !full_name || !role) return res.status(400).json({ success: false, message: 'Username, full name, and role are required.' });
     if (!['Employee','HR','Admin'].includes(role)) return res.status(400).json({ success: false, message: 'Invalid role.' });
-    if (password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+
+    // If password provided manually, validate it; otherwise auto-generate a temp password
+    const useManualPassword = Boolean(password);
+    if (useManualPassword && password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
 
     let conn;
     try {
@@ -811,12 +943,36 @@ module.exports = function (app, pool) {
       const [existing] = await conn.execute('SELECT user_id FROM users WHERE username = ? LIMIT 1', [username]);
       if (existing.length) return res.status(409).json({ success: false, message: 'Username already exists.' });
 
-      const hashed = await bcrypt.hash(password, parseInt(process.env.BCRYPT_ROUNDS, 10) || 12);
+      const finalPassword = useManualPassword ? password : generateTempPassword();
+      const isTempPassword = useManualPassword ? 0 : 1;
+      const hashed = await bcrypt.hash(finalPassword, parseInt(process.env.BCRYPT_ROUNDS, 10) || 12);
+      const resolvedEmail = String(email || '').trim().toLowerCase() || null;
+
       const [result] = await conn.execute(
-        "INSERT INTO users (username, password, full_name, role, account_status) VALUES (?, ?, ?, ?, 'Active')",
-        [username, hashed, full_name, role]
+        "INSERT INTO users (username, password, full_name, role, account_status, email, is_temp_password) VALUES (?, ?, ?, ?, 'Active', ?, ?)",
+        [username, hashed, full_name, role, resolvedEmail, isTempPassword]
       );
-      return res.json({ success: true, user_id: result.insertId, message: 'Registration successful.' });
+
+      let emailSent = false;
+      if (isTempPassword && resolvedEmail) {
+        emailSent = await sendTempPasswordEmail(
+          { email: resolvedEmail, full_name, username },
+          finalPassword
+        );
+      }
+
+      return res.json({
+        success: true,
+        user_id: result.insertId,
+        emailSent,
+        isTempPassword: Boolean(isTempPassword),
+        message: isTempPassword
+          ? (emailSent
+              ? `Account created. Temporary password sent to ${maskEmail(resolvedEmail)}.`
+              : `Account created. No email on record — temporary password: ${finalPassword}`)
+          : 'Account created successfully.',
+        tempPassword: (isTempPassword && !emailSent) ? finalPassword : undefined,
+      });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message || 'Server error.' });
     } finally {

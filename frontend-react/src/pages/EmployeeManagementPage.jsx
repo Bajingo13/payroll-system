@@ -967,9 +967,9 @@ export default function EmployeeManagementPage() {
       const account = addForm.systemAccount || {};
       if (!canCreateAccounts) return 'Only Admin and HR users can create employee accounts.';
       if (!account.username.trim()) return 'Username is required in Create Account Setting.';
-      if (!account.user_id && !account.password) return 'Password is required in Create Account Setting.';
-      if (account.password && account.password.length < 8) return 'Password must be at least 8 characters.';
-      if (account.password !== account.confirmPassword) return 'Passwords do not match in Create Account Setting.';
+      // For existing accounts only: validate password change fields if filled
+      if (account.user_id && account.password && account.password.length < 8) return 'Password must be at least 8 characters.';
+      if (account.user_id && account.password !== account.confirmPassword) return 'Passwords do not match in Create Account Setting.';
       if (!SYSTEM_ACCOUNT_ROLES.includes(account.role)) return 'Select a valid role in Create Account Setting.';
     }
 
@@ -1014,10 +1014,9 @@ export default function EmployeeManagementPage() {
             })
           : api.post('/register', {
               username: account.username,
-              password: account.password,
               full_name: fullName,
               role: account.role || 'Employee',
-              email: addForm.email
+              email: addForm.email,
             });
 
         const { data } = await accountRequest;
@@ -1042,6 +1041,9 @@ export default function EmployeeManagementPage() {
         const successMessage = data.message || `Account saved. Username '${account.username}' can now sign in.`;
         setMessage(successMessage);
         setSaveNotice(successMessage);
+        if (data.tempPassword) {
+          setMessage(`No email on record. Temporary password for ${account.username}: ${data.tempPassword} — please share this with the employee directly.`);
+        }
         return;
       }
 
@@ -1069,8 +1071,12 @@ export default function EmployeeManagementPage() {
           confirmPassword: ''
         }
       }));
-      setMessage(`${tabLabel} saved successfully.`);
-      setSaveNotice(`${tabLabel} saved successfully.`);
+      const successMsg = data.message || `${tabLabel} saved successfully.`;
+      setMessage(successMsg);
+      setSaveNotice(successMsg);
+      if (data.tempPassword) {
+        setMessage(`${successMsg} No email on record — temporary password for ${addForm.systemAccount?.username || 'this account'}: ${data.tempPassword} — please share this with the employee directly.`);
+      }
       void Promise.all([loadSummary(), loadEmployeeList()]).catch(() => {});
     } catch (err) {
       setMessage(getApiMessage(err, 'Unable to save employee.'));
@@ -1309,44 +1315,56 @@ export default function EmployeeManagementPage() {
           </div>
           <div>
             <h4>Password</h4>
-            {renderFormRow(account.user_id ? 'New Password:' : 'Password:', (
-              <div className="password-field compact">
-                <input
-                  type={showAccountPassword ? 'text' : 'password'}
-                  value={account.password || ''}
-                  onChange={(event) => updateNestedAddField('systemAccount', 'password', event.target.value)}
-                  placeholder={account.user_id ? 'Leave blank to keep current password' : ''}
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowAccountPassword((current) => !current)}
-                  aria-label={showAccountPassword ? 'Hide password' : 'Show password'}
-                  title={showAccountPassword ? 'Hide password' : 'Show password'}
-                >
-                  <PasswordToggleIcon visible={showAccountPassword} />
-                </button>
+            {!account.user_id ? (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '0.85rem 1rem', fontSize: '0.86rem', color: '#1e40af', lineHeight: 1.6 }}>
+                <strong>Auto-generated temporary password</strong>
+                <p style={{ margin: '0.35rem 0 0' }}>
+                  A secure temporary password will be generated and sent to <strong>{addForm.email || 'the employee\'s email'}</strong> upon saving.
+                  The employee will be prompted to change it on their first login.
+                </p>
               </div>
-            ))}
-            {renderFormRow('Confirm Password:', (
-              <div className="password-field compact">
-                <input
-                  type={showAccountConfirmPassword ? 'text' : 'password'}
-                  value={account.confirmPassword || ''}
-                  onChange={(event) => updateNestedAddField('systemAccount', 'confirmPassword', event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowAccountConfirmPassword((current) => !current)}
-                  aria-label={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
-                  title={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
-                >
-                  <PasswordToggleIcon visible={showAccountConfirmPassword} />
-                </button>
-              </div>
-            ))}
-            {account.user_id ? <p className="muted">Existing account found. Enter a new password only when changing it.</p> : null}
+            ) : (
+              <>
+                {renderFormRow('New Password:', (
+                  <div className="password-field compact">
+                    <input
+                      type={showAccountPassword ? 'text' : 'password'}
+                      value={account.password || ''}
+                      onChange={(event) => updateNestedAddField('systemAccount', 'password', event.target.value)}
+                      placeholder="Leave blank to keep current password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowAccountPassword((current) => !current)}
+                      aria-label={showAccountPassword ? 'Hide password' : 'Show password'}
+                      title={showAccountPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <PasswordToggleIcon visible={showAccountPassword} />
+                    </button>
+                  </div>
+                ))}
+                {renderFormRow('Confirm Password:', (
+                  <div className="password-field compact">
+                    <input
+                      type={showAccountConfirmPassword ? 'text' : 'password'}
+                      value={account.confirmPassword || ''}
+                      onChange={(event) => updateNestedAddField('systemAccount', 'confirmPassword', event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowAccountConfirmPassword((current) => !current)}
+                      aria-label={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
+                      title={showAccountConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <PasswordToggleIcon visible={showAccountConfirmPassword} />
+                    </button>
+                  </div>
+                ))}
+                <p className="muted">Enter a new password only when resetting this account's password.</p>
+              </>
+            )}
           </div>
         </div>
       </div>

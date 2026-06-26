@@ -11,6 +11,7 @@ const TYPE_META = {
   leave_status:     { icon: 'check', label: 'Leave Update',        route: '/employee-leave-request' },
   overtime_status:  { icon: 'check', label: 'Overtime Update',     route: '/employee-overtime-request' },
   evaluation:       { icon: 'chartUp', label: 'Evaluation',        route: '/personal-management' },
+  account_unlock:   { icon: 'lock', label: 'Unlock Request',       route: '/user-settings' },
 };
 
 function timeAgo(dateStr) {
@@ -67,6 +68,13 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [open]);
 
+  function resolveRoute(notif) {
+    if (TYPE_META[notif.type]?.route) return TYPE_META[notif.type].route;
+    // Fallback for existing 'system' notifications by title
+    if (notif.title?.toLowerCase().includes('unlock')) return '/user-settings';
+    return null;
+  }
+
   async function handleNotifClick(notif) {
     if (!notif.is_read) {
       try {
@@ -80,7 +88,7 @@ export default function NotificationBell() {
       }
     }
     setOpen(false);
-    const route = TYPE_META[notif.type]?.route;
+    const route = resolveRoute(notif);
     if (route) navigate(route);
   }
 
@@ -124,10 +132,11 @@ export default function NotificationBell() {
             ) : (
               notifications.map((n) => {
                 const meta = TYPE_META[n.type] || { icon: 'bell', label: n.type, route: null };
+                const clickable = !!resolveRoute(n);
                 return (
                   <div
                     key={n.notification_id}
-                    className={`notif-item${n.is_read ? '' : ' notif-item-unread'}${meta.route ? ' notif-item-clickable' : ''}`}
+                    className={`notif-item${n.is_read ? '' : ' notif-item-unread'}${clickable ? ' notif-item-clickable' : ''}`}
                     onClick={() => handleNotifClick(n)}
                     role="button"
                     tabIndex={0}

@@ -5,10 +5,11 @@ import { api } from '../api/client';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user,          setUser]          = useState(null);
-  const [loading,       setLoading]       = useState(true);
-  const [justLoggedIn,  setJustLoggedIn]  = useState(false);
-  const [justLoggedOut, setJustLoggedOut] = useState(false);
+  const [user,                 setUser]                 = useState(null);
+  const [loading,              setLoading]              = useState(true);
+  const [justLoggedIn,         setJustLoggedIn]         = useState(false);
+  const [justLoggedOut,        setJustLoggedOut]        = useState(false);
+  const [needsPasswordChange,  setNeedsPasswordChange]  = useState(false);
 
   useEffect(() => {
     AsyncStorage.multiGet(['user_id', 'full_name', 'role'])
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
       user_id: String(data.user_id),
       full_name: data.full_name || '',
       role: data.role || '',
+      isTempPassword: Boolean(data.isTempPassword),
     };
     await AsyncStorage.multiSet([
       ['user_id', nextUser.user_id],
@@ -57,12 +59,16 @@ export function AuthProvider({ children }) {
   const commitLogin = useCallback((nextUser) => {
     setUser(nextUser);
     setJustLoggedIn(true);
+    if (nextUser.isTempPassword) setNeedsPasswordChange(true);
   }, []);
+
+  const clearNeedsPasswordChange = useCallback(() => setNeedsPasswordChange(false), []);
 
   const logout = useCallback(async () => {
     try { await api.post('/logout'); } catch (_) {}
     await AsyncStorage.multiRemove(['user_id', 'full_name', 'role', 'session_cookie']);
     setJustLoggedOut(true);
+    setNeedsPasswordChange(false);
     setUser(null);
   }, []);
 
@@ -70,8 +76,8 @@ export function AuthProvider({ children }) {
   const clearLogoutFlag = useCallback(() => setJustLoggedOut(false), []);
 
   const value = useMemo(
-    () => ({ user, loading, login, finishLogin, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag }),
-    [user, loading, commitLogin, logout, justLoggedIn, justLoggedOut, clearLoginFlag, clearLogoutFlag]
+    () => ({ user, loading, login, finishLogin, commitLogin, logout, justLoggedIn, justLoggedOut, needsPasswordChange, clearNeedsPasswordChange, clearLoginFlag, clearLogoutFlag }),
+    [user, loading, commitLogin, logout, justLoggedIn, justLoggedOut, needsPasswordChange, clearNeedsPasswordChange, clearLoginFlag, clearLogoutFlag]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
