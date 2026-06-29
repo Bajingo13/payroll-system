@@ -6,6 +6,7 @@ import { api, getAssetUrl } from '../api/client.js';
 import { canAccessFeature, normalizeRole } from '../access/roleAccess.js';
 import astreaBlueLogo from '../assets/astreablue-logo.png';
 import NotificationBell from './NotificationBell.jsx';
+import AppIcon from './AppIcon.jsx';
 
 const SESSION_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_TIMEOUT_MS || 15 * 60 * 1000);
 
@@ -23,10 +24,36 @@ export default function AppLayout() {
   });
   const [, setRoleAccessVersion] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sys_company_profile') || '{}'); }
+    catch { return {}; }
+  });
 
   useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/company_settings')
+      .then(({ data }) => {
+        if (cancelled || !data?.data) return;
+        const company = data.data;
+        setCompanyProfile(company);
+        localStorage.setItem('sys_company_profile', JSON.stringify(company));
+        localStorage.setItem('sys_company_name', company.company_name || '');
+        document.documentElement.style.setProperty('--system-company-name', JSON.stringify(company.company_name || ''));
+        window.dispatchEvent(new CustomEvent('company-settings-updated', { detail: company }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const updateCompany = (event) => setCompanyProfile(event?.detail || {});
+    window.addEventListener('company-settings-updated', updateCompany);
+    return () => window.removeEventListener('company-settings-updated', updateCompany);
+  }, []);
 
   useEffect(() => {
     setAvatar(localStorage.getItem(avatarStorageKey) || '');
@@ -176,14 +203,14 @@ export default function AppLayout() {
     .join('')
     .toUpperCase() || 'U';
   const employeeNav = [
-    { to: '/dashboard', label: 'Dashboard', feature: 'dashboard' },
-    { to: '/personal-management', label: 'Personal Management', feature: 'personal-management' },
-    { to: '/employee-leave-request', label: 'Leave Request', feature: 'employee-leave-request' },
-    { to: '/employee-overtime-request', label: 'Overtime Request', feature: 'employee-overtime-request' },
-    { to: '/employee-attendance-correction', label: 'Attendance Correction', feature: 'employee-attendance-correction' },
-    { to: '/employee-payroll-information', label: 'Payroll Information', feature: 'employee-payroll-information' },
-    { to: '/employee-schedule', label: 'Schedule', feature: 'employee-schedule' },
-    { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' }
+    { to: '/dashboard', label: 'Dashboard', feature: 'dashboard', icon: 'chart' },
+    { to: '/personal-management', label: 'My Profile', feature: 'personal-management', icon: 'user' },
+    { to: '/employee-leave-request', label: 'Leave Requests', feature: 'employee-leave-request', icon: 'calendar' },
+    { to: '/employee-overtime-request', label: 'Overtime Requests', feature: 'employee-overtime-request', icon: 'time' },
+    { to: '/employee-attendance-correction', label: 'Attendance Correction', feature: 'employee-attendance-correction', icon: 'clipboard' },
+    { to: '/employee-payroll-information', label: 'Payslips & Payroll', feature: 'employee-payroll-information', icon: 'wallet' },
+    { to: '/employee-schedule', label: 'My Schedule', feature: 'employee-schedule', icon: 'briefcase' },
+    { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar', icon: 'world' }
   ];
 
   const hrWorkforceNav = [
@@ -209,6 +236,7 @@ export default function AppLayout() {
   ];
 
   const hrToolsNav = [
+    { to: '/government-reports', label: 'Government Reports', feature: 'government-reports' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' }
   ];
@@ -227,6 +255,29 @@ export default function AppLayout() {
   const visibleAdminReportNav = adminReportNav.filter((item) => hasFeature(item.feature));
   const visibleAdminToolsNav = adminToolsNav.filter((item) => hasFeature(item.feature));
 
+  function getSidebarIcon(to) {
+    if (to === '/dashboard') return 'chart';
+    if (to.includes('attendance')) return 'time';
+    if (to.includes('employee') || to.includes('organization') || to.includes('performance')) return 'users';
+    if (to.includes('leave') || to.includes('schedule')) return 'calendar';
+    if (to.includes('payroll') || to.includes('payslip') || to.includes('loan')) return 'wallet';
+    if (to.includes('government') || to.includes('reconciliation')) return 'building';
+    if (to.includes('report')) return 'document';
+    if (to.includes('security')) return 'shield';
+    if (to.includes('settings') || to.includes('config')) return 'wrench';
+    if (to.includes('utilities')) return 'briefcase';
+    return 'clipboard';
+  }
+
+  function sidebarLink(to, label, icon) {
+    return (
+      <NavLink className="sidebar-link-with-icon" to={to}>
+        <AppIcon name={icon || getSidebarIcon(to)} size={17} />
+        <span>{label}</span>
+      </NavLink>
+    );
+  }
+
   function toggleGroup(groupKey) {
     setOpenGroups((current) => ({
       ...current,
@@ -243,11 +294,15 @@ export default function AppLayout() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isEmployee ? ' employee-shell' : ''}`}>
       <aside className={`sidebar${drawerOpen ? ' mobile-open' : ''}`}>
         <div className="profile">
           <div className="logo">
-            <img src={astreaBlueLogo} alt="AstreaBlue" className="logo-img" />
+            <img
+              src={companyProfile.logo_main || companyProfile.logo_url || astreaBlueLogo}
+              alt={companyProfile.company_name || 'Company'}
+              className="logo-img"
+            />
             <span className="logo-tagline">HRIS · Payroll Platform</span>
           </div>
           <button
@@ -279,13 +334,15 @@ export default function AppLayout() {
               <>
                 <li className="nav-section-label">My Work</li>
                 {visibleEmployeeNav.map((item) => (
-                  <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                  <li key={item.to}>
+                    {sidebarLink(item.to, item.label, item.icon)}
+                  </li>
                 ))}
               </>
             ) : isHr ? (
               <>
                 <li className="nav-section-label">Overview</li>
-                {hasFeature('dashboard') ? <li><NavLink to="/dashboard">HR Dashboard</NavLink></li> : null}
+                {hasFeature('dashboard') ? <li>{sidebarLink('/dashboard', 'HR Dashboard')}</li> : null}
 
                 {visibleHrWorkforceNav.length ? (
                   <>
@@ -300,11 +357,11 @@ export default function AppLayout() {
                         className="sidebar-group-trigger"
                         onClick={() => toggleGroup('employeeManagement')}
                       >
-                        Employee Records
+                        <span className="sidebar-trigger-label"><AppIcon name="users" size={17} /> Employee Records</span>
                       </button>
                       <ul>
                         {visibleHrWorkforceNav.map((item) => (
-                          <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                          <li key={item.to}>{sidebarLink(item.to, item.label)}</li>
                         ))}
                       </ul>
                     </li>
@@ -313,13 +370,13 @@ export default function AppLayout() {
 
                 {visibleHrToolsNav.length ? <li className="nav-section-label">HR Tools</li> : null}
                 {visibleHrToolsNav.map((item) => (
-                  <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                  <li key={item.to}>{sidebarLink(item.to, item.label)}</li>
                 ))}
               </>
             ) : (
               <>
                 <li className="nav-section-label">Overview</li>
-                <li><NavLink to="/dashboard">Dashboard</NavLink></li>
+                <li>{sidebarLink('/dashboard', 'Dashboard')}</li>
 
                 <li className="nav-section-label">HRIS</li>
                 <li
@@ -332,19 +389,19 @@ export default function AppLayout() {
                     className="sidebar-group-trigger"
                     onClick={() => toggleGroup('employeeManagement')}
                   >
-                    Employee Management
+                    <span className="sidebar-trigger-label"><AppIcon name="users" size={17} /> Employee Management</span>
                   </button>
                   <ul>
                     {hrWorkforceNav.map((item) => (
-                      <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                      <li key={item.to}>{sidebarLink(item.to, item.label)}</li>
                     ))}
                   </ul>
                 </li>
 
                 <li className="nav-section-label">Payroll & Reports</li>
-                <li><NavLink to="/payroll-computation">Payroll Computation</NavLink></li>
-                <li><NavLink to="/year-end-payroll">Year-End Payroll</NavLink></li>
-                <li><NavLink to="/loan-deduction-management">Loan Deductions</NavLink></li>
+                <li>{sidebarLink('/payroll-computation', 'Payroll Computation')}</li>
+                <li>{sidebarLink('/year-end-payroll', 'Year-End Payroll')}</li>
+                <li>{sidebarLink('/loan-deduction-management', 'Loan Deductions')}</li>
                 {visibleAdminReportNav.length ? (
                   <li
                     className={`nav-group ${openGroups.payrollReports ? 'open' : ''}`}
@@ -356,11 +413,11 @@ export default function AppLayout() {
                       className="sidebar-group-trigger"
                       onClick={() => toggleGroup('payrollReports')}
                     >
-                      Payroll Summary Report
+                      <span className="sidebar-trigger-label"><AppIcon name="document" size={17} /> Payroll Summary Report</span>
                     </button>
                     <ul>
                       {visibleAdminReportNav.map((item) => (
-                        <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                        <li key={item.to}>{sidebarLink(item.to, item.label)}</li>
                       ))}
                     </ul>
                   </li>
@@ -368,7 +425,7 @@ export default function AppLayout() {
 
                 <li className="nav-section-label">System Tools</li>
                 {visibleAdminToolsNav.map((item) => (
-                  <li key={item.to}><NavLink to={item.to}>{item.label}</NavLink></li>
+                  <li key={item.to}>{sidebarLink(item.to, item.label)}</li>
                 ))}
               </>
             )}

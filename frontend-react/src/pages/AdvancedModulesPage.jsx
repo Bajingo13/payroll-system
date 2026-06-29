@@ -725,6 +725,37 @@ function ComplianceReports() {
   const [excludeZero, setExcludeZero] = useState(true);
   const [company, setCompany] = useState('');
   const [department, setDepartment] = useState('');
+  const [dashboard, setDashboard] = useState(null);
+  const [filingHistory, setFilingHistory] = useState([]);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [selectedReport, setSelectedReport] = useState('SSS-R3');
+  const [filing, setFiling] = useState({ status: 'Draft', filing_reference: '', payment_reference: '', filed_at: '', paid_at: '', amount_paid: '', notes: '', receipt_name: '', receipt_data: '' });
+
+  async function loadDashboard() {
+    setLoadingDashboard(true);
+    try {
+      const [dashboardResponse, historyResponse] = await Promise.all([
+        api.get('/government-reports/dashboard', { params: { year, month } }),
+        api.get('/government-reports/filings/history')
+      ]);
+      setDashboard(dashboardResponse.data);
+      setFilingHistory(historyResponse.data?.data || []);
+    } catch (err) {
+      setMessage(getApiMessage(err, 'Unable to load compliance dashboard.'));
+    } finally { setLoadingDashboard(false); }
+  }
+
+  useEffect(() => { loadDashboard(); }, [year, month]);
+
+  useEffect(() => {
+    const annual = ['BIR-2316', 'BIR-1604C', 'BIR-Alphalist'].includes(selectedReport);
+    const saved = dashboard?.filings?.find((item) => item.report_type === selectedReport && Number(item.report_month) === (annual ? 0 : Number(month)));
+    setFiling({
+      status: saved?.status || 'Draft', filing_reference: saved?.filing_reference || '', payment_reference: saved?.payment_reference || '',
+      filed_at: saved?.filed_at ? String(saved.filed_at).slice(0, 10) : '', paid_at: saved?.paid_at ? String(saved.paid_at).slice(0, 10) : '',
+      amount_paid: saved?.amount_paid || '', notes: saved?.notes || '', receipt_name: saved?.receipt_name || '', receipt_data: ''
+    });
+  }, [dashboard, selectedReport, month]);
 
   useEffect(() => {
     let alive = true;
@@ -800,6 +831,41 @@ function ComplianceReports() {
     }
   }
 
+  async function saveFiling() {
+    setBusy(true); setMessage('');
+    try {
+      await api.put(`/government-reports/filings/${encodeURIComponent(selectedReport)}`, { ...filing, year, month });
+      setMessage(`${selectedReport} filing record saved.`);
+      await loadDashboard();
+    } catch (err) { setMessage(getApiMessage(err, 'Unable to save filing record.')); }
+    finally { setBusy(false); }
+  }
+
+  function selectReceipt(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setMessage('Receipt must be smaller than 2 MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setFiling((prev) => ({ ...prev, receipt_name: file.name, receipt_data: String(reader.result || '') }));
+    reader.readAsDataURL(file);
+  }
+
+  async function downloadReceipt() {
+    try {
+      const response = await api.get(`/government-reports/filings/${encodeURIComponent(selectedReport)}/receipt`, { params: { year, month }, responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a'); link.href = url; link.download = filing.receipt_name || 'filing-receipt'; link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { setMessage(getApiMessage(err, 'Unable to download receipt.')); }
+  }
+
+  const reportCards = [
+    ['SSS-R3', 'SSS R3/R5', dashboard?.payroll?.sss_total, 'sss_employer_no'],
+    ['PhilHealth-RF1', 'PhilHealth RF-1', dashboard?.payroll?.philhealth_total, 'philhealth_pen'],
+    ['PagIBIG-MCRF', 'Pag-IBIG MCRF', dashboard?.payroll?.pagibig_total, 'pagibig_employer_id'],
+    ['BIR-1601C', 'BIR 1601-C', dashboard?.payroll?.bir_total, 'tin']
+  ];
+
   return (
     <section className="table-section">
       <div className="table-header">
@@ -814,6 +880,55 @@ function ComplianceReports() {
           <button type="button" className="btn" onClick={exportAll} disabled={busy}>{busy ? 'Exporting…' : 'Export All CSV'}</button>
         </div>
       </div>
+      {loadingDashboard ? <p className="empty-state">Checking compliance data...</p> : (
+        <>
+          <div className="dashboard-grid" style={{ marginBottom: 16 }}>
+            {reportCards.map(([key, label, total, employerField]) => {
+              const saved = dashboard?.filings?.find((item) => item.report_type === key && Number(item.report_month) === Number(month));
+              const ready = Boolean(dashboard?.company?.[employerField]) && Number(dashboard?.payroll?.employee_count || 0) > 0;
+              return <button key={key} type="button" className="card" onClick={() => setSelectedReport(key)} style={{ textAlign: 'left', cursor: 'pointer', border: selectedReport === key ? '2px solid var(--primary, #2563eb)' : undefined }}>
+                <small>{label}</small><h3 style={{ margin: '8px 0' }}>PHP {money(total)}</h3>
+                <span className={`status-badge ${saved?.status === 'Paid' ? 'approved' : ''}`}>{saved?.status || (ready ? 'Ready for validation' : 'Needs setup')}</span>
+              </button>;
+            })}
+          </div>
+
+          {(dashboard?.employerIssues?.length || dashboard?.employeeIssues?.length) ? (
+            <div className="card" style={{ marginBottom: 16, borderLeft: '4px solid #f59e0b' }}>
+              <h4 style={{ marginTop: 0 }}>Compliance issues</h4>
+              <p>{dashboard.employerIssues.length} employer field(s) and {dashboard.employeeIssues.length} employee record(s) need attention before filing.</p>
+              {dashboard.employerIssues.length ? <p><strong>Employer setup:</strong> {dashboard.employerIssues.map((item) => item.label).join(', ')}</p> : null}
+              {dashboard.employeeIssues.length ? <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Employee</th><th>Issues</th></tr></thead><tbody>
+                {dashboard.employeeIssues.slice(0, 20).map((row) => <tr key={row.employee_id}><td>{row.emp_code} - {row.employee_name}</td><td>{row.issues.join(', ')}</td></tr>)}
+              </tbody></table></div> : null}
+              <p><small>Complete employer IDs in Company Settings and employee IDs in Employee Management.</small></p>
+            </div>
+          ) : <p className="message">All employer and active employee compliance fields are complete.</p>}
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h4 style={{ marginTop: 0 }}>Filing lifecycle and proof of remittance</h4>
+            <div className="report-filter-grid">
+              <label>Report<select value={selectedReport} onChange={(e) => setSelectedReport(e.target.value)}>{(dashboard?.reportTypes || []).map((item) => <option key={item}>{item}</option>)}</select></label>
+              <label>Status<select value={filing.status} onChange={(e) => setFiling((prev) => ({ ...prev, status: e.target.value }))}>{(dashboard?.statuses || []).map((item) => <option key={item}>{item}</option>)}</select></label>
+              <label>Filing Reference<input value={filing.filing_reference} onChange={(e) => setFiling((prev) => ({ ...prev, filing_reference: e.target.value }))} /></label>
+              <label>Payment Reference<input value={filing.payment_reference} onChange={(e) => setFiling((prev) => ({ ...prev, payment_reference: e.target.value }))} /></label>
+              <label>Filed Date<input type="date" value={filing.filed_at} onChange={(e) => setFiling((prev) => ({ ...prev, filed_at: e.target.value }))} /></label>
+              <label>Paid Date<input type="date" value={filing.paid_at} onChange={(e) => setFiling((prev) => ({ ...prev, paid_at: e.target.value }))} /></label>
+              <label>Amount Paid<input type="number" min="0" step="0.01" value={filing.amount_paid} onChange={(e) => setFiling((prev) => ({ ...prev, amount_paid: e.target.value }))} /></label>
+              <label>Receipt / Confirmation<input type="file" accept="image/*,.pdf" onChange={selectReceipt} /><small>{filing.receipt_name || 'No proof attached'}</small>{filing.receipt_name && !filing.receipt_data ? <button type="button" className="btn btn-outline" onClick={downloadReceipt} style={{ marginTop: 6 }}>Download proof</button> : null}</label>
+              <label style={{ gridColumn: 'span 2' }}>Notes<textarea rows="3" value={filing.notes} onChange={(e) => setFiling((prev) => ({ ...prev, notes: e.target.value }))} /></label>
+              <div className="toolbar"><button type="button" className="btn" onClick={saveFiling} disabled={busy}>{busy ? 'Saving...' : 'Save Filing Record'}</button></div>
+            </div>
+            <p><small>Reports become locked after they are marked Filed or Paid. Every status change is retained in the audit history.</small></p>
+          </div>
+          {filingHistory.length ? <div className="card" style={{ marginBottom: 16 }}>
+            <h4 style={{ marginTop: 0 }}>Recent filing audit history</h4>
+            <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Report / Period</th><th>Status change</th><th>Changed by</th><th>Date</th></tr></thead><tbody>
+              {filingHistory.slice(0, 10).map((row) => <tr key={row.history_id}><td>{row.report_type} / {row.report_month ? `${row.report_month}/` : ''}{row.report_year}</td><td>{row.previous_status || 'New'} → {row.new_status}</td><td>{row.changed_by}</td><td>{new Date(row.created_at).toLocaleString()}</td></tr>)}
+            </tbody></table></div>
+          </div> : null}
+        </>
+      )}
       <SimpleTable headers={['Report', 'Purpose', 'Deadline']} rows={GOVERNMENT_REPORTS} />
 
       <div className="card" style={{ marginTop: 16 }}>

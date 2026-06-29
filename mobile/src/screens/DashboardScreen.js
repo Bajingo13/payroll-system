@@ -97,7 +97,14 @@ export default function DashboardScreen({ navigation }) {
   useEffect(() => { loadDashboard(); }, [user?.user_id]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => loadDashboard());
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadDashboard();
+      if (user?.user_id) {
+        api.get('/notifications', { params: { user_id: user.user_id } })
+          .then(({ data }) => setUnreadCount(Number(data.unread_count || 0)))
+          .catch(() => {});
+      }
+    });
     return unsubscribe;
   }, [navigation, user?.user_id]);
 

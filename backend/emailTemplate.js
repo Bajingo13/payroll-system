@@ -1,5 +1,13 @@
 'use strict';
 
+let defaultCompanyProfile = { company_name: 'Astreablue Intelligence Inc.' };
+
+function setDefaultCompanyProfile(profile) {
+  if (profile && typeof profile === 'object') {
+    defaultCompanyProfile = { ...defaultCompanyProfile, ...profile };
+  }
+}
+
 // ── HTML escape ───────────────────────────────────────────────────────────────
 function esc(value) {
   return String(value ?? '')
@@ -78,8 +86,12 @@ function buildEmail(opts) {
     rejectionReason,
     closing       = '',
     cta,
-    companyName   = 'AstreaBlue Intelligence Inc.',
+    companyName   = defaultCompanyProfile.company_name || 'Astreablue Intelligence Inc.',
   } = opts;
+
+  const companyAddress = defaultCompanyProfile.address || '';
+  const companyContact = [defaultCompanyProfile.email, defaultCompanyProfile.phone, defaultCompanyProfile.website].filter(Boolean).join(' • ');
+  const signatureLogo = defaultCompanyProfile.logo_email_signature || defaultCompanyProfile.logo_main || '';
 
   const rowsHtml = rows.map((r, i) =>
     detailRow(r.label, r.value, i, r.isStatus)
@@ -168,9 +180,12 @@ function buildEmail(opts) {
           <!-- ── Footer ── -->
           <tr>
             <td style="padding:20px 32px 28px;text-align:center;">
+              ${signatureLogo ? `<img src="${esc(signatureLogo)}" alt="${esc(companyName)}" style="display:block;max-width:180px;max-height:52px;object-fit:contain;margin:0 auto 12px;">` : ''}
               <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#1e3a8a;">
                 ${esc(companyName)}
               </p>
+              ${companyAddress ? `<p style="margin:0 0 3px;font-size:11px;color:#64748b;line-height:1.5;">${esc(companyAddress)}</p>` : ''}
+              ${companyContact ? `<p style="margin:0 0 8px;font-size:11px;color:#64748b;line-height:1.5;">${esc(companyContact)}</p>` : ''}
               <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.6;">
                 This is an automated message from the HRIS &amp; Payroll System.<br>
                 Please do not reply to this email.
@@ -193,4 +208,4 @@ function buildEmail(opts) {
 </html>`;
 }
 
-module.exports = { buildEmail, statusBadge, esc };
+module.exports = { buildEmail, statusBadge, esc, setDefaultCompanyProfile };

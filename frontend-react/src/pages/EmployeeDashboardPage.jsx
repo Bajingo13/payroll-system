@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import MobileAttendanceFlow from '../components/MobileAttendanceFlow.jsx';
+import AppIcon from '../components/AppIcon.jsx';
 
 function formatDateTime(value) {
   if (!value) return '-';
@@ -196,6 +198,38 @@ export default function EmployeeDashboardPage() {
         <div className="card"><span>Department</span><strong>{employee.department || '-'}</strong></div>
         <div className="card"><span>Position</span><strong>{employee.position || '-'}</strong></div>
         <div className="card"><span>Payroll Status</span><strong>{payrollSummary?.payroll_status || '-'}</strong></div>
+      </section>
+
+      <section className="employee-quick-actions" aria-label="Quick actions">
+        <div className="employee-section-heading">
+          <div>
+            <span>Self-service</span>
+            <h3>What would you like to do?</h3>
+          </div>
+          <p>Your most-used employee tools, one click away.</p>
+        </div>
+        <div className="employee-action-grid">
+          <Link to="/employee-leave-request" className="employee-action-card action-leave">
+            <span className="employee-action-icon"><AppIcon name="calendar" size={21} /></span>
+            <span><strong>Request leave</strong><small>File and track time off</small></span>
+            <span className="employee-action-arrow">→</span>
+          </Link>
+          <Link to="/employee-overtime-request" className="employee-action-card action-overtime">
+            <span className="employee-action-icon"><AppIcon name="time" size={21} /></span>
+            <span><strong>Submit overtime</strong><small>Record additional hours</small></span>
+            <span className="employee-action-arrow">→</span>
+          </Link>
+          <Link to="/employee-payroll-information" className="employee-action-card action-payroll">
+            <span className="employee-action-icon"><AppIcon name="wallet" size={21} /></span>
+            <span><strong>View payslip</strong><small>Check payroll details</small></span>
+            <span className="employee-action-arrow">→</span>
+          </Link>
+          <Link to="/employee-schedule" className="employee-action-card action-schedule">
+            <span className="employee-action-icon"><AppIcon name="briefcase" size={21} /></span>
+            <span><strong>My schedule</strong><small>See shifts and workdays</small></span>
+            <span className="employee-action-arrow">→</span>
+          </Link>
+        </div>
       </section>
 
       {/* Mobile attendance flow */}

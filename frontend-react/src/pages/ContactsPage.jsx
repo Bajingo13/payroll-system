@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import AppIcon from '../components/AppIcon.jsx';
+import { getReportCompanyProfile } from '../utils/reportExport.js';
 
 const DEPARTMENTS = [
   { icon: 'briefcase', title: 'Payroll Concerns', team: 'HR / Payroll Team', desc: 'Payslip disputes, salary adjustments, loan deductions, and government contribution queries.' },
@@ -17,16 +18,19 @@ function IconBox({ name, color = '#1e40af', bg = '#eff6ff', size = 20 }) {
 }
 
 export default function ContactsPage() {
-  const [company, setCompany] = useState(null);
+  const [company, setCompany] = useState(() => getReportCompanyProfile());
 
   useEffect(() => {
+    const updateCompany = (event) => setCompany(event?.detail || getReportCompanyProfile());
     api.get('/company_settings')
       .then(({ data }) => { if (data.data) setCompany(data.data); })
       .catch(() => {});
+    window.addEventListener('company-settings-updated', updateCompany);
+    return () => window.removeEventListener('company-settings-updated', updateCompany);
   }, []);
 
   const address = company?.address || '20th Floor, Unit 2004, Philippine AXA Life Centre, 1286 Sen. Gil Puyat Ave., Makati City';
-  const email = company?.email || 'astreablueintelligenceinc@gmail.com';
+  const email = company?.email || 'hris@astreablue.com';
   const phone = company?.phone || '';
   const website = company?.website || '';
 

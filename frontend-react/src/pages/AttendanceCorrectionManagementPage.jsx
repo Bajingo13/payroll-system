@@ -37,6 +37,9 @@ export default function AttendanceCorrectionManagementPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  // Approve modal state
+  const [approveModal, setApproveModal] = useState(null); // { correction_id, employee_name }
+
   // Reject modal state
   const [rejectModal, setRejectModal] = useState(null); // { correction_id, employee_name }
   const [rejectionReason, setRejectionReason] = useState('');
@@ -61,15 +64,20 @@ export default function AttendanceCorrectionManagementPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleApprove(correctionId, employeeName) {
-    if (!window.confirm(`Approve the attendance correction request for ${employeeName}?\n\nThis will update their attendance record.`)) return;
+  function openApproveModal(req) {
+    setApproveModal({ correction_id: req.correction_id, employee_name: req.employee_name });
+    setActionMsg('');
+  }
+
+  async function handleApprove(e) {
+    e.preventDefault();
     setActionLoading(true);
     setActionMsg('');
     try {
-      const { data } = await api.patch(`/admin/attendance-correction-requests/${correctionId}/status`, {
+      const { data } = await api.patch(`/admin/attendance-correction-requests/${approveModal.correction_id}/status`, {
         user_id: user.user_id, status: 'Approved'
       });
-      if (data.success) { setActionMsg('✓ Request approved and attendance record updated.'); load(); }
+      if (data.success) { setApproveModal(null); setActionMsg('✓ Request approved and attendance record updated.'); load(); }
       else setActionMsg(data.message || 'Failed.');
     } catch (err) {
       setActionMsg(getApiMessage(err, 'Failed to approve.'));
@@ -230,7 +238,7 @@ export default function AttendanceCorrectionManagementPage() {
                               className="btn"
                               style={{ fontSize: 12, padding: '5px 12px', background: '#16a34a' }}
                               disabled={actionLoading}
-                              onClick={() => handleApprove(r.correction_id, r.employee_name)}
+                              onClick={() => openApproveModal(r)}
                             >
                               Approve
                             </button>
@@ -254,6 +262,39 @@ export default function AttendanceCorrectionManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Approve Modal */}
+      {approveModal && (
+        <div className="app-modal-backdrop" onClick={() => setApproveModal(null)}>
+          <div className="app-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="app-modal-header">
+              <h3>Approve Correction Request</h3>
+              <button type="button" className="app-modal-close" onClick={() => setApproveModal(null)}>×</button>
+            </div>
+            <div className="app-modal-body">
+              <p style={{ color: '#475569', marginTop: 0 }}>
+                Approve the attendance correction request for <strong>{approveModal.employee_name}</strong>?
+              </p>
+              <p style={{ color: '#475569', marginTop: 0, fontSize: 13 }}>
+                This will update their attendance record.
+              </p>
+              {actionMsg && <p className="form-message error" style={{ margin: '8px 0 0' }}>{actionMsg}</p>}
+              <div className="row-actions" style={{ marginTop: 16 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ background: '#16a34a' }}
+                  disabled={actionLoading}
+                  onClick={handleApprove}
+                >
+                  {actionLoading ? 'Approving…' : 'Confirm Approve'}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => setApproveModal(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reject Modal */}
       {rejectModal && (

@@ -20,6 +20,7 @@ const HRIS_MODULES = [
   { icon: 'folder-open',     label: '201 Files',           color: '#22d3ee', screen: 'HR201Files' },
   { icon: 'git-branch',      label: 'Org Setup',           color: '#34d399', screen: 'HROrgSetup' },
   { icon: 'calendar',        label: 'Attendance',          color: '#60a5fa', screen: 'Attendance' },
+  { icon: 'create',          label: 'Att. Corrections',    color: '#f97316', screen: 'HRAttendanceCorrection' },
   { icon: 'leaf',            label: 'Leave',               color: '#34d399', screen: 'Leave' },
   { icon: 'time',            label: 'Overtime',            color: '#fbbf24', screen: 'Overtime' },
   { icon: 'calendar-number', label: 'Schedule',            color: '#c084fc', screen: 'HRSchedule' },

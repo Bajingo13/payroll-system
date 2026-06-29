@@ -37,7 +37,7 @@ export const FEATURE_OPTIONS = [
 const STORAGE_KEY = 'role_feature_access_v1';
 
 const REQUIRED_ROLE_FEATURES = {
-  hr: ['leave-calendar'],
+  hr: ['leave-calendar', 'government-reports'],
   employee: ['leave-calendar']
 };
 
@@ -65,6 +65,7 @@ export const DEFAULT_ROLE_ACCESS = {
     'schedule-management',
     'leave-calendar',
     'performance-management',
+    'government-reports',
     'auditing',
     'utilities',
     'about-us',

@@ -590,7 +590,7 @@ const s = StyleSheet.create({
     flex: 1, paddingVertical: 14, borderRadius: 14,
     backgroundColor: '#b91c1c', alignItems: 'center',
   },
-  dialogConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  dialogConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff', textAlign: 'center', letterSpacing: 0 },
 
   // Password modal
   pwInputWrap: {

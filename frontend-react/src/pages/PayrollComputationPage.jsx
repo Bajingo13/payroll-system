@@ -1250,8 +1250,12 @@ export default function PayrollComputationPage() {
       });
       if (!data.success) throw new Error(data.message||'Failed to save.');
       setEmpDataMap(cache);
-      flash(`${payrolls.length} employee payroll(s) saved successfully.`,'success');
-      setShowSaveModal(false); setIsEditing(false); setSelectedEmp(null);
+      const mail = data.payslip_email;
+      const mailNote = mail?.configured === false
+        ? ' Payslip email is not configured.'
+        : mail ? ` Payslips emailed: ${mail.sent || 0}; skipped: ${mail.skipped || 0}; failed: ${mail.failed || 0}.` : '';
+      flash(`${payrolls.length} employee payroll(s) saved successfully.${mailNote}`, mail?.failed ? 'warning' : 'success');
+      setShowSaveModal(false); setIsEditing(false);
       await loadRunEmployees(runId);
     } catch(err) {
       flash(getApiMessage(err,'Failed to save payroll.'),'warning');

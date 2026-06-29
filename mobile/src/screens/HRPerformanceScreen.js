@@ -119,11 +119,11 @@ export default function HRPerformanceScreen({ navigation }) {
                   <Text style={s.empMeta}>{ev.department || 'No dept'} · {ev.emp_code}</Text>
                   <Text style={s.reviewPeriod}>{ev.review_period || ''}</Text>
                 </View>
-                <View>
+                <View style={s.ratingWrap}>
                   <View style={[s.ratingBadge, { backgroundColor: rc + '20', borderColor: rc + '44' }]}>
-                    <Text style={[s.ratingText, { color: rc }]}>{Number(ev.overall_score || 0).toFixed(1)}</Text>
+                    <Text numberOfLines={1} style={[s.ratingText, { color: rc }]}>{Number(ev.overall_score || 0).toFixed(1)}</Text>
                   </View>
-                  <Text style={[s.ratingLabel, { color: rc }]}>{ev.rating || '—'}</Text>
+                  <Text numberOfLines={1} style={[s.ratingLabel, { color: rc }]}>{ev.rating || '—'}</Text>
                 </View>
               </View>
 
@@ -183,15 +183,16 @@ const s = StyleSheet.create({
   empName: { fontSize: 13, fontWeight: '800', color: T.textPrimary },
   empMeta: { fontSize: 11, color: T.textSub },
   reviewPeriod: { fontSize: 10, color: T.textMuted, marginTop: 2 },
-  ratingBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, alignItems: 'center' },
-  ratingText: { fontSize: 16, fontWeight: '900' },
+  ratingWrap: { alignItems: 'center', width: 72, flexShrink: 0 },
+  ratingBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, alignItems: 'center', alignSelf: 'stretch' },
+  ratingText: { fontSize: 16, fontWeight: '900', textAlign: 'center', letterSpacing: 0 },
   ratingLabel: { fontSize: 9, fontWeight: '700', textAlign: 'center', marginTop: 2 },
   detailWrap: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: T.border, gap: 10 },
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   scoreLabel: { fontSize: 11, color: T.textSub, width: 90 },
   scoreBarBg: { flex: 1, height: 5, backgroundColor: T.surfaceAlt, borderRadius: 3, overflow: 'hidden' },
   scoreBarFill: { height: '100%', borderRadius: 3 },
-  scoreVal: { fontSize: 11, fontWeight: '800', color: T.textPrimary, width: 28, textAlign: 'right' },
+  scoreVal: { fontSize: 11, fontWeight: '800', color: T.textPrimary, width: 42, textAlign: 'right' },
   textBlock: { backgroundColor: T.surfaceAlt, borderRadius: 10, padding: 10 },
   textBlockLabel: { fontSize: 10, color: T.textMuted, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
   textBlockVal: { fontSize: 12, color: T.textSub, lineHeight: 17 },
