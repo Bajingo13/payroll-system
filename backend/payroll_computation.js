@@ -1467,7 +1467,17 @@ module.exports = function (app, pool) {
             const payrollRange = runs[0].payroll_range || "Unknown Range";
             await logAudit(pool, user_id, admin_name, `Payroll run ${run_id} (${payrollRange}) marked as Generated`, "Success");
 
-            res.json({ success: true, message: "Payroll run marked as Generated." });
+            let emailSummary = null;
+            try {
+                emailSummary = app.locals.sendPayslipsForRun
+                    ? await app.locals.sendPayslipsForRun(run_id)
+                    : null;
+            } catch (emailError) {
+                console.error("Automatic payslip email error:", emailError);
+                emailSummary = { sent: 0, failed: 1, message: "Payroll generated, but payslip email delivery failed." };
+            }
+
+            res.json({ success: true, message: "Payroll run marked as Generated.", payslip_email: emailSummary });
         } catch (err) {
             console.error("Generate payroll run error:", err);
             res.status(500).json({ success: false, message: "Server error" });
@@ -3278,7 +3288,18 @@ module.exports = function (app, pool) {
 
             await logAudit(pool, user_id, admin_name, auditText, "Success");
             await conn.commit();
-            res.json({ success: true });
+
+            let emailSummary = null;
+            try {
+                emailSummary = app.locals.sendPayslipsForRun
+                    ? await app.locals.sendPayslipsForRun(run_id)
+                    : null;
+            } catch (emailError) {
+                console.error("Automatic payslip email error:", emailError);
+                emailSummary = { sent: 0, failed: 1, message: "Payroll saved, but payslip email delivery failed." };
+            }
+
+            res.json({ success: true, payslip_email: emailSummary });
         } catch (err) {
             if (conn) await conn.rollback();
             console.error("Payroll save error:", err);
