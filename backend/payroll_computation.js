@@ -1320,7 +1320,8 @@ module.exports = function (app, pool) {
 
         try {
             let query = `
-                SELECT ep.employee_id, e.first_name, e.last_name, e.emp_code
+                SELECT ep.employee_id, e.first_name, e.last_name, e.emp_code,
+                    ee.company, ee.department, ee.position, e.status
                 FROM employee_payroll ep
                 JOIN employees e ON ep.employee_id = e.employee_id
                 JOIN employee_employment ee ON ep.employee_id = ee.employee_id

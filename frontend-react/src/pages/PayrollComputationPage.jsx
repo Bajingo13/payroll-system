@@ -428,7 +428,7 @@ export default function PayrollComputationPage() {
     const gross =
       toNum(payroll.basic_salary) - toNum(payroll.absence_deduction) -
       toNum(payroll.late_deduction) - toNum(payroll.undertime_deduction) +
-      toNum(payroll.overtime) + allowanceTotals.taxable +
+      toNum(payroll.overtime) + toNum(payroll.holiday_pay) + allowanceTotals.taxable +
       allowanceTotals.nontaxable + toNum(payroll.adj_comp) +
       toNum(payroll.adj_non_comp) + toNum(payroll.total_leaves_used);
     const ded =
@@ -438,6 +438,24 @@ export default function PayrollComputationPage() {
       toNum(payroll.loans) + toNum(payroll.other_deductions) + toNum(payroll.premium_adj);
     return { gross, ded, net: gross - ded };
   }, [payroll, allowanceTotals, deductionRowsTotal]);
+
+  const premiumAdj = useMemo(() => {
+    let total = 0;
+
+    // sum all employee premium fields
+    PREM_ROWS.forEach(({ key }) => {
+      total += parseFloat(attAdj?.[`${key}_emp`]) || 0;
+    });
+
+    // include tax withheld
+    total += parseFloat(attAdj?.tax_withheld) || 0;
+
+    return total.toFixed(2);
+  }, [attAdj]);
+  
+  useEffect(() => {
+    upPayroll("premium_adj", premiumAdj);
+  }, [premiumAdj]);
 
   const filteredEmps = useMemo(() => {
     if (!searchInput) return employees;
@@ -1071,7 +1089,7 @@ export default function PayrollComputationPage() {
         parseFloat(ytd.ytd_gross || 0) + gross
       ).toFixed(2);
     }
-
+    
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
   }
 
@@ -1114,7 +1132,6 @@ export default function PayrollComputationPage() {
   }
 
   async function selectEmployee(emp) {
-    if (isEditing) { flash('Save or cancel current changes first.','warning'); return; }
     if (empDataMap[emp.employee_id]) {
       const d = empDataMap[emp.employee_id];
       setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
@@ -1664,7 +1681,7 @@ export default function PayrollComputationPage() {
                           <tr><th>Description</th><th>Time</th><th>Amount</th></tr>
                         </thead>
                         <tbody>
-                          <tr><td>Basic Salary</td><td></td><td><Ni dis={!isEditing} v={payroll.basic_salary} set={v=>upPayroll('basic_salary',v)} /></td></tr>
+                          <tr><td>Basic Salary</td><td></td><td><Ni dis={true} v={payroll.basic_salary} set={v=>upPayroll('basic_salary',v)} /></td></tr>
                           <tr>
                             <td colSpan={3}>
                               <div className="hris-attendance-banner">
@@ -1697,16 +1714,16 @@ export default function PayrollComputationPage() {
                               </div>
                             </td>
                           </tr>
-                          <tr><td>Absences (-)</td><td><Ti dis={!isEditing} v={payroll.absence_time} set={v=>upPayroll('absence_time',v)} /></td><td><Ni dis={!isEditing} v={payroll.absence_deduction} set={v=>upPayroll('absence_deduction',v)} /></td></tr>
-                          <tr><td>Late (-)</td><td><Ti dis={!isEditing} v={payroll.late_time} set={v=>upPayroll('late_time',v)} /></td><td><Ni dis={!isEditing} v={payroll.late_deduction} set={v=>upPayroll('late_deduction',v)} /></td></tr>
-                          <tr><td>Undertime (-)</td><td><Ti dis={!isEditing} v={payroll.undertime} set={v=>upPayroll('undertime',v)} /></td><td><Ni dis={!isEditing} v={payroll.undertime_deduction} set={v=>upPayroll('undertime_deduction',v)} /></td></tr>
-                          <tr><td>Total Overtime (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.overtime} set={v=>upPayroll('overtime',v)} /></td></tr>
-                          <tr><td>Holiday Pay (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.holiday_pay} set={v=>upPayroll('holiday_pay',v)} /></td></tr>
-                          <tr><td>Taxable Allowances (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.taxable_allowances} set={v=>upPayroll('taxable_allowances',v)} /></td></tr>
-                          <tr><td>Non-Taxable Allow. (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.non_taxable_allowances} set={v=>upPayroll('non_taxable_allowances',v)} /></td></tr>
-                          <tr><td>Adj. Compensation (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></td></tr>
+                          <tr><td>Absences (-)</td><td><Ti dis={true} v={payroll.absence_time} set={v=>upPayroll('absence_time',v)} /></td><td><Ni dis={true} v={payroll.absence_deduction} set={v=>upPayroll('absence_deduction',v)} /></td></tr>
+                          <tr><td>Late (-)</td><td><Ti dis={true} v={payroll.late_time} set={v=>upPayroll('late_time',v)} /></td><td><Ni dis={true} v={payroll.late_deduction} set={v=>upPayroll('late_deduction',v)} /></td></tr>
+                          <tr><td>Undertime (-)</td><td><Ti dis={true} v={payroll.undertime} set={v=>upPayroll('undertime',v)} /></td><td><Ni dis={true} v={payroll.undertime_deduction} set={v=>upPayroll('undertime_deduction',v)} /></td></tr>
+                          <tr><td>Total Overtime (+)</td><td></td><td><Ni dis={true} v={payroll.overtime} set={v=>upPayroll('overtime',v)} /></td></tr>
+                          <tr><td>Holiday Pay (+)</td><td></td><td><Ni dis={true} v={payroll.holiday_pay} set={v=>upPayroll('holiday_pay',v)} /></td></tr>
+                          <tr><td>Taxable Allowances (+)</td><td></td><td><Ni dis={true} v={payroll.taxable_allowances} set={v=>upPayroll('taxable_allowances',v)} /></td></tr>
+                          <tr><td>Non-Taxable Allow. (+)</td><td></td><td><Ni dis={true} v={payroll.non_taxable_allowances} set={v=>upPayroll('non_taxable_allowances',v)} /></td></tr>
+                          <tr><td>Adj. Compensation (+)</td><td></td><td><Ni dis={true} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></td></tr>
                           <tr><td>Adj. Non-Comp. (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_non_comp} set={v=>upPayroll('adj_non_comp',v)} /></td></tr>
-                          <tr><td>Total Leaves Used (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></td></tr>
+                          <tr><td>Total Leaves Used (+)</td><td></td><td><Ni dis={true} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -1717,22 +1734,22 @@ export default function PayrollComputationPage() {
                           <tr><th></th><th>Employee</th><th>Employer</th><th>ECC</th></tr>
                         </thead>
                         <tbody>
-                          <tr><td>GSIS</td><td><Ni dis={!isEditing} v={payroll.gsis_employee} set={v=>upPayroll('gsis_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.gsis_employer} set={v=>upPayroll('gsis_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.gsis_ecc} set={v=>upPayroll('gsis_ecc',v)} /></td></tr>
-                          <tr><td>SSS</td><td><Ni dis={!isEditing} v={payroll.sss_employee} set={v=>upPayroll('sss_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.sss_employer} set={v=>upPayroll('sss_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.sss_ecc} set={v=>upPayroll('sss_ecc',v)} /></td></tr>
-                          <tr><td>Pag-ibig</td><td><Ni dis={!isEditing} v={payroll.pagibig_employee} set={v=>upPayroll('pagibig_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.pagibig_employer} set={v=>upPayroll('pagibig_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.pagibig_ecc} set={v=>upPayroll('pagibig_ecc',v)} /></td></tr>
-                          <tr><td>Philhealth</td><td><Ni dis={!isEditing} v={payroll.philhealth_employee} set={v=>upPayroll('philhealth_employee',v)} /></td><td><Ni dis={!isEditing} v={payroll.philhealth_employer} set={v=>upPayroll('philhealth_employer',v)} /></td><td><Ni dis={!isEditing} v={payroll.philhealth_ecc} set={v=>upPayroll('philhealth_ecc',v)} /></td></tr>
-                          <tr><td>Tax Withheld</td><td><Ni dis={!isEditing} v={payroll.tax_withheld} set={v=>upPayroll('tax_withheld',v)} /></td><td colSpan={2}></td></tr>
-                          <tr><td>Total Deductions</td><td><Ni dis={!isEditing} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /></td><td colSpan={2}></td></tr>
-                          <tr><td>Loans</td><td><Ni dis={!isEditing} v={payroll.loans} set={v=>upPayroll('loans',v)} /></td><td colSpan={2}></td></tr>
-                          <tr><td>Other Deductions</td><td><Ni dis={!isEditing} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /></td><td>Premium Adj.</td><td><Ni dis={!isEditing} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></td></tr>
+                          <tr><td>GSIS</td><td><Ni dis={true} v={payroll.gsis_employee} set={v=>upPayroll('gsis_employee',v)} /></td><td><Ni dis={true} v={payroll.gsis_employer} set={v=>upPayroll('gsis_employer',v)} /></td><td><Ni dis={true} v={payroll.gsis_ecc} set={v=>upPayroll('gsis_ecc',v)} /></td></tr>
+                          <tr><td>SSS</td><td><Ni dis={true} v={payroll.sss_employee} set={v=>upPayroll('sss_employee',v)} /></td><td><Ni dis={true} v={payroll.sss_employer} set={v=>upPayroll('sss_employer',v)} /></td><td><Ni dis={true} v={payroll.sss_ecc} set={v=>upPayroll('sss_ecc',v)} /></td></tr>
+                          <tr><td>Pag-ibig</td><td><Ni dis={true} v={payroll.pagibig_employee} set={v=>upPayroll('pagibig_employee',v)} /></td><td><Ni dis={true} v={payroll.pagibig_employer} set={v=>upPayroll('pagibig_employer',v)} /></td><td><Ni dis={true} v={payroll.pagibig_ecc} set={v=>upPayroll('pagibig_ecc',v)} /></td></tr>
+                          <tr><td>Philhealth</td><td><Ni dis={true} v={payroll.philhealth_employee} set={v=>upPayroll('philhealth_employee',v)} /></td><td><Ni dis={true} v={payroll.philhealth_employer} set={v=>upPayroll('philhealth_employer',v)} /></td><td><Ni dis={true} v={payroll.philhealth_ecc} set={v=>upPayroll('philhealth_ecc',v)} /></td></tr>
+                          <tr><td>Tax Withheld</td><td><Ni dis={true} v={payroll.tax_withheld} set={v=>upPayroll('tax_withheld',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Total Deductions</td><td><Ni dis={true} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Loans</td><td><Ni dis={true} v={payroll.loans} set={v=>upPayroll('loans',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Other Deductions</td><td><Ni dis={true} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /></td><td>Premium Adj.</td><td><Ni dis={true} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></td></tr>
                         </tbody>
                       </table>
                       <div className="payroll-ytd-title">Year-to-Date (YTD)</div>
                       <table className="payroll-entry-table ytd payroll-ytd-table">
                         <tbody>
-                          <tr><td>YTD SSS</td><td><Ni dis={!isEditing} v={payroll.ytd_sss} set={v=>upPayroll('ytd_sss',v)} /></td><td>YTD Wtax</td><td><Ni dis={!isEditing} v={payroll.ytd_wtax} set={v=>upPayroll('ytd_wtax',v)} /></td></tr>
-                          <tr><td>YTD Philhealth</td><td><Ni dis={!isEditing} v={payroll.ytd_philhealth} set={v=>upPayroll('ytd_philhealth',v)} /></td><td>YTD GSIS</td><td><Ni dis={!isEditing} v={payroll.ytd_gsis} set={v=>upPayroll('ytd_gsis',v)} /></td></tr>
-                          <tr><td>YTD Pag-ibig</td><td><Ni dis={!isEditing} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} /></td><td>YTD Gross</td><td><Ni dis={!isEditing} v={payroll.ytd_gross} set={v=>upPayroll('ytd_gross',v)} /></td></tr>
+                          <tr><td>YTD SSS</td><td><Ni dis={true} v={payroll.ytd_sss} set={v=>upPayroll('ytd_sss',v)} /></td><td>YTD Wtax</td><td><Ni dis={true} v={payroll.ytd_wtax} set={v=>upPayroll('ytd_wtax',v)} /></td></tr>
+                          <tr><td>YTD Philhealth</td><td><Ni dis={true} v={payroll.ytd_philhealth} set={v=>upPayroll('ytd_philhealth',v)} /></td><td>YTD GSIS</td><td><Ni dis={true} v={payroll.ytd_gsis} set={v=>upPayroll('ytd_gsis',v)} /></td></tr>
+                          <tr><td>YTD Pag-ibig</td><td><Ni dis={true} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} /></td><td>YTD Gross</td><td><Ni dis={true} v={payroll.ytd_gross} set={v=>upPayroll('ytd_gross',v)} /></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -1752,7 +1769,7 @@ export default function PayrollComputationPage() {
                             <td>{label}</td>
                             <td><span className="readonly-rate">{rate}</span></td>
                             <td><TimeInput dis={!isEditing} v={otNd[`${key}_time`]} set={v=>upOtNd(`${key}_time`,v)} /></td>
-                            <td><Ni dis={!isEditing} v={otNd[key]} set={v=>upOtNd(key,v)} /></td>
+                            <td><Ni dis={true} v={otNd[key]} set={v=>upOtNd(key,v)} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1768,7 +1785,7 @@ export default function PayrollComputationPage() {
                             <td>{label}</td>
                             <td><span className="readonly-rate">0.10% of {baseRate}</span></td>
                             <td><TimeInput dis={!isEditing} v={otNd[`${key}_nd_time`]} set={v=>upOtNd(`${key}_nd_time`,v)} /></td>
-                            <td><Ni dis={!isEditing} v={otNd[`${key}_nd`]} set={v=>upOtNd(`${key}_nd`,v)} /></td>
+                            <td><Ni dis={true} v={otNd[`${key}_nd`]} set={v=>upOtNd(`${key}_nd`,v)} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1974,7 +1991,7 @@ export default function PayrollComputationPage() {
                           <tr key={key}>
                             <td>{label}</td>
                             <td>{hasTime?<Ti dis={!isEditing} v={attAdj[`${key}_time`]} set={v=>upAttAdj(`${key}_time`,v)} />:null}</td>
-                            <td><Ni dis={!isEditing} v={attAdj[`${key}_amt`]} set={v=>upAttAdj(`${key}_amt`,v)} /></td>
+                            <td><Ni dis={true} v={attAdj[`${key}_amt`]} set={v=>upAttAdj(`${key}_amt`,v)} /></td>
                           </tr>
                         ))}
                       </tbody>
