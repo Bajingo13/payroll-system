@@ -3141,6 +3141,11 @@ module.exports = function (app, pool) {
                         }
                     }
                 }
+
+                // ==================== LOANS ====================
+                if (Array.isArray(loans)) {
+                    //...
+                }
             }
             
             // --- MARK PAYROLL RUN AS GENERATED ---

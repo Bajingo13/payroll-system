@@ -1339,7 +1339,6 @@ export default function PayrollComputationPage() {
     if (selectedEmp) selectEmployee(selectedEmp);
     else { setPayroll(makeEmptyPayroll()); setIsEditing(false); }
     setShowCancelModal(false);
-    setSelectedEmp(null);
   }
 
   const TABS = [
