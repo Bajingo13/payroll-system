@@ -261,22 +261,6 @@ module.exports = function (app, pool) {
         return roundMoney(otHours * otHourlyRate * 1.25);
     }
 
-    function computePeriodSalaryFromMonthly(monthlySalary, payrollPeriod, daysInYear = 313) {
-        const salary = toMoney(monthlySalary);
-        const normalizedPeriod = normalizePayPeriod(payrollPeriod);
-        if (salary <= 0) return 0;
-        if (normalizedPeriod === 'WEEKLY') return roundMoney((salary * 12) / 52);
-        if (normalizedPeriod === 'SEMI-MONTHLY') return roundMoney(salary / 2);
-        if (normalizedPeriod === 'DAILY') return roundMoney((salary * 12) / toMoney(daysInYear || 313));
-        return roundMoney(salary);
-    }
-
-    function computeDailyRateFromMonthly(monthlySalary, daysInYear = 313) {
-        const salary = toMoney(monthlySalary);
-        if (salary <= 0) return 0;
-        return roundMoney((salary * 12) / toMoney(daysInYear || 313));
-    }
-
     async function ensurePayrollAutomationColumns(conn) {
         const [columns] = await conn.query(
             `SELECT COLUMN_NAME
@@ -289,128 +273,6 @@ module.exports = function (app, pool) {
         if (!columns.length) {
             await conn.query('ALTER TABLE employee_payroll ADD COLUMN holiday_pay DECIMAL(10,2) DEFAULT 0.00 AFTER overtime');
         }
-    }
-
-    // GSIS (RA 8291) contributes a flat percentage of the revised basic salary,
-    // with no salary cap — unlike SSS's bracket table — so it is stored as a rate, not brackets.
-    async function ensureGsisContributionTable(conn) {
-        await conn.query(`
-            CREATE TABLE IF NOT EXISTS gsis_contribution_table (
-                id INT NOT NULL AUTO_INCREMENT,
-                ee_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 9.00,
-                er_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 12.00,
-                date_effective DATE NOT NULL,
-                is_active TINYINT(1) NOT NULL DEFAULT 1,
-                PRIMARY KEY (id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        `);
-
-        const [rows] = await conn.query('SELECT COUNT(*) AS cnt FROM gsis_contribution_table');
-        if (!rows[0].cnt) {
-            // Official RA 8291 rates: 9% employee share, 12% employer share of revised basic salary.
-            await conn.query(
-                `INSERT INTO gsis_contribution_table (ee_rate_percent, er_rate_percent, date_effective, is_active)
-                 VALUES (9.00, 12.00, '1997-05-30', 1)`
-            );
-        }
-    }
-
-    async function lookupGsisContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(
-            `SELECT ee_rate_percent, er_rate_percent
-             FROM gsis_contribution_table
-             WHERE COALESCE(is_active, 1) = 1
-             ORDER BY date_effective DESC
-             LIMIT 1`
-        );
-        const rate = rows[0];
-        if (!rate) return null;
-        return {
-            ee_share: roundMoney(salaryBasis * (Number(rate.ee_rate_percent) / 100)),
-            er_share: roundMoney(salaryBasis * (Number(rate.er_rate_percent) / 100)),
-            ecc: 0
-        };
-    }
-
-    async function lookupSssContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(`
-            SELECT
-                employee_ss,
-                employer_ss,
-                employer_ec,
-                employee_mpf,
-                employer_mpf
-            FROM sss_contribution_table
-            WHERE salary_from <= ?
-            AND (salary_to >= ? OR salary_to IS NULL)
-            ORDER BY salary_from DESC
-            LIMIT 1
-        `, [salaryBasis, salaryBasis]);
-
-        if (!rows || rows.length === 0) {
-            return null;
-        }
-
-        const r = rows[0];
-
-        const ee_share =
-            toMoney(r.employee_ss) +
-            toMoney(r.employee_mpf);
-
-        const er_share =
-            toMoney(r.employer_ss) +
-            toMoney(r.employer_ec) +
-            toMoney(r.employer_mpf);
-
-        return {
-            ee_share: roundMoney(ee_share),
-            er_share: roundMoney(er_share),
-            ecc: roundMoney(toMoney(r.employer_ec))
-        };
-    }
-
-    async function lookupPagibigContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(`
-            SELECT
-                employee_rate,
-                employer_rate,
-                employee_max,
-                employer_max
-            FROM pagibig_contribution_table
-            WHERE is_active = 1
-            ORDER BY effective_date DESC
-            LIMIT 1
-        `);
-
-        if (!rows.length) return null;
-
-        const rule = rows[0];
-
-        return {
-            ee_share: Math.min(
-                salaryBasis * Number(rule.employee_rate),
-                Number(rule.employee_max)
-            ),
-
-            er_share: Math.min(
-                salaryBasis * Number(rule.employer_rate),
-                Number(rule.employer_max)
-            ),
-
-            ecc: 0
-        };
-    }
-
-    async function lookupPhilhealthContribution(conn) {
-        const [rows] = await conn.query(`
-            SELECT rate, min_base, max_base
-            FROM philhealth_contribution_table
-            WHERE is_active = 1
-            ORDER BY effective_date DESC
-            LIMIT 1
-        `);
-
-        return rows[0] || null;
     }
 
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
@@ -487,24 +349,6 @@ module.exports = function (app, pool) {
         const otherDeductions = toMoney(input.other_deductions);
         const premiumAdj = toMoney(input.premium_adj);
 
-        const salaryBasis = Math.max(0, toMoney(input.contribution_basis) || basicSalary + taxableAllowances + overtime + holidayPay);
-        // GSIS (government employees) and SSS (private employees) are mutually exclusive.
-        const isGovernmentEmployee = Boolean(input.is_government_employee || input.gsis_no);
-        await ensureGsisContributionTable(conn);
-        const gsis = isGovernmentEmployee ? await lookupGsisContribution(conn, salaryBasis) : null;
-        const sss = isGovernmentEmployee
-            ? null
-            : await lookupSssContribution(conn, salaryBasis);
-        const pagibig = await lookupPagibigContribution(conn, salaryBasis);
-        const philhealth = await lookupPhilhealthContribution(conn);
-        const sssEmployee = roundMoney(sss?.ee_share || 0);
-        const gsisEmployee = roundMoney(gsis?.ee_share || 0);
-        const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
-        const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
-        const statutoryEmployee = sssEmployee + gsisEmployee + pagibigEmployee + philhealthEmployee;
-        const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
-        const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
-        const taxWithheld = roundMoney(taxResult.amount);
         const grossPay = roundMoney(
             basicSalary -
             absenceDeduction -
@@ -518,37 +362,16 @@ module.exports = function (app, pool) {
             adjNonComp +
             totalLeavesUsed
         );
-        const grandTotalDeductions = roundMoney(statutoryEmployee + taxWithheld + additionalDeductions + loans + otherDeductions + premiumAdj);
+        const grandTotalDeductions = roundMoney(additionalDeductions + loans + otherDeductions + premiumAdj);
         const netPay = roundMoney(grossPay - grandTotalDeductions);
+
+        const isGovernmentEmployee = Boolean(input.is_government_employee);
 
         return {
             success: true,
-            salary_basis: roundMoney(salaryBasis),
-            taxable_income: roundMoney(taxableIncome),
-            sss_employee: sssEmployee,
-            sss_employer: roundMoney(sss?.er_share || 0),
-            sss_ecc: roundMoney(sss?.ecc || 0),
-            gsis_employee: gsisEmployee,
-            gsis_employer: roundMoney(gsis?.er_share || 0),
-            gsis_ecc: 0,
-            pagibig_employee: pagibigEmployee,
-            pagibig_employer: roundMoney(pagibig?.er_share || 0),
-            pagibig_ecc: 0,
-            philhealth_employee: philhealthEmployee,
-            philhealth_employer: roundMoney(philhealth?.er_share || 0),
-            philhealth_ecc: 0,
-            tax_withheld: taxWithheld,
             gross_pay: grossPay,
             grand_total_deductions: grandTotalDeductions,
-            net_pay: netPay,
-            tax_bracket: taxResult.bracket,
-            notes: {
-                sss: isGovernmentEmployee ? 'Skipped (government employee contributes to GSIS instead).' : (sss ? 'Matched SSS contribution table.' : 'No SSS contribution bracket matched.'),
-                gsis: isGovernmentEmployee ? (gsis ? 'Computed from GSIS contribution rate.' : 'No GSIS contribution rate configured.') : 'Skipped (private employee contributes to SSS instead).',
-                pagibig: pagibig ? 'Matched Pag-IBIG contribution table.' : 'No Pag-IBIG contribution bracket matched.',
-                philhealth: philhealth ? 'Matched PhilHealth contribution table.' : 'No PhilHealth contribution bracket matched.',
-                tax: taxResult.bracket ? 'Matched withholding tax table.' : 'No withholding tax bracket matched.'
-            }
+            net_pay: netPay
         };
     }
 
@@ -1958,6 +1781,56 @@ module.exports = function (app, pool) {
             const computePhilhealth = shouldCompute(philhealthRecord);
             const computeWtax = shouldCompute(wtaxRecord);
 
+            const isGovernmentEmployee = Boolean(employee.is_government_employee);
+
+            // === GSIS ===
+            if (isGovernmentEmployee) {
+                const MC = computeMonthlySalaryFromRate(
+                    employee.main_computation,
+                    employee.payroll_rate,
+                    employee
+                );
+
+                const normalizedPeriodGSIS = normalizePayPeriod(effectivePayrollPeriod);
+
+                const periodDivisorGSIS =
+                    normalizedPeriodGSIS === 'SEMI-MONTHLY' ? 2 :
+                    normalizedPeriodGSIS === 'WEEKLY' ? 4 : 1;
+
+                // STEP 1: get latest active GSIS rate
+                const [gsisRows] = await conn.query(`
+                    SELECT ee_rate_percent, er_rate_percent
+                    FROM gsis_contribution_table
+                    WHERE is_active = 1
+                    ORDER BY date_effective DESC
+                    LIMIT 1
+                `);
+
+                if (gsisRows.length > 0) {
+                    const rate = gsisRows[0];
+
+                    const eeRate = Number(rate.ee_rate_percent) / 100;
+                    const erRate = Number(rate.er_rate_percent) / 100;
+
+                    // STEP 2: monthly computation FIRST
+                    const monthlyGsisEe = MC * eeRate;
+                    const monthlyGsisEr = MC * erRate;
+
+                    // STEP 3: divide per period AFTER
+                    const gsisEe = roundMoney(monthlyGsisEe / periodDivisorGSIS);
+                    const gsisEr = roundMoney(monthlyGsisEr / periodDivisorGSIS);
+                    const gsisEcc = 0;
+
+                    // STEP 4: assign
+                    if (employee.gsis_employee == null) {
+                        employee.gsis_employee = gsisEe;
+                        employee.gsis_employer = gsisEr;
+                        employee.gsis_ecc = gsisEcc;
+                    }
+                }
+            }
+
+            // === SSS ===
             if (computeSSS) {
                 const monthlySalarySSS = computeMonthlySalaryFromRate(
                     employee.main_computation,
@@ -2024,6 +1897,7 @@ module.exports = function (app, pool) {
                 }
             }
 
+            // === Pag-IBIG ===
             if (computePagibig) {
                 const MC = computeMonthlySalaryFromRate(
                     employee.main_computation,
@@ -2080,6 +1954,7 @@ module.exports = function (app, pool) {
                 }
             }
 
+            // === PhilHealth ===
             if (computePhilhealth) {
                 const MC = computeMonthlySalaryFromRate(
                     employee.main_computation,
@@ -2137,6 +2012,7 @@ module.exports = function (app, pool) {
                 }
             }
 
+            // === BIR Withholding Tax ===
             if (computeWtax) {
                 const wtaxFormula = String(wtaxRecord.computation || '').toLowerCase();
                 if (wtaxFormula === 'gross taxable' || wtaxFormula === 'gross pay') {
@@ -2159,7 +2035,7 @@ module.exports = function (app, pool) {
                 }
                 // 'fix' (or any unrecognized formula) keeps the stored ee_share as-is.
             }
-
+            
             // Map computed contribution amounts to the employee payroll fields when no
             // saved values were loaded from the DB (i.e., the field is still NULL).
             if (computeSSS && employee.sss_employee == null && sssRecord) {

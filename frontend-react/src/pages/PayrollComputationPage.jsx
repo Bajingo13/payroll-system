@@ -757,7 +757,7 @@ export default function PayrollComputationPage() {
 
       api.get('/employees_for_payroll', {
         params: {
-          option: 'active',
+          option: filters.option || 'active',
           company: filters.company || '',
           location: filters.location || '',
           branch: filters.branch || '',
@@ -877,6 +877,7 @@ export default function PayrollComputationPage() {
     }
   }
 
+  // Function to handle the save payroll button click
   async function handleSavePayrollClick() {
     if (!runId) { flash('No payroll run loaded.','warning'); return; }
     setLoading(true);
@@ -1200,6 +1201,7 @@ export default function PayrollComputationPage() {
     }
   }
 
+  // Save all employee payrolls in the current run
   async function doSaveAll() {
     if (!runId) { flash('No payroll run loaded.','warning'); return; }
     setLoading(true);
@@ -1249,7 +1251,7 @@ export default function PayrollComputationPage() {
       if (!data.success) throw new Error(data.message||'Failed to save.');
       setEmpDataMap(cache);
       flash(`${payrolls.length} employee payroll(s) saved successfully.`,'success');
-      setShowSaveModal(false); setIsEditing(false);
+      setShowSaveModal(false); setIsEditing(false); setSelectedEmp(null);
       await loadRunEmployees(runId);
     } catch(err) {
       flash(getApiMessage(err,'Failed to save payroll.'),'warning');
@@ -1258,6 +1260,7 @@ export default function PayrollComputationPage() {
     }
   }
 
+  // Save the currently selected employee's payroll
   async function doSave() {
     if (!selectedEmp||!runId) return;
     setLoading(true);
@@ -1268,8 +1271,8 @@ export default function PayrollComputationPage() {
         absence_time:toNum(payroll.absence_time), absence_deduction:toNum(payroll.absence_deduction),
         late_time:toNum(payroll.late_time), late_deduction:toNum(payroll.late_deduction),
         undertime:toNum(payroll.undertime), undertime_deduction:toNum(payroll.undertime_deduction),
-        overtime:toNum(payroll.overtime), holiday_pay:toNum(payroll.holiday_pay), taxable_allowances:allowanceTotals.taxable,
-        non_taxable_allowances:allowanceTotals.nontaxable,
+        overtime:toNum(payroll.overtime), holiday_pay:toNum(payroll.holiday_pay),
+        taxable_allowances: toNum(allowanceTotals?.taxable), non_taxable_allowances: toNum(allowanceTotals?.nontaxable),
         adj_comp:toNum(payroll.adj_comp), adj_non_comp:toNum(payroll.adj_non_comp),
         total_leaves_used:toNum(payroll.total_leaves_used),
         gsis_employee:toNum(payroll.gsis_employee), gsis_employer:toNum(payroll.gsis_employer), gsis_ecc:toNum(payroll.gsis_ecc),
@@ -1287,9 +1290,10 @@ export default function PayrollComputationPage() {
         allowances, deductions,
         user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
+      
       if (!data.success) throw new Error(data.message||'Failed to save.');
       flash('Payroll saved successfully.','success');
-      setIsEditing(false); setShowSaveModal(false);
+      setIsEditing(false); setShowSaveModal(false); setSelectedEmp(null);
       await loadRunEmployees(runId);
     } catch(err) {
       flash(getApiMessage(err,'Failed to save payroll.'),'warning');
@@ -1331,6 +1335,7 @@ export default function PayrollComputationPage() {
     if (selectedEmp) selectEmployee(selectedEmp);
     else { setPayroll(makeEmptyPayroll()); setIsEditing(false); }
     setShowCancelModal(false);
+    setSelectedEmp(null);
   }
 
   const TABS = [
@@ -1616,7 +1621,7 @@ export default function PayrollComputationPage() {
                 </>
               ) : (
                 <>
-                  <button className="btn save-btn" type="button" disabled={loading} onClick={()=>setShowSaveModal(true)}>Save</button>
+                  <button className="btn save-btn" type="button" disabled={loading} onClick={doSave}>Save</button>
                   <button className="btn cancel-btn" type="button" onClick={()=>setShowCancelModal(true)}>Cancel</button>
                 </>
               )}
@@ -2162,13 +2167,36 @@ export default function PayrollComputationPage() {
           </>
         )}
 
-        <div className="payroll-buttons">
-          <button type="button" className="add-employee-btn" onClick={openEmpModal}>+ Add New Employee</button>
-          <div className="right-buttons">
-            <button type="button" className="btn" onClick={()=>isEditing?setShowBackModal(true):goBackToSetup()}>← Back to Filters</button>
-            <button type="button" className="btn save-payroll-btn" disabled={loading} onClick={handleSavePayrollClick}>&#128190; Save Payroll</button>
+        {!isEditing && (
+          <div className="payroll-buttons">
+            <button
+              type="button"
+              className="add-employee-btn"
+              onClick={openEmpModal}
+            >
+              + Add New Employee
+            </button>
+
+            <div className="right-buttons">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => isEditing ? setShowBackModal(true) : goBackToSetup()}
+              >
+                ← Back to Filters
+              </button>
+
+              <button
+                type="button"
+                className="btn save-payroll-btn"
+                disabled={loading}
+                onClick={handleSavePayrollClick}
+              >
+                &#128190; Save Payroll
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       {renderIncompleteModal()}
