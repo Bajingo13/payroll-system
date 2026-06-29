@@ -275,6 +275,135 @@ module.exports = function (app, pool) {
         }
     }
 
+    // GSIS (RA 8291) contributes a flat percentage of the revised basic salary,
+    // with no salary cap — unlike SSS's bracket table — so it is stored as a rate, not brackets.
+    async function ensureGsisContributionTable(conn) {
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS gsis_contribution_table (
+                id INT NOT NULL AUTO_INCREMENT,
+                ee_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 9.00,
+                er_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 12.00,
+                date_effective DATE NOT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                PRIMARY KEY (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        const [rows] = await conn.query('SELECT COUNT(*) AS cnt FROM gsis_contribution_table');
+        if (!rows[0].cnt) {
+            // Official RA 8291 rates: 9% employee share, 12% employer share of revised basic salary.
+            await conn.query(
+                `INSERT INTO gsis_contribution_table (ee_rate_percent, er_rate_percent, date_effective, is_active)
+                 VALUES (9.00, 12.00, '1997-05-30', 1)`
+            );
+        }
+    }
+
+    async function lookupGsisContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(
+            `SELECT ee_rate_percent, er_rate_percent
+             FROM gsis_contribution_table
+             WHERE COALESCE(is_active, 1) = 1
+             ORDER BY date_effective DESC
+             LIMIT 1`
+        );
+        const rate = rows[0];
+        if (!rate) return null;
+        return {
+            ee_share: roundMoney(salaryBasis * (Number(rate.ee_rate_percent) / 100)),
+            er_share: roundMoney(salaryBasis * (Number(rate.er_rate_percent) / 100)),
+            ecc: 0
+        };
+    }
+
+    async function lookupSssContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(`
+            SELECT
+                employee_ss,
+                employer_ss,
+                employer_ec,
+                employee_mpf,
+                employer_mpf
+            FROM sss_contribution_table
+            WHERE salary_from <= ?
+            AND (salary_to >= ? OR salary_to IS NULL)
+            ORDER BY salary_from DESC
+            LIMIT 1
+        `, [salaryBasis, salaryBasis]);
+
+        if (!rows || rows.length === 0) {
+            return null;
+        }
+
+        const r = rows[0];
+
+        const ee_share =
+            toMoney(r.employee_ss) +
+            toMoney(r.employee_mpf);
+
+        const er_share =
+            toMoney(r.employer_ss) +
+            toMoney(r.employer_mpf);
+
+        return {
+            ee_share: roundMoney(ee_share),
+            er_share: roundMoney(er_share),
+            ecc: roundMoney(toMoney(r.employer_ec))
+        };
+    }
+
+    async function lookupPagibigContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(`
+            SELECT
+                employee_rate,
+                employer_rate,
+                employee_max,
+                employer_max
+            FROM pagibig_contribution_table
+            WHERE is_active = 1
+            ORDER BY effective_date DESC
+            LIMIT 1
+        `);
+
+        if (!rows.length) return null;
+
+        const rule = rows[0];
+
+        return {
+            ee_share: Math.min(
+                salaryBasis * Number(rule.employee_rate),
+                Number(rule.employee_max)
+            ),
+
+            er_share: Math.min(
+                salaryBasis * Number(rule.employer_rate),
+                Number(rule.employer_max)
+            ),
+
+            ecc: 0
+        };
+    }
+
+    async function lookupPhilhealthContribution(conn, salaryBasis) {
+        const [rows] = await conn.query(`
+            SELECT rate, employee_share, employer_share, min_base, max_base
+            FROM philhealth_contribution_table
+            WHERE is_active = 1
+            ORDER BY effective_date DESC
+            LIMIT 1
+        `);
+
+        const rule = rows[0];
+        if (!rule) return null;
+        const base = Math.min(Math.max(toMoney(salaryBasis), toMoney(rule.min_base)), toMoney(rule.max_base) || Infinity);
+        const totalPremium = base * toMoney(rule.rate);
+        return {
+            ...rule,
+            ee_share: roundMoney(totalPremium * (toMoney(rule.employee_share) || 0.5)),
+            er_share: roundMoney(totalPremium * (toMoney(rule.employer_share) || 0.5))
+        };
+    }
+
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
         const normalizedPeriod = normalizePayPeriod(payPeriod);
 
@@ -349,6 +478,24 @@ module.exports = function (app, pool) {
         const otherDeductions = toMoney(input.other_deductions);
         const premiumAdj = toMoney(input.premium_adj);
 
+        const salaryBasis = Math.max(0, toMoney(input.contribution_basis) || basicSalary + taxableAllowances + overtime + holidayPay);
+        // GSIS (government employees) and SSS (private employees) are mutually exclusive.
+        const isGovernmentEmployee = Boolean(input.is_government_employee || input.gsis_no);
+        await ensureGsisContributionTable(conn);
+        const gsis = isGovernmentEmployee ? await lookupGsisContribution(conn, salaryBasis) : null;
+        const sss = isGovernmentEmployee
+            ? null
+            : await lookupSssContribution(conn, salaryBasis);
+        const pagibig = await lookupPagibigContribution(conn, salaryBasis);
+        const philhealth = await lookupPhilhealthContribution(conn, salaryBasis);
+        const sssEmployee = roundMoney(sss?.ee_share || 0);
+        const gsisEmployee = roundMoney(gsis?.ee_share || 0);
+        const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
+        const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
+        const statutoryEmployee = sssEmployee + gsisEmployee + pagibigEmployee + philhealthEmployee;
+        const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
+        const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
+        const taxWithheld = roundMoney(taxResult.amount);
         const grossPay = roundMoney(
             basicSalary -
             absenceDeduction -
@@ -362,16 +509,37 @@ module.exports = function (app, pool) {
             adjNonComp +
             totalLeavesUsed
         );
-        const grandTotalDeductions = roundMoney(additionalDeductions + loans + otherDeductions + premiumAdj);
+        const grandTotalDeductions = roundMoney(statutoryEmployee + taxWithheld + additionalDeductions + loans + otherDeductions + premiumAdj);
         const netPay = roundMoney(grossPay - grandTotalDeductions);
-
-        const isGovernmentEmployee = Boolean(input.is_government_employee);
 
         return {
             success: true,
+            salary_basis: roundMoney(salaryBasis),
+            taxable_income: roundMoney(taxableIncome),
+            sss_employee: sssEmployee,
+            sss_employer: roundMoney(sss?.er_share || 0),
+            sss_ecc: roundMoney(sss?.ecc || 0),
+            gsis_employee: gsisEmployee,
+            gsis_employer: roundMoney(gsis?.er_share || 0),
+            gsis_ecc: 0,
+            pagibig_employee: pagibigEmployee,
+            pagibig_employer: roundMoney(pagibig?.er_share || 0),
+            pagibig_ecc: 0,
+            philhealth_employee: philhealthEmployee,
+            philhealth_employer: roundMoney(philhealth?.er_share || 0),
+            philhealth_ecc: 0,
+            tax_withheld: taxWithheld,
             gross_pay: grossPay,
             grand_total_deductions: grandTotalDeductions,
-            net_pay: netPay
+            net_pay: netPay,
+            tax_bracket: taxResult.bracket,
+            notes: {
+                sss: isGovernmentEmployee ? 'Skipped (government employee contributes to GSIS instead).' : (sss ? 'Matched SSS contribution table.' : 'No SSS contribution bracket matched.'),
+                gsis: isGovernmentEmployee ? (gsis ? 'Computed from GSIS contribution rate.' : 'No GSIS contribution rate configured.') : 'Skipped (private employee contributes to SSS instead).',
+                pagibig: pagibig ? 'Matched Pag-IBIG contribution table.' : 'No Pag-IBIG contribution bracket matched.',
+                philhealth: philhealth ? 'Matched PhilHealth contribution table.' : 'No PhilHealth contribution bracket matched.',
+                tax: taxResult.bracket ? 'Matched withholding tax table.' : 'No withholding tax bracket matched.'
+            }
         };
     }
 
@@ -1878,7 +2046,6 @@ module.exports = function (app, pool) {
 
                     const monthlyEr =
                         toMoney(match.employer_ss) +
-                        toMoney(match.employer_ec) +
                         toMoney(match.employer_mpf);
 
                     // convert to payroll period
@@ -1981,7 +2148,7 @@ module.exports = function (app, pool) {
 
                 // 👇 fetch rate config instead of bracket
                 const [rows] = await conn.query(
-                    `SELECT rate, min_base, max_base
+                    `SELECT rate, employee_share, employer_share, min_base, max_base
                     FROM philhealth_contribution_table
                     WHERE is_active = 1
                     ORDER BY effective_date DESC
@@ -2000,9 +2167,11 @@ module.exports = function (app, pool) {
                         maxBase
                     );
 
-                    // STEP 1: monthly computation
-                    let monthlyEe = base * toMoney(rule.rate);
-                    let monthlyEr = base * toMoney(rule.rate);
+                    // The configured rate is the TOTAL premium rate. Split it
+                    // between employee and employer using the configured shares.
+                    const monthlyPremium = base * toMoney(rule.rate);
+                    let monthlyEe = monthlyPremium * (toMoney(rule.employee_share) || 0.5);
+                    let monthlyEr = monthlyPremium * (toMoney(rule.employer_share) || 0.5);
 
                     // STEP 2: split per payroll period
                     let periodEeShare = roundMoney(monthlyEe / periodDivisorPH);

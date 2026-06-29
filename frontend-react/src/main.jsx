@@ -32,6 +32,7 @@ import EmployeeDocumentsPage from './pages/EmployeeDocumentsPage.jsx';
 import YearEndPayrollPage from './pages/YearEndPayrollPage.jsx';
 import LoanDeductionPage from './pages/LoanDeductionPage.jsx';
 import SystemConfigPage from './pages/SystemConfigPage.jsx';
+import GovernmentReportsPage from './pages/GovernmentReportsPage.jsx';
 import CompanySettingsPage from './pages/CompanySettingsPage.jsx';
 import UserSettingsPage from './pages/UserSettingsPage.jsx';
 import AboutUsPage from './pages/AboutUsPage.jsx';
@@ -361,7 +362,7 @@ function AppRoutes() {
           path="government-reports"
           element={
             <RoleRoute roles={['admin', 'hr']} feature="government-reports">
-              <AdvancedModulesPage moduleKey="compliance" />
+              <GovernmentReportsPage />
             </RoleRoute>
           }
         />
@@ -387,7 +388,7 @@ function AppRoutes() {
         <Route
           path="report-builder"
           element={
-            <RoleRoute roles={['admin']} feature="report-builder">
+            <RoleRoute roles={['admin', 'hr']} feature="report-builder">
               <AdvancedModulesPage moduleKey="reports" />
             </RoleRoute>
           }
