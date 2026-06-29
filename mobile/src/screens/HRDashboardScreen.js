@@ -201,7 +201,14 @@ export default function HRDashboardScreen({ navigation }) {
 
   useEffect(() => { loadData(); }, [user?.user_id]);
   useEffect(() => {
-    const unsub = navigation.addListener('focus', () => loadData());
+    const unsub = navigation.addListener('focus', () => {
+      loadData();
+      if (user?.user_id) {
+        api.get('/notifications', { params: { user_id: user.user_id } })
+          .then(({ data }) => setUnreadCount(Number(data.unread_count || 0)))
+          .catch(() => {});
+      }
+    });
     return unsub;
   }, [navigation, user?.user_id]);
   useEffect(() => {

@@ -21,6 +21,7 @@ import HRPerformanceScreen from '../screens/HRPerformanceScreen';
 import HRAuditingScreen from '../screens/HRAuditingScreen';
 import HRCalendarScreen from '../screens/HRCalendarScreen';
 import HRUtilitiesScreen from '../screens/HRUtilitiesScreen';
+import HRAttendanceCorrectionScreen from '../screens/HRAttendanceCorrectionScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import AttendanceCorrectionScreen from '../screens/AttendanceCorrectionScreen';
 import LeaveScreen from '../screens/LeaveScreen';
@@ -207,7 +208,8 @@ export default function AppNavigator() {
           <Stack.Screen name="HRPerformance" component={HRPerformanceScreen} options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="HRAuditing"    component={HRAuditingScreen}    options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="HRCalendar"    component={HRCalendarScreen}    options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="HRUtilities"   component={HRUtilitiesScreen}   options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRUtilities"        component={HRUtilitiesScreen}            options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="HRAttendanceCorrection" component={HRAttendanceCorrectionScreen} options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />

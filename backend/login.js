@@ -8,7 +8,7 @@ const { createNotificationsForAdminHr } = require('./notificationHelper');
 
 const MAX_ATTEMPTS = 3;
 const OTP_EXPIRY_MINUTES = Number(process.env.LOGIN_OTP_EXPIRY_MINUTES || 5);
-const OTP_SEND_TIMEOUT_MS = Number(process.env.LOGIN_OTP_SEND_TIMEOUT_MS || 5000);
+const OTP_SEND_TIMEOUT_MS = Number(process.env.LOGIN_OTP_SEND_TIMEOUT_MS || 15000);
 
 module.exports = function (app, pool) {
   console.log('AUTH ROUTES LOADED: login.js (2fa-v1)');
@@ -159,14 +159,33 @@ module.exports = function (app, pool) {
     return d.length >= 4 ? `***-***-${d.slice(-4)}` : '***';
   }
 
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+  }
+
+  function getOtpEmail(user) {
+    if (isValidEmail(user?.email)) return String(user.email).trim();
+
+    // The bootstrap/system administrator may not be linked to an employee
+    // contact. In that case, deliver its OTP to the explicitly configured
+    // fallback, or to the system mailbox already used to send security mail.
+    const role = String(user?.role || '').toLowerCase();
+    const isPrivileged = role.includes('admin') || role.includes('human resource') || role === 'hr';
+    if (!isPrivileged) return null;
+
+    const fallback = process.env.LOGIN_OTP_FALLBACK_EMAIL || process.env.GMAIL_USER || process.env.SMTP_USER;
+    return isValidEmail(fallback) ? String(fallback).trim() : null;
+  }
+
   async function sendOtpEmail(user, otp) {
     const transporter = getTransporter();
     const cfg = getMailConfig();
-    if (!transporter || !cfg || !user.email) return false;
+    const recipient = getOtpEmail(user);
+    if (!transporter || !cfg || !recipient) return false;
     try {
       await transporter.sendMail({
         from: cfg.from,
-        to: String(user.email).trim(),
+        to: recipient,
         subject: 'Your Login Verification Code — AstreaBlue HRIS',
         text: `Hi ${user.full_name || user.username},\n\nYour login verification code is: ${otp}\n\nThis code expires in ${OTP_EXPIRY_MINUTES} minutes.\nDo not share this code with anyone.\n\nIf you did not attempt to log in, contact HR immediately.`,
         html: buildEmail({
@@ -359,7 +378,8 @@ module.exports = function (app, pool) {
       }
 
       const channels = [];
-      if (emailSent && user.email) channels.push(`email (${maskEmail(user.email)})`);
+      const otpEmail = getOtpEmail(user);
+      if (emailSent && otpEmail) channels.push(`email (${maskEmail(otpEmail)})`);
       if (smsSent   && user.phone) channels.push(`SMS (${maskPhone(user.phone)})`);
 
       return res.json({
@@ -368,7 +388,7 @@ module.exports = function (app, pool) {
         userId: user.user_id,
         isTempPassword: Boolean(user.is_temp_password),
         channels,
-        maskedEmail: user.email ? maskEmail(user.email) : null,
+        maskedEmail: otpEmail ? maskEmail(otpEmail) : null,
         maskedPhone: user.phone ? maskPhone(user.phone) : null,
         message: `Verification code sent to ${channels.join(' and ')}.`
       });
@@ -496,8 +516,17 @@ module.exports = function (app, pool) {
         sendOtpSms(user.phone, otp)
       ]);
       const channels  = [];
-      if (emailSent && user.email) channels.push(`email (${maskEmail(user.email)})`);
+      const otpEmail = getOtpEmail(user);
+      if (emailSent && otpEmail) channels.push(`email (${maskEmail(otpEmail)})`);
       if (smsSent   && user.phone) channels.push(`SMS (${maskPhone(user.phone)})`);
+
+      if (!channels.length) {
+        await conn.execute('UPDATE login_otp SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL', [userId]);
+        return res.status(503).json({
+          success: false,
+          message: 'Unable to deliver a verification code. Please verify the account email and mail configuration.'
+        });
+      }
 
       return res.json({ success: true, channels, message: `New code sent to ${channels.join(' and ')}.` });
     } catch (err) {
