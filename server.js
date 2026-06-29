@@ -473,6 +473,7 @@ if (useReactFrontend) {
     require('./backend/payroll_computation')(app, pool);
     require('./backend/payroll_journal')(app, pool);
     require('./backend/government_reports')(app, pool);
+    require('./backend/report_builder')(app, pool);
     require('./backend/audit_logs')(app, pool);
     require('./backend/utilities')(app, pool);
     require('./backend/employee_documents')(app, pool);

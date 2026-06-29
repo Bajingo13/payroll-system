@@ -566,7 +566,7 @@ function PayrollAggregateSection({ type, roleSettings }) {
         const payload = data.data || {};
         setMeta({
           payrollGroups: payload.payrollGroups || [],
-          payrollPeriods: payload.payrollPeriods || [],
+          payrollPeriods: [],
           payrollMonths: payload.payrollMonths || [],
           payrollYears: payload.payrollYears || []
         });
@@ -620,6 +620,29 @@ function PayrollAggregateSection({ type, roleSettings }) {
 
   function updateFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  async function changePayrollGroup(value) {
+    setFilters((current) => ({ ...current, payroll_group: value, payroll_period: '' }));
+    setRows([]);
+    setRunId(null);
+    if (!value) {
+      setMeta((current) => ({ ...current, payrollPeriods: [] }));
+      return;
+    }
+    try {
+      const { data } = await api.get('/payroll_periods', { params: { groupId: value } });
+      setMeta((current) => ({ ...current, payrollPeriods: data.data?.payrollPeriods || [] }));
+    } catch (err) {
+      setMeta((current) => ({ ...current, payrollPeriods: [] }));
+      setMessage(getApiMessage(err, 'Unable to load periods for the selected payroll group.'));
+    }
+  }
+
+  function periodLabel(name) {
+    if (name === 'First Half') return '1st Half';
+    if (name === 'Second Half') return '2nd Half';
+    return name;
   }
 
   const hasCompleteFilters = Boolean(
@@ -776,7 +799,7 @@ function PayrollAggregateSection({ type, roleSettings }) {
         <div className="report-filter-grid">
           <label>
             Payroll Group
-            <select value={filters.payroll_group} onChange={(event) => updateFilter('payroll_group', event.target.value)}>
+            <select value={filters.payroll_group} onChange={(event) => changePayrollGroup(event.target.value)}>
               <option value="">Select</option>
               {meta.payrollGroups.map((item) => (
                 <option key={item.group_id} value={item.group_id}>{item.group_name}</option>
@@ -789,7 +812,7 @@ function PayrollAggregateSection({ type, roleSettings }) {
             <select value={filters.payroll_period} onChange={(event) => updateFilter('payroll_period', event.target.value)}>
               <option value="">Select</option>
               {meta.payrollPeriods.map((item) => (
-                <option key={item.period_id} value={item.period_id}>{item.period_name}</option>
+                <option key={item.period_id} value={item.period_id}>{periodLabel(item.period_name)}</option>
               ))}
             </select>
           </label>

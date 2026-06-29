@@ -237,6 +237,7 @@ export default function AppLayout() {
 
   const hrToolsNav = [
     { to: '/government-reports', label: 'Government Reports', feature: 'government-reports' },
+    { to: '/report-builder', label: 'Report Builder', feature: 'report-builder' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' }
   ];

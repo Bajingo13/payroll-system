@@ -180,6 +180,16 @@ module.exports = function (app, pool) {
         try {
             conn = await pool.getConnection();
 
+            // Older databases omitted the single period used by Monthly payroll.
+            await conn.query(`
+                INSERT INTO payroll_periods (period_name, group_id)
+                SELECT 'Monthly', 3
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM payroll_periods
+                    WHERE group_id = 3 AND LOWER(TRIM(period_name)) = 'monthly'
+                )
+            `);
+
             // Fetch payroll groups, months, and years in parallel
             const [payrollGroups, payrollMonths, payrollYears] = await Promise.all([
                 conn.query("SELECT group_id, group_name FROM payroll_groups ORDER BY group_id ASC"),
@@ -249,6 +259,7 @@ module.exports = function (app, pool) {
         let conn;
         try {
             conn = await pool.getConnection();
+
             const rows = await getPayrollRunCandidates(conn, {
                 payroll_group,
                 payroll_period,

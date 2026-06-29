@@ -401,16 +401,24 @@ module.exports = function (app, pool) {
         };
     }
 
-    async function lookupPhilhealthContribution(conn) {
+    async function lookupPhilhealthContribution(conn, salaryBasis) {
         const [rows] = await conn.query(`
-            SELECT rate, min_base, max_base
+            SELECT rate, employee_share, employer_share, min_base, max_base
             FROM philhealth_contribution_table
             WHERE is_active = 1
             ORDER BY effective_date DESC
             LIMIT 1
         `);
 
-        return rows[0] || null;
+        const rule = rows[0];
+        if (!rule) return null;
+        const base = Math.min(Math.max(toMoney(salaryBasis), toMoney(rule.min_base)), toMoney(rule.max_base) || Infinity);
+        const totalPremium = base * toMoney(rule.rate);
+        return {
+            ...rule,
+            ee_share: roundMoney(totalPremium * (toMoney(rule.employee_share) || 0.5)),
+            er_share: roundMoney(totalPremium * (toMoney(rule.employer_share) || 0.5))
+        };
     }
 
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
@@ -496,7 +504,7 @@ module.exports = function (app, pool) {
             ? null
             : await lookupSssContribution(conn, salaryBasis);
         const pagibig = await lookupPagibigContribution(conn, salaryBasis);
-        const philhealth = await lookupPhilhealthContribution(conn);
+        const philhealth = await lookupPhilhealthContribution(conn, salaryBasis);
         const sssEmployee = roundMoney(sss?.ee_share || 0);
         const gsisEmployee = roundMoney(gsis?.ee_share || 0);
         const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
@@ -2005,7 +2013,6 @@ module.exports = function (app, pool) {
 
                     const monthlyEr =
                         toMoney(match.employer_ss) +
-                        toMoney(match.employer_ec) +
                         toMoney(match.employer_mpf);
 
                     // convert to payroll period
@@ -2106,7 +2113,7 @@ module.exports = function (app, pool) {
 
                 // 👇 fetch rate config instead of bracket
                 const [rows] = await conn.query(
-                    `SELECT rate, min_base, max_base
+                    `SELECT rate, employee_share, employer_share, min_base, max_base
                     FROM philhealth_contribution_table
                     WHERE is_active = 1
                     ORDER BY effective_date DESC
@@ -2125,9 +2132,11 @@ module.exports = function (app, pool) {
                         maxBase
                     );
 
-                    // STEP 1: monthly computation
-                    let monthlyEe = base * toMoney(rule.rate);
-                    let monthlyEr = base * toMoney(rule.rate);
+                    // The configured rate is the TOTAL premium rate. Split it
+                    // between employee and employer using the configured shares.
+                    const monthlyPremium = base * toMoney(rule.rate);
+                    let monthlyEe = monthlyPremium * (toMoney(rule.employee_share) || 0.5);
+                    let monthlyEr = monthlyPremium * (toMoney(rule.employer_share) || 0.5);
 
                     // STEP 2: split per payroll period
                     let periodEeShare = roundMoney(monthlyEe / periodDivisorPH);

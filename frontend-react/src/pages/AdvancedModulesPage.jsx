@@ -831,6 +831,46 @@ function ComplianceReports() {
     }
   }
 
+  function exportGovernmentPdf() {
+    if (!dashboard) {
+      setMessage('Government report data is still loading.');
+      return;
+    }
+
+    const monthLabel = new Date(Number(year), Number(month) - 1, 1).toLocaleString('en-PH', { month: 'long' });
+    const totals = {
+      'SSS-R3': dashboard.payroll?.sss_total,
+      'PhilHealth-RF1': dashboard.payroll?.philhealth_total,
+      'PagIBIG-MCRF': dashboard.payroll?.pagibig_total,
+      'BIR-1601C': dashboard.payroll?.bir_total
+    };
+    const reportRows = (dashboard.reportTypes || []).map((reportType) => {
+      const annual = ['BIR-2316', 'BIR-1604C', 'BIR-Alphalist'].includes(reportType);
+      const record = dashboard.filings?.find((item) => item.report_type === reportType && Number(item.report_month) === (annual ? 0 : Number(month)));
+      return [
+        'Government Report', reportType, annual ? String(year) : `${monthLabel} ${year}`,
+        record?.status || 'Draft', totals[reportType] == null ? '-' : `PHP ${money(totals[reportType])}`,
+        record?.filing_reference || record?.payment_reference || '-'
+      ];
+    });
+    const employerRows = (dashboard.employerIssues || []).map((item) => [
+      'Employer Validation', item.label, `${monthLabel} ${year}`, 'Missing information', '-', item.field
+    ]);
+    const employeeRows = (dashboard.employeeIssues || []).map((item) => [
+      'Employee Validation', `${item.emp_code} - ${item.employee_name}`, `${monthLabel} ${year}`,
+      item.issues.join('; '), '-', '-'
+    ]);
+
+    exportReport(
+      'pdf',
+      `government-compliance-${year}-${String(month).padStart(2, '0')}`,
+      `Government Compliance Report - ${monthLabel} ${year}`,
+      ['Category', 'Report / Record', 'Period', 'Status / Finding', 'Amount', 'Reference'],
+      [...reportRows, ...employerRows, ...employeeRows]
+    );
+    setMessage('Government compliance PDF generated.');
+  }
+
   async function saveFiling() {
     setBusy(true); setMessage('');
     try {
@@ -877,6 +917,7 @@ function ComplianceReports() {
           <label>Year<input type="number" min="1990" max="2100" value={year} onChange={(event) => setYear(Number(event.target.value || 0))} /></label>
           <label>Month<input type="number" min="1" max="12" value={month} onChange={(event) => setMonth(Number(event.target.value || 0))} /></label>
           <button type="button" className="btn secondary" onClick={exportReports}>Export Checklist</button>
+          <button type="button" className="btn secondary" onClick={exportGovernmentPdf} disabled={loadingDashboard}>Export PDF</button>
           <button type="button" className="btn" onClick={exportAll} disabled={busy}>{busy ? 'Exporting…' : 'Export All CSV'}</button>
         </div>
       </div>
@@ -1346,116 +1387,104 @@ function PerformanceManagement() {
 }
 
 function CustomReportBuilder() {
-  const reports = [
-    {
-      id: 'payroll-journal',
-      title: 'Payroll Journal',
-      category: 'Payroll',
-      purpose: 'Shows each payroll run with gross pay, deductions, and net pay for audit and review.',
-      route: 'payroll_journal.html',
-      fields: 'Company, employee, gross pay, deductions, net pay',
-      frequency: 'Per payroll run'
-    },
-    {
-      id: 'gross-pay',
-      title: 'Gross Pay',
-      category: 'Payroll',
-      purpose: 'Summarizes earnings before deductions are applied.',
-      route: 'gross_pay.html',
-      fields: 'Employee ID, employee name, company, gross pay',
-      frequency: 'Per payroll run'
-    },
-    {
-      id: 'net-pay',
-      title: 'Net Pay',
-      category: 'Payroll',
-      purpose: 'Shows take-home pay after all deductions and contributions.',
-      route: 'net_pay.html',
-      fields: 'Employee ID, employee name, company, net pay',
-      frequency: 'Per payroll run'
-    },
-    {
-      id: 'payslip',
-      title: 'Payslip',
-      category: 'Payroll',
-      purpose: 'Employee pay statement with earnings, deductions, and payout details.',
-      route: 'payslip.html',
-      fields: 'Employee, pay period, gross pay, deductions, net pay',
-      frequency: 'Per payroll run'
-    },
-    {
-      id: 'government-reports',
-      title: 'Government Reports',
-      category: 'Compliance',
-      purpose: 'Provides BIR, SSS, PhilHealth, and Pag-IBIG export templates.',
-      route: 'government_reports.html',
-      fields: 'BIR 1601-C, BIR 2316, BIR 1604-C, SSS R3/R5, PhilHealth RF-1, Pag-IBIG MCRF',
-      frequency: 'Monthly / Annual'
-    },
-    {
-      id: 'reconciliation-details',
-      title: 'Reconciliation Details',
-      category: 'Payroll',
-      purpose: 'Compares gross, deductions, and net pay totals for validation.',
-      route: 'reconciliation_details.html',
-      fields: 'Employee ID, gross, deductions, net, delta',
-      frequency: 'Per payroll run'
-    }
-  ];
-  const categories = ['All', 'Payroll', 'Compliance'];
-  const [category, setCategory] = useState('All');
-  const [selectedReportId, setSelectedReportId] = useState(reports[0].id);
-  const selectedReport = reports.find((report) => report.id === selectedReportId) || reports[0];
+  const [sources, setSources] = useState([]);
+  const [sourceKey, setSourceKey] = useState('employees');
+  const [selectedFields, setSelectedFields] = useState([]);
+  const [filters, setFilters] = useState({ date_from: '', date_to: '', company: '', department: '', status: '', run_id: '' });
+  const [groupBy, setGroupBy] = useState('');
+  const [sortField, setSortField] = useState('');
+  const [sortDir, setSortDir] = useState('ASC');
+  const [preview, setPreview] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [templateName, setTemplateName] = useState('');
+  const [reportTitle, setReportTitle] = useState('Custom HRIS and Payroll Report');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const source = sources.find((item) => item.key === sourceKey);
 
-  const rows = reports.filter((row) => category === 'All' || row.category === category);
-
-  useEffect(() => {
-    if (!rows.some((report) => report.id === selectedReportId)) {
-      setSelectedReportId(rows[0]?.id || reports[0].id);
-    }
-  }, [category, rows, reports, selectedReportId]);
-
-  function exportBuilder() {
-    downloadCsv(
-      'report-builder-template.csv',
-      ['Report', 'Category', 'Purpose', 'Route', 'Fields', 'Frequency'],
-      rows.map((row) => [row.title, row.category, row.purpose, row.route, row.fields, row.frequency])
-    );
+  async function loadTemplates() {
+    try { const { data } = await api.get('/report-builder/templates'); setTemplates(data.data || []); } catch { setTemplates([]); }
   }
 
-  return (
+  useEffect(() => {
+    api.get('/report-builder/metadata').then(({ data }) => {
+      const list = data.sources || []; setSources(list);
+      const first = list.find((item) => item.key === sourceKey) || list[0];
+      if (first) { setSourceKey(first.key); setSelectedFields(first.fields.slice(0, 8).map((f) => f.field)); setSortField(first.fields[0]?.field || ''); }
+    }).catch((err) => setMessage(getApiMessage(err, 'Unable to load report datasets.')));
+    loadTemplates();
+  }, []);
+
+  function changeSource(key) {
+    const next = sources.find((item) => item.key === key); setSourceKey(key); setPreview(null); setGroupBy('');
+    setSelectedFields((next?.fields || []).slice(0, 8).map((f) => f.field)); setSortField(next?.fields?.[0]?.field || '');
+    setReportTitle(next?.label || 'Custom HRIS and Payroll Report');
+  }
+
+  function toggleField(field) {
+    setSelectedFields((current) => current.includes(field) ? current.filter((item) => item !== field) : current.length < 20 ? [...current, field] : current);
+  }
+
+  const configuration = { source: sourceKey, fields: selectedFields, filters, group_by: groupBy, sort_field: sortField, sort_dir: sortDir, title: reportTitle };
+
+  async function generatePreview() {
+    if (!selectedFields.length) { setMessage('Select at least one field.'); return; }
+    setLoading(true); setMessage('');
+    try { const { data } = await api.post('/report-builder/preview', configuration); setPreview(data); if (data.truncated) setMessage('Preview is limited to 2,000 records. Refine the filters for a smaller report.'); }
+    catch (err) { setMessage(getApiMessage(err, 'Unable to generate report.')); setPreview(null); }
+    finally { setLoading(false); }
+  }
+
+  async function saveTemplate() {
+    if (!templateName.trim()) { setMessage('Enter a template name.'); return; }
+    try { await api.post('/report-builder/templates', { template_name: templateName, configuration }); setTemplateName(''); await loadTemplates(); setMessage('Report template saved.'); }
+    catch (err) { setMessage(getApiMessage(err, 'Unable to save template.')); }
+  }
+
+  function applyTemplate(item) {
+    const c = item.configuration || {}; setSourceKey(c.source); setSelectedFields(c.fields || []); setFilters(c.filters || {}); setGroupBy(c.group_by || ''); setSortField(c.sort_field || ''); setSortDir(c.sort_dir || 'ASC'); setReportTitle(c.title || item.template_name); setPreview(null);
+  }
+
+  async function deleteTemplate(id) {
+    try { await api.delete(`/report-builder/templates/${id}`); await loadTemplates(); } catch (err) { setMessage(getApiMessage(err, 'Unable to delete template.')); }
+  }
+
+  function exportBuiltReport(format) {
+    if (!preview?.data?.length) { setMessage('Generate a preview before exporting.'); return; }
+    const headers = preview.columns.map((c) => c.label);
+    const rows = preview.data.map((row) => preview.columns.map((c) => ['money','number'].includes(c.type) ? (c.type === 'money' ? Number(row[c.field] || 0).toFixed(2) : row[c.field]) : row[c.field]));
+    exportReport(format, reportTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'), reportTitle, headers, rows);
+  }
+
+  return <>
     <section className="table-section">
-      <h3>Report Builder</h3>
-      <p style={{ marginTop: 0 }}>Use this module to select a payroll summary report, review its purpose, and export a template for the chosen report.</p>
+      <div className="table-header"><div><h3>Custom Report Builder</h3><p>Build live HRIS, timekeeping, and payroll reports using approved system datasets.</p></div><div className="toolbar"><button className="btn" type="button" onClick={generatePreview} disabled={loading}>{loading ? 'Generating...' : 'Generate Preview'}</button></div></div>
       <div className="report-filter-grid">
-        <label>
-          Category
-          <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            {categories.map((value) => <option key={value}>{value}</option>)}
-          </select>
-        </label>
-        <label>
-          Available Reports
-          <select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}>
-            {rows.map((report) => <option key={report.id} value={report.id}>{report.title}</option>)}
-          </select>
-        </label>
-        <label>
-          Purpose
-          <textarea value={selectedReport.purpose} readOnly rows={4} style={{ resize: 'none' }} />
-        </label>
-        <label>
-          Open Report
-          <input type="text" readOnly value={selectedReport.route} />
-        </label>
-        <div className="toolbar">
-          <button type="button" className="btn" onClick={() => { window.location.href = selectedReport.route; }}>Open Report</button>
-          <button type="button" className="btn secondary" onClick={exportBuilder}>Export Template</button>
-        </div>
+        <label>Report Title<input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} /></label>
+        <label>Data Source<select value={sourceKey} onChange={(e) => changeSource(e.target.value)}>{sources.map((s) => <option key={s.key} value={s.key}>{s.category} - {s.label}</option>)}</select></label>
+        <label>Date From<input type="date" value={filters.date_from || ''} onChange={(e) => setFilters((p) => ({...p,date_from:e.target.value}))} /></label>
+        <label>Date To<input type="date" value={filters.date_to || ''} onChange={(e) => setFilters((p) => ({...p,date_to:e.target.value}))} /></label>
+        <label>Company<input value={filters.company || ''} onChange={(e) => setFilters((p) => ({...p,company:e.target.value}))} placeholder="All companies" /></label>
+        <label>Department<input value={filters.department || ''} onChange={(e) => setFilters((p) => ({...p,department:e.target.value}))} placeholder="All departments" /></label>
+        <label>Status<input value={filters.status || ''} onChange={(e) => setFilters((p) => ({...p,status:e.target.value}))} placeholder="All statuses" /></label>
+        {sourceKey === 'payroll' ? <label>Payroll Run ID<input type="number" value={filters.run_id || ''} onChange={(e) => setFilters((p) => ({...p,run_id:e.target.value}))} /></label> : null}
+        <label>Group By<select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}><option value="">No grouping</option>{source?.fields.filter((f) => selectedFields.includes(f.field)).map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}</select></label>
+        <label>Sort By<select value={sortField} onChange={(e) => setSortField(e.target.value)}>{source?.fields.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}</select></label>
+        <label>Direction<select value={sortDir} onChange={(e) => setSortDir(e.target.value)}><option value="ASC">Ascending</option><option value="DESC">Descending</option></select></label>
       </div>
-      <SimpleTable headers={['Report', 'Category', 'Purpose', 'Route', 'Fields', 'Frequency']} rows={rows.map((row) => [row.title, row.category, row.purpose, row.route, row.fields, row.frequency])} />
+      <h4>Select Fields <small>({selectedFields.length}/20)</small></h4>
+      <div className="permission-grid">{source?.fields.map((field) => <label key={field.field}><input type="checkbox" checked={selectedFields.includes(field.field)} onChange={() => toggleField(field.field)} /> {field.label}{field.type === 'sensitive' ? ' (Sensitive)' : ''}</label>)}</div>
+      {message ? <p className="message">{message}</p> : null}
     </section>
-  );
+
+    <section className="table-section">
+      <div className="table-header"><div><h3>Live Preview</h3><p>{preview ? `${preview.count} record(s) returned` : 'Choose fields and filters, then generate the preview.'}</p></div><div className="toolbar"><button className="btn secondary" onClick={() => exportBuiltReport('csv')} disabled={!preview}>CSV</button><button className="btn secondary" onClick={() => exportBuiltReport('pdf')} disabled={!preview}>PDF</button><button className="btn secondary" onClick={() => exportBuiltReport('txt')} disabled={!preview}>Text</button></div></div>
+      {preview?.groups?.length ? <><h4>Grouped Summary</h4><SimpleTable headers={['Group','Records',...preview.columns.filter((c)=>['money','number'].includes(c.type)).map((c)=>c.label)]} rows={preview.groups.map((g)=>[g.group,g.count,...preview.columns.filter((c)=>['money','number'].includes(c.type)).map((c)=>money(g[c.field]))])} /></> : null}
+      {preview ? <div className="table-scroll"><table><thead><tr>{preview.columns.map((c)=><th key={c.field}>{c.label}</th>)}</tr></thead><tbody>{preview.data.map((row,i)=><tr key={i}>{preview.columns.map((c)=><td key={c.field} style={c.type==='money'?{textAlign:'right'}:undefined}>{c.type==='money'?money(row[c.field]):String(row[c.field]??'-').slice(0,300)}</td>)}</tr>)}</tbody>{Object.keys(preview.totals||{}).length?<tfoot><tr>{preview.columns.map((c,i)=><td key={c.field}><strong>{i===0?'TOTAL':preview.totals[c.field]!==undefined?money(preview.totals[c.field]):''}</strong></td>)}</tr></tfoot>:null}</table></div> : <p className="empty-state">No preview generated.</p>}
+    </section>
+
+    <section className="table-section"><h3>Saved Report Templates</h3><div className="toolbar"><input value={templateName} onChange={(e)=>setTemplateName(e.target.value)} placeholder="Template name" /><button type="button" className="btn" onClick={saveTemplate}>Save Current Template</button></div><div className="table-scroll"><table><thead><tr><th>Name</th><th>Source</th><th>Created By</th><th>Updated</th><th>Actions</th></tr></thead><tbody>{templates.length?templates.map((t)=><tr key={t.template_id}><td>{t.template_name}</td><td>{t.source_key}</td><td>{t.created_by||'-'}</td><td>{t.updated_at?new Date(t.updated_at).toLocaleString():'-'}</td><td><div className="row-actions"><button className="btn small-btn" onClick={()=>applyTemplate(t)}>Load</button><button className="btn secondary small-btn" onClick={()=>deleteTemplate(t.template_id)}>Delete</button></div></td></tr>):<tr><td colSpan="5">No saved templates.</td></tr>}</tbody></table></div></section>
+  </>;
 }
 
 function SecurityCenter() {
