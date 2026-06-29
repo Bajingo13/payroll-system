@@ -1,3 +1,5 @@
+const { setDefaultCompanyProfile } = require('./emailTemplate');
+
 module.exports = function (app, pool) {
 
     const DEFAULT_BIR_BRACKETS = [
@@ -117,6 +119,14 @@ module.exports = function (app, pool) {
         await safeAddColumn(conn, 'company_settings', 'overtime_policy', "TEXT");
         await safeAddColumn(conn, 'company_settings', 'code_of_conduct', "TEXT");
         await safeAddColumn(conn, 'company_settings', 'data_privacy_policy', "TEXT");
+        await safeAddColumn(conn, 'company_settings', 'sss_employer_no', "VARCHAR(100) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'philhealth_pen', "VARCHAR(100) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'pagibig_employer_id', "VARCHAR(100) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'bir_rdo_code', "VARCHAR(20) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'bir_branch_code', "VARCHAR(20) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'taxpayer_type', "VARCHAR(50) DEFAULT 'Private'");
+        await safeAddColumn(conn, 'company_settings', 'authorized_signatory', "VARCHAR(255) DEFAULT ''");
+        await safeAddColumn(conn, 'company_settings', 'signatory_designation', "VARCHAR(255) DEFAULT ''");
 
         await conn.query(`
             CREATE TABLE IF NOT EXISTS bir_tax_brackets (
@@ -190,6 +200,8 @@ module.exports = function (app, pool) {
             conn = await pool.getConnection();
             await ensureTables(conn);
             await seedDefaults(conn);
+            const [[company]] = await conn.query('SELECT * FROM company_settings WHERE id = 1');
+            if (company) setDefaultCompanyProfile(company);
             console.log('OK > system_config tables ready');
         } catch (err) {
             console.error('WARN > system_config init failed:', err.message);
@@ -222,7 +234,10 @@ module.exports = function (app, pool) {
             company_name, address, tin, email, phone, logo_url, hr_policy,
             industry, website, registration_no, founded_year,
             logo_main, logo_secondary, logo_email_signature,
-            leave_policy, overtime_policy, code_of_conduct, data_privacy_policy
+            leave_policy, overtime_policy, code_of_conduct, data_privacy_policy,
+            sss_employer_no, philhealth_pen, pagibig_employer_id,
+            bir_rdo_code, bir_branch_code, taxpayer_type,
+            authorized_signatory, signatory_designation
         } = req.body || {};
         if (!company_name || !String(company_name).trim()) {
             return res.status(400).json({ success: false, message: 'Company name is required' });
@@ -236,8 +251,11 @@ module.exports = function (app, pool) {
                    (id, company_name, address, tin, email, phone, logo_url, hr_policy,
                     industry, website, registration_no, founded_year,
                     logo_main, logo_secondary, logo_email_signature,
-                    leave_policy, overtime_policy, code_of_conduct, data_privacy_policy)
-                 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    leave_policy, overtime_policy, code_of_conduct, data_privacy_policy,
+                    sss_employer_no, philhealth_pen, pagibig_employer_id,
+                    bir_rdo_code, bir_branch_code, taxpayer_type,
+                    authorized_signatory, signatory_designation)
+                 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                    company_name         = VALUES(company_name),
                    address              = VALUES(address),
@@ -256,17 +274,29 @@ module.exports = function (app, pool) {
                    leave_policy         = VALUES(leave_policy),
                    overtime_policy      = VALUES(overtime_policy),
                    code_of_conduct      = VALUES(code_of_conduct),
-                   data_privacy_policy  = VALUES(data_privacy_policy)`,
+                   data_privacy_policy  = VALUES(data_privacy_policy),
+                   sss_employer_no      = VALUES(sss_employer_no),
+                   philhealth_pen       = VALUES(philhealth_pen),
+                   pagibig_employer_id  = VALUES(pagibig_employer_id),
+                   bir_rdo_code         = VALUES(bir_rdo_code),
+                   bir_branch_code      = VALUES(bir_branch_code),
+                   taxpayer_type        = VALUES(taxpayer_type),
+                   authorized_signatory = VALUES(authorized_signatory),
+                   signatory_designation = VALUES(signatory_designation)`,
                 [
                     String(company_name).trim(),
                     address || '', tin || '', email || '', phone || '',
                     effectiveLogoUrl, hr_policy || '',
                     industry || '', website || '', registration_no || '', founded_year || '',
                     logo_main || '', logo_secondary || '', logo_email_signature || '',
-                    leave_policy || '', overtime_policy || '', code_of_conduct || '', data_privacy_policy || ''
+                    leave_policy || '', overtime_policy || '', code_of_conduct || '', data_privacy_policy || '',
+                    sss_employer_no || '', philhealth_pen || '', pagibig_employer_id || '',
+                    bir_rdo_code || '', bir_branch_code || '', taxpayer_type || 'Private',
+                    authorized_signatory || '', signatory_designation || ''
                 ]
             );
             const [rows] = await conn.query('SELECT * FROM company_settings WHERE id = 1');
+            if (rows[0]) setDefaultCompanyProfile(rows[0]);
             res.json({ success: true, data: rows[0] });
         } catch (err) {
             console.error('PUT company_settings error:', err);

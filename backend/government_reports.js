@@ -77,6 +77,208 @@ module.exports = function registerGovernmentReportRoutes(app, pool) {
     return 'all';
   }
 
+  const FILING_STATUSES = ['Draft', 'Validated', 'Reviewed', 'Approved', 'Filed', 'Paid'];
+  const REPORT_TYPES = ['SSS-R3', 'PhilHealth-RF1', 'PagIBIG-MCRF', 'BIR-1601C', 'BIR-2316', 'BIR-1604C', 'BIR-Alphalist'];
+
+  async function ensureComplianceTables(conn) {
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS government_report_filings (
+        filing_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        report_type VARCHAR(40) NOT NULL,
+        report_year INT NOT NULL,
+        report_month INT NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+        filing_reference VARCHAR(150) DEFAULT '',
+        payment_reference VARCHAR(150) DEFAULT '',
+        filed_at DATETIME NULL,
+        paid_at DATETIME NULL,
+        amount_paid DECIMAL(15,2) NOT NULL DEFAULT 0,
+        receipt_name VARCHAR(255) DEFAULT '',
+        receipt_data MEDIUMTEXT NULL,
+        notes TEXT NULL,
+        prepared_by VARCHAR(150) DEFAULT '',
+        reviewed_by VARCHAR(150) DEFAULT '',
+        approved_by VARCHAR(150) DEFAULT '',
+        locked_at DATETIME NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_government_filing_period (report_type, report_year, report_month)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS government_report_filing_history (
+        history_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        filing_id INT NOT NULL,
+        previous_status VARCHAR(20) DEFAULT '',
+        new_status VARCHAR(20) NOT NULL,
+        changed_by VARCHAR(150) DEFAULT '',
+        notes TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_government_filing_history (filing_id, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+  }
+
+  function filingPeriod(reportType, year, month) {
+    return reportType === 'BIR-2316' || reportType === 'BIR-1604C' || reportType === 'BIR-Alphalist'
+      ? 0
+      : month;
+  }
+
+  async function getValidation(conn, year, month) {
+    const [companyRows] = await conn.query('SELECT * FROM company_settings WHERE id = 1');
+    const company = companyRows[0] || {};
+    const employerChecks = [
+      ['Company TIN', 'tin'], ['Company address', 'address'], ['SSS Employer Number', 'sss_employer_no'],
+      ['PhilHealth PEN', 'philhealth_pen'], ['Pag-IBIG Employer ID', 'pagibig_employer_id'],
+      ['BIR RDO Code', 'bir_rdo_code'], ['Authorized signatory', 'authorized_signatory'],
+      ['Signatory designation', 'signatory_designation']
+    ];
+    const employerIssues = employerChecks.filter(([, field]) => !normalizeString(company[field])).map(([label, field]) => ({ label, field }));
+
+    const [employees] = await conn.query(`
+      SELECT e.employee_id, e.emp_code, e.first_name, e.middle_name, e.last_name, e.birth_date, e.gender,
+             a.sss_no, a.philhealth_no, a.pagibig_no, a.tin_no
+      FROM employees e
+      LEFT JOIN employee_accounts a ON a.employee_id = e.employee_id
+      WHERE e.status IS NULL OR LOWER(e.status) NOT IN ('inactive', 'terminated', 'resigned')
+      ORDER BY e.emp_code ASC
+    `);
+    const employeeIssues = employees.map((row) => {
+      const issues = [];
+      if (!decryptSensitiveValue(row.sss_no)) issues.push('Missing SSS number');
+      if (!decryptSensitiveValue(row.philhealth_no)) issues.push('Missing PhilHealth number');
+      if (!decryptSensitiveValue(row.pagibig_no)) issues.push('Missing Pag-IBIG MID');
+      if (!decryptSensitiveValue(row.tin_no)) issues.push('Missing TIN');
+      if (!row.birth_date) issues.push('Missing birth date');
+      if (!normalizeString(row.gender)) issues.push('Missing sex/gender');
+      return { employee_id: row.employee_id, emp_code: row.emp_code, employee_name: `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ''}`, issues };
+    }).filter((row) => row.issues.length);
+
+    const [payrollRows] = await conn.query(`
+      SELECT COUNT(DISTINCT p.employee_id) employee_count,
+             COALESCE(SUM(p.sss_employee + p.sss_employer + p.sss_ecc), 0) sss_total,
+             COALESCE(SUM(p.philhealth_employee + p.philhealth_employer), 0) philhealth_total,
+             COALESCE(SUM(p.pagibig_employee + p.pagibig_employer), 0) pagibig_total,
+             COALESCE(SUM(p.tax_withheld), 0) bir_total
+      FROM employee_payroll p INNER JOIN payroll_runs r ON r.run_id = p.run_id
+      WHERE r.year_id = ? AND r.month_id = ? AND (p.payroll_status IS NULL OR p.payroll_status = 'Active')
+    `, [String(year), String(month)]);
+    return { company, employerIssues, employeeIssues, activeEmployees: employees.length, payroll: payrollRows[0] || {} };
+  }
+
+  app.get('/api/government-reports/dashboard', async (req, res) => {
+    const year = asNumber(req.query.year);
+    const month = asNumber(req.query.month);
+    if (!year || !month) return res.status(400).json({ success: false, message: 'year and month are required' });
+    const conn = await pool.getConnection();
+    try {
+      await ensureComplianceTables(conn);
+      const validation = await getValidation(conn, year, month);
+      const [filings] = await conn.query(`SELECT filing_id, report_type, report_year, report_month, status, filing_reference,
+        payment_reference, filed_at, paid_at, amount_paid, receipt_name, notes, prepared_by, reviewed_by,
+        approved_by, locked_at, updated_at FROM government_report_filings WHERE report_year = ? AND report_month IN (?, 0)`, [year, month]);
+      res.json({ success: true, year, month, ...validation, filings, statuses: FILING_STATUSES, reportTypes: REPORT_TYPES });
+    } catch (err) {
+      console.error('Government dashboard error:', err);
+      res.status(500).json({ success: false, message: 'Unable to load government report dashboard.' });
+    } finally { conn.release(); }
+  });
+
+  app.get('/api/government-reports/validation', async (req, res) => {
+    const year = asNumber(req.query.year);
+    const month = asNumber(req.query.month);
+    if (!year || !month) return res.status(400).json({ success: false, message: 'year and month are required' });
+    const conn = await pool.getConnection();
+    try { res.json({ success: true, ...(await getValidation(conn, year, month)) }); }
+    catch (err) { console.error('Government validation error:', err); res.status(500).json({ success: false, message: 'Unable to validate report data.' }); }
+    finally { conn.release(); }
+  });
+
+  app.put('/api/government-reports/filings/:reportType', async (req, res) => {
+    const reportType = decodeURIComponent(req.params.reportType || '');
+    const year = asNumber(req.body?.year);
+    const requestedMonth = asNumber(req.body?.month) || 0;
+    const month = filingPeriod(reportType, year, requestedMonth);
+    const status = normalizeString(req.body?.status) || 'Draft';
+    if (!REPORT_TYPES.includes(reportType) || !year || !FILING_STATUSES.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid report type, period, or status.' });
+    }
+    if (month !== 0 && (month < 1 || month > 12)) return res.status(400).json({ success: false, message: 'Invalid month.' });
+    const receiptData = normalizeString(req.body?.receipt_data);
+    if (receiptData.length > 3_000_000) return res.status(413).json({ success: false, message: 'Receipt must be smaller than 2 MB.' });
+    const actor = normalizeString(req.session?.user?.full_name || req.session?.user?.email || 'System user');
+    const conn = await pool.getConnection();
+    try {
+      await ensureComplianceTables(conn);
+      const [currentRows] = await conn.query('SELECT * FROM government_report_filings WHERE report_type = ? AND report_year = ? AND report_month = ?', [reportType, year, month]);
+      const current = currentRows[0];
+      if (current?.locked_at && !['Filed', 'Paid'].includes(status)) return res.status(409).json({ success: false, message: 'Filed reports are locked and cannot return to an earlier status.' });
+      const preparedBy = status === 'Draft' || status === 'Validated' ? actor : (current?.prepared_by || actor);
+      const reviewedBy = FILING_STATUSES.indexOf(status) >= 2 ? actor : (current?.reviewed_by || '');
+      const approvedBy = FILING_STATUSES.indexOf(status) >= 3 ? actor : (current?.approved_by || '');
+      await conn.query(`INSERT INTO government_report_filings
+        (report_type, report_year, report_month, status, filing_reference, payment_reference, filed_at, paid_at,
+         amount_paid, receipt_name, receipt_data, notes, prepared_by, reviewed_by, approved_by, locked_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE status=VALUES(status), filing_reference=VALUES(filing_reference),
+        payment_reference=VALUES(payment_reference), filed_at=VALUES(filed_at), paid_at=VALUES(paid_at),
+        amount_paid=VALUES(amount_paid), receipt_name=IF(VALUES(receipt_name)='', receipt_name, VALUES(receipt_name)),
+        receipt_data=IF(VALUES(receipt_data) IS NULL OR VALUES(receipt_data)='', receipt_data, VALUES(receipt_data)),
+        notes=VALUES(notes), prepared_by=VALUES(prepared_by), reviewed_by=VALUES(reviewed_by),
+        approved_by=VALUES(approved_by), locked_at=VALUES(locked_at)`, [
+        reportType, year, month, status, normalizeString(req.body?.filing_reference), normalizeString(req.body?.payment_reference),
+        req.body?.filed_at || null, req.body?.paid_at || null, Number(req.body?.amount_paid || 0),
+        normalizeString(req.body?.receipt_name), receiptData || null, normalizeString(req.body?.notes), preparedBy, reviewedBy, approvedBy,
+        ['Filed', 'Paid'].includes(status) ? (current?.locked_at || new Date()) : null
+      ]);
+      const [savedRows] = await conn.query('SELECT * FROM government_report_filings WHERE report_type = ? AND report_year = ? AND report_month = ?', [reportType, year, month]);
+      const saved = savedRows[0];
+      if (!current || current.status !== status) await conn.query(`INSERT INTO government_report_filing_history
+        (filing_id, previous_status, new_status, changed_by, notes) VALUES (?, ?, ?, ?, ?)`,
+        [saved.filing_id, current?.status || '', status, actor, normalizeString(req.body?.notes)]);
+      delete saved.receipt_data;
+      res.json({ success: true, data: saved });
+    } catch (err) {
+      console.error('Government filing save error:', err);
+      res.status(500).json({ success: false, message: 'Unable to save filing record.' });
+    } finally { conn.release(); }
+  });
+
+  app.get('/api/government-reports/filings/history', async (req, res) => {
+    const conn = await pool.getConnection();
+    try {
+      await ensureComplianceTables(conn);
+      const [rows] = await conn.query(`SELECT h.*, f.report_type, f.report_year, f.report_month
+        FROM government_report_filing_history h INNER JOIN government_report_filings f ON f.filing_id = h.filing_id
+        ORDER BY h.created_at DESC LIMIT 200`);
+      res.json({ success: true, data: rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Unable to load filing history.' }); }
+    finally { conn.release(); }
+  });
+
+  app.get('/api/government-reports/filings/:reportType/receipt', async (req, res) => {
+    const reportType = decodeURIComponent(req.params.reportType || '');
+    const year = asNumber(req.query.year);
+    const requestedMonth = asNumber(req.query.month) || 0;
+    const month = filingPeriod(reportType, year, requestedMonth);
+    if (!REPORT_TYPES.includes(reportType) || !year) return res.status(400).json({ success: false, message: 'Invalid report or period.' });
+    const conn = await pool.getConnection();
+    try {
+      await ensureComplianceTables(conn);
+      const [rows] = await conn.query('SELECT receipt_name, receipt_data FROM government_report_filings WHERE report_type=? AND report_year=? AND report_month=?', [reportType, year, month]);
+      const receipt = rows[0];
+      if (!receipt?.receipt_data) return res.status(404).json({ success: false, message: 'No receipt is attached.' });
+      const match = String(receipt.receipt_data).match(/^data:([^;,]+);base64,(.+)$/s);
+      if (!match) return res.status(422).json({ success: false, message: 'Stored receipt format is invalid.' });
+      const filename = String(receipt.receipt_name || 'filing-receipt').replace(/[\r\n"\\]/g, '_');
+      res.setHeader('Content-Type', match[1]);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(Buffer.from(match[2], 'base64'));
+    } catch (err) { res.status(500).json({ success: false, message: 'Unable to retrieve receipt.' }); }
+    finally { conn.release(); }
+  });
+
   async function fetchRuns(conn, { groupId }) {
     const params = [];
     const where = [];

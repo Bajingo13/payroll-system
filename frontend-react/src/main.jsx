@@ -360,7 +360,7 @@ function AppRoutes() {
         <Route
           path="government-reports"
           element={
-            <RoleRoute roles={['admin']} feature="government-reports">
+            <RoleRoute roles={['admin', 'hr']} feature="government-reports">
               <AdvancedModulesPage moduleKey="compliance" />
             </RoleRoute>
           }

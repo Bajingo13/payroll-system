@@ -12,7 +12,9 @@ const EMPTY_SETTINGS = {
   company_name: '', address: '', tin: '', email: '', phone: '',
   industry: '', website: '', registration_no: '', founded_year: '',
   logo_url: '', logo_main: '', logo_secondary: '', logo_email_signature: '',
-  hr_policy: '', leave_policy: '', overtime_policy: '', code_of_conduct: '', data_privacy_policy: ''
+  hr_policy: '', leave_policy: '', overtime_policy: '', code_of_conduct: '', data_privacy_policy: '',
+  sss_employer_no: '', philhealth_pen: '', pagibig_employer_id: '', bir_rdo_code: '',
+  bir_branch_code: '', taxpayer_type: 'Private', authorized_signatory: '', signatory_designation: ''
 };
 
 export default function CompanySettingsPage() {
@@ -32,10 +34,9 @@ export default function CompanySettingsPage() {
     const { data } = await api.put('/company_settings', merged);
     if (data.success) {
       setSettings((prev) => ({ ...prev, ...data.data }));
-      if (data.data?.company_name) {
-        localStorage.setItem('sys_company_name', data.data.company_name);
-        window.dispatchEvent(new CustomEvent('company-settings-updated', { detail: data.data }));
-      }
+      localStorage.setItem('sys_company_profile', JSON.stringify(data.data || {}));
+      localStorage.setItem('sys_company_name', data.data?.company_name || '');
+      window.dispatchEvent(new CustomEvent('company-settings-updated', { detail: data.data || {} }));
     }
     return data;
   }
@@ -72,7 +73,9 @@ export default function CompanySettingsPage() {
 function CompanyProfile({ settings, loading, onSave }) {
   const [form, setForm] = useState({
     company_name: '', address: '', tin: '', email: '', phone: '',
-    industry: '', website: '', registration_no: '', founded_year: ''
+    industry: '', website: '', registration_no: '', founded_year: '',
+    sss_employer_no: '', philhealth_pen: '', pagibig_employer_id: '', bir_rdo_code: '',
+    bir_branch_code: '', taxpayer_type: 'Private', authorized_signatory: '', signatory_designation: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -86,7 +89,11 @@ function CompanyProfile({ settings, loading, onSave }) {
       industry:        settings.industry        || '',
       website:         settings.website         || '',
       registration_no: settings.registration_no || '',
-      founded_year:    settings.founded_year    || ''
+      founded_year:    settings.founded_year    || '',
+      sss_employer_no: settings.sss_employer_no || '', philhealth_pen: settings.philhealth_pen || '',
+      pagibig_employer_id: settings.pagibig_employer_id || '', bir_rdo_code: settings.bir_rdo_code || '',
+      bir_branch_code: settings.bir_branch_code || '', taxpayer_type: settings.taxpayer_type || 'Private',
+      authorized_signatory: settings.authorized_signatory || '', signatory_designation: settings.signatory_designation || ''
     });
   }, [loading, settings]);
 
@@ -193,6 +200,15 @@ function CompanyProfile({ settings, loading, onSave }) {
               placeholder="https://www.company.com"
             />
           </label>
+
+          <label>SSS Employer Number<input value={form.sss_employer_no} onChange={(e) => set('sss_employer_no', e.target.value)} /></label>
+          <label>PhilHealth PEN<input value={form.philhealth_pen} onChange={(e) => set('philhealth_pen', e.target.value)} /></label>
+          <label>Pag-IBIG Employer ID<input value={form.pagibig_employer_id} onChange={(e) => set('pagibig_employer_id', e.target.value)} /></label>
+          <label>BIR RDO Code<input value={form.bir_rdo_code} onChange={(e) => set('bir_rdo_code', e.target.value)} /></label>
+          <label>BIR Branch Code<input value={form.bir_branch_code} onChange={(e) => set('bir_branch_code', e.target.value)} /></label>
+          <label>Taxpayer Type<select value={form.taxpayer_type} onChange={(e) => set('taxpayer_type', e.target.value)}><option>Private</option><option>Government</option></select></label>
+          <label>Authorized Signatory<input value={form.authorized_signatory} onChange={(e) => set('authorized_signatory', e.target.value)} /></label>
+          <label>Signatory Designation<input value={form.signatory_designation} onChange={(e) => set('signatory_designation', e.target.value)} /></label>
 
           <div className="toolbar">
             <button type="submit" className="btn" disabled={saving}>

@@ -24,10 +24,36 @@ export default function AppLayout() {
   });
   const [, setRoleAccessVersion] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sys_company_profile') || '{}'); }
+    catch { return {}; }
+  });
 
   useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/company_settings')
+      .then(({ data }) => {
+        if (cancelled || !data?.data) return;
+        const company = data.data;
+        setCompanyProfile(company);
+        localStorage.setItem('sys_company_profile', JSON.stringify(company));
+        localStorage.setItem('sys_company_name', company.company_name || '');
+        document.documentElement.style.setProperty('--system-company-name', JSON.stringify(company.company_name || ''));
+        window.dispatchEvent(new CustomEvent('company-settings-updated', { detail: company }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const updateCompany = (event) => setCompanyProfile(event?.detail || {});
+    window.addEventListener('company-settings-updated', updateCompany);
+    return () => window.removeEventListener('company-settings-updated', updateCompany);
+  }, []);
 
   useEffect(() => {
     setAvatar(localStorage.getItem(avatarStorageKey) || '');
@@ -210,6 +236,7 @@ export default function AppLayout() {
   ];
 
   const hrToolsNav = [
+    { to: '/government-reports', label: 'Government Reports', feature: 'government-reports' },
     { to: '/leave-calendar', label: 'Company Calendar', feature: 'leave-calendar' },
     { to: '/utilities', label: 'Utilities', feature: 'utilities' }
   ];
@@ -271,7 +298,11 @@ export default function AppLayout() {
       <aside className={`sidebar${drawerOpen ? ' mobile-open' : ''}`}>
         <div className="profile">
           <div className="logo">
-            <img src={astreaBlueLogo} alt="AstreaBlue" className="logo-img" />
+            <img
+              src={companyProfile.logo_main || companyProfile.logo_url || astreaBlueLogo}
+              alt={companyProfile.company_name || 'Company'}
+              className="logo-img"
+            />
             <span className="logo-tagline">HRIS · Payroll Platform</span>
           </div>
           <button

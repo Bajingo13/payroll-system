@@ -50,12 +50,12 @@ module.exports = function (app, pool) {
     `);
   }
 
-  function buildAutomaticPayslipEmail(payroll) {
+  function buildAutomaticPayslipEmail(payroll, company = {}) {
     const fullName = [payroll.first_name, payroll.middle_name ? `${payroll.middle_name[0]}.` : '', payroll.last_name]
       .filter(Boolean).join(' ') || payroll.emp_code || 'Employee';
     const period = payroll.payroll_range || 'Current Period';
     return {
-      subject: `Your Payslip — ${period} | AstreaBlue HRIS`,
+      subject: `Your Payslip — ${period} | ${company.company_name || 'HRIS'}`,
       text: [
         `Hi ${fullName},`, '', `Your payslip for ${period} is ready.`, '',
         `Gross Pay: ₱${money(payroll.gross_pay)}`,
@@ -76,7 +76,7 @@ module.exports = function (app, pool) {
           { label: 'Net Pay', value: `₱${money(payroll.net_pay)}`, isStatus: true },
         ],
         closing: 'Log in to the HRIS portal for the complete earnings and deductions breakdown. Contact HR if you have questions.',
-        companyName: payroll.company || 'AstreaBlue Intelligence Inc.',
+        companyName: company.company_name || payroll.company || 'Astreablue Intelligence Inc.',
       })
     };
   }
@@ -90,6 +90,7 @@ module.exports = function (app, pool) {
     try {
       conn = await pool.getConnection();
       await ensureDeliveryTable(conn);
+      const [[company]] = await conn.execute('SELECT * FROM company_settings WHERE id = 1').catch(() => [[{}]]);
       const [rows] = await conn.execute(`
         SELECT ep.payroll_id, ep.run_id, ep.employee_id, ep.basic_salary,
                ep.gross_pay, ep.total_deductions, ep.net_pay,
@@ -128,8 +129,13 @@ module.exports = function (app, pool) {
         }
 
         try {
-          const mail = buildAutomaticPayslipEmail(payroll);
-          await transporter.sendMail({ from: mailConfig.from, to: recipient, ...mail });
+          const mail = buildAutomaticPayslipEmail(payroll, company || {});
+          await transporter.sendMail({
+            from: { ...mailConfig.from, name: company?.company_name || mailConfig.from.name },
+            replyTo: company?.email || undefined,
+            to: recipient,
+            ...mail
+          });
           summary.sent += 1;
           await conn.execute(`
             INSERT INTO payslip_email_deliveries
@@ -174,6 +180,7 @@ module.exports = function (app, pool) {
     let conn;
     try {
       conn = await pool.getConnection();
+      const [[companySettings]] = await conn.execute('SELECT * FROM company_settings WHERE id = 1').catch(() => [[{}]]);
 
       // Fetch payslip data
       let payroll;
@@ -277,14 +284,15 @@ module.exports = function (app, pool) {
         intro: `Your payslip for the pay period ${payroll.payroll_range || 'most recent period'} is now available. Please review the details below.`,
         rows: emailRows2,
         closing: 'If you have questions about your payslip, please contact the HR department.',
-        companyName: payroll.company || 'AstreaBlue Intelligence Inc.',
+        companyName: companySettings?.company_name || payroll.company || 'Astreablue Intelligence Inc.',
       });
 
       const transporter = getTransporter(mailConfig);
       await transporter.sendMail({
-        from: mailConfig.from,
+        from: { ...mailConfig.from, name: companySettings?.company_name || mailConfig.from.name },
+        replyTo: companySettings?.email || undefined,
         to: recipientEmail,
-        subject: `Your Payslip — ${payroll.payroll_range || 'Latest Period'} | AstreaBlue HRIS`,
+        subject: `Your Payslip — ${payroll.payroll_range || 'Latest Period'} | ${companySettings?.company_name || 'HRIS'}`,
         text: [
           `Hi ${fullName},`,
           ``,
@@ -296,7 +304,7 @@ module.exports = function (app, pool) {
           ``,
           `Please log in to the HRIS portal to view your full payslip.`,
           ``,
-          `— AstreaBlue Intelligence Inc.`,
+          `— ${companySettings?.company_name || 'Astreablue Intelligence Inc.'}`,
         ].join('\n'),
         html,
       });

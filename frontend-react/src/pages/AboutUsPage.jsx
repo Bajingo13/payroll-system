@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import AppIcon from '../components/AppIcon.jsx';
+import { getReportCompanyProfile } from '../utils/reportExport.js';
 
 const FEATURES = [
   { icon: 'user', tag: 'HRIS', title: 'Employee Records', desc: 'Complete employee profiles, government IDs, 201 files, and full organizational hierarchy.' },
@@ -28,17 +29,20 @@ const INFO_ICON = {
 };
 
 export default function AboutUsPage() {
-  const [company, setCompany] = useState(null);
+  const [company, setCompany] = useState(() => getReportCompanyProfile());
 
   useEffect(() => {
+    const updateCompany = (event) => setCompany(event?.detail || getReportCompanyProfile());
     api.get('/company_settings')
       .then(({ data }) => { if (data.data) setCompany(data.data); })
       .catch(() => {});
+    window.addEventListener('company-settings-updated', updateCompany);
+    return () => window.removeEventListener('company-settings-updated', updateCompany);
   }, []);
 
   const name = company?.company_name || 'Astreablue Intelligence Inc.';
   const address = company?.address || '20th Floor, Unit 2004, Philippine AXA Life Centre, 1286 Sen. Gil Puyat Ave., Makati City';
-  const email = company?.email || 'astreablueintelligenceinc@gmail.com';
+  const email = company?.email || 'hris@astreablue.com';
   const phone = company?.phone || '';
   const website = company?.website || '';
   const industry = company?.industry || 'Information Technology';

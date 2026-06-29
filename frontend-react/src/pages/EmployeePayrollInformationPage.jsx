@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { getReportCompanyName, getReportMetadata } from '../utils/reportExport.js';
+import { getReportCompanyName, getReportCompanyProfile, getReportMetadata } from '../utils/reportExport.js';
 
 const PAYSLIP_WIDTH = 70;
-const DEFAULT_COMPANY_NAME = getReportCompanyName();
+const DEFAULT_COMPANY_NAME = 'Astreablue Intelligence Inc.';
 
 function money(value) {
   return `PHP ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -59,15 +59,20 @@ function signatoryHtml(meta) {
   `;
 }
 
-function buildPayslipPrintHtml(p, cv, companyName) {
+function buildPayslipPrintHtml(p, cv, companyProfile) {
   const esc = (v) => escapeHtml(v ?? '-');
   const m = (v) => esc(fmt(v));
   const dash = (v) => (Number(v) ? m(v) : '-');
+  const company = typeof companyProfile === 'string' ? { company_name: companyProfile } : (companyProfile || {});
+  const companyName = company.company_name || DEFAULT_COMPANY_NAME;
 
   return `
 <div class="ps">
   <div class="rule"></div>
+  ${company.logo_main || company.logo_url ? `<img src="${esc(company.logo_main || company.logo_url)}" alt="Company logo" style="display:block;max-width:150px;max-height:48px;object-fit:contain;margin:0 auto 5px;">` : ''}
   <div class="center heavy">${esc(companyName)}</div>
+  ${company.address ? `<div class="center">${esc(company.address)}</div>` : ''}
+  ${company.tin ? `<div class="center">TIN: ${esc(company.tin)}</div>` : ''}
   <div class="center ps-title">P A Y S L I P</div>
   <div class="center">PAYROLL PERIOD COVERED : ${esc(p?.payroll_range || '-')}</div>
 
@@ -121,7 +126,7 @@ function buildPayslipPrintHtml(p, cv, companyName) {
 </div>`;
 }
 
-function buildPayslipFullPage(title, payslip, computed, companyName) {
+function buildPayslipFullPage(title, payslip, computed, companyProfile) {
   const meta = { ...getReportMetadata(title), signatories: ['Employee Signature:'] };
   return `<!DOCTYPE html>
 <html lang="en">
@@ -160,26 +165,26 @@ function buildPayslipFullPage(title, payslip, computed, companyName) {
   </style>
 </head>
 <body>
-  ${buildPayslipPrintHtml(payslip, computed, companyName || DEFAULT_COMPANY_NAME)}
+  ${buildPayslipPrintHtml(payslip, computed, companyProfile)}
   ${signatoryHtml(meta)}
 </body>
 </html>`;
 }
 
-function printPayslipDocument(title, payslip, computed, companyName) {
+function printPayslipDocument(title, payslip, computed, companyProfile) {
   const printWindow = window.open('', '_blank', 'width=760,height=820');
   if (!printWindow) {
     window.alert('Popup blocked. Please allow popups to print the payslip.');
     return;
   }
-  printWindow.document.write(buildPayslipFullPage(title, payslip, computed, companyName));
+  printWindow.document.write(buildPayslipFullPage(title, payslip, computed, companyProfile));
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
 }
 
-function downloadPayslipDocument(title, payslip, computed, companyName, filename) {
-  const html = buildPayslipFullPage(title, payslip, computed, companyName);
+function downloadPayslipDocument(title, payslip, computed, companyProfile, filename) {
+  const html = buildPayslipFullPage(title, payslip, computed, companyProfile);
   const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -202,6 +207,14 @@ export default function EmployeePayrollInformationPage() {
   const [payslipLoading, setPayslipLoading] = useState(false);
   const [payslipMessage, setPayslipMessage] = useState('');
   const [emailSending, setEmailSending] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState(() => getReportCompanyProfile());
+
+  useEffect(() => {
+    const updateCompany = (event) => setCompanyProfile(event?.detail || getReportCompanyProfile());
+    updateCompany();
+    window.addEventListener('company-settings-updated', updateCompany);
+    return () => window.removeEventListener('company-settings-updated', updateCompany);
+  }, []);
 
   useEffect(() => {
     if (!user?.user_id) return;
@@ -251,8 +264,8 @@ export default function EmployeePayrollInformationPage() {
   const employeeName = payslip
     ? `${payslip.first_name || ''} ${payslip.last_name || ''}`.trim()
     : (user?.full_name || '-');
+  const companyName = companyProfile.company_name || getReportCompanyName();
 
-  const companyName = DEFAULT_COMPANY_NAME;
   const monthlyRate = getValue(payslip, ['monthly_rate', 'basic_salary', 'salary', 'rate'], 0);
   const grossPay = getValue(payslip, ['gross_pay'], 0);
   const totalDeductions = getValue(payslip, ['total_deductions'], 0);
@@ -277,14 +290,14 @@ export default function EmployeePayrollInformationPage() {
   function handlePrint() {
     if (!payslip) return;
     const empId = payslip.emp_code || payslip.employee_id || 'employee';
-    printPayslipDocument(`Payslip ${empId}`, payslip, payslipComputed, companyName);
+    printPayslipDocument(`Payslip ${empId}`, payslip, payslipComputed, companyProfile);
   }
 
   function handleDownload() {
     if (!payslip) return;
     const empId = payslip.emp_code || payslip.employee_id || 'employee';
     const date = new Date().toISOString().slice(0, 10);
-    downloadPayslipDocument(`Payslip ${empId}`, payslip, payslipComputed, companyName, `payslip-${empId}-${date}.html`);
+    downloadPayslipDocument(`Payslip ${empId}`, payslip, payslipComputed, companyProfile, `payslip-${empId}-${date}.html`);
   }
 
   async function handleSendEmail() {
@@ -363,9 +376,18 @@ export default function EmployeePayrollInformationPage() {
 
             <div className="payslip-paper" style={{ marginTop: '1rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+                {(companyProfile.logo_main || companyProfile.logo_url) && (
+                  <img
+                    src={companyProfile.logo_main || companyProfile.logo_url}
+                    alt={`${companyName} logo`}
+                    style={{ display: 'block', maxWidth: 150, maxHeight: 48, objectFit: 'contain', margin: '0 auto 5px' }}
+                  />
+                )}
                 <strong style={{ fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   {companyName}
                 </strong>
+                {companyProfile.address && <div style={{ fontSize: '0.72rem' }}>{companyProfile.address}</div>}
+                {companyProfile.tin && <div style={{ fontSize: '0.72rem' }}>TIN: {companyProfile.tin}</div>}
                 <div style={{ fontSize: '1.1rem', fontWeight: 900, letterSpacing: '4px', margin: '2px 0' }}>
                   P A Y S L I P
                 </div>

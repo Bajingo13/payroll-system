@@ -1,4 +1,18 @@
+import { useEffect, useState } from 'react';
 import AppIcon from './AppIcon.jsx';
+import { api } from '../api/client.js';
+import { getReportCompanyProfile } from '../utils/reportExport.js';
+
+function useCompanyProfile() {
+  const [company, setCompany] = useState(() => getReportCompanyProfile());
+  useEffect(() => {
+    const update = (event) => setCompany(event?.detail || getReportCompanyProfile());
+    api.get('/company_settings').then(({ data }) => { if (data?.data) setCompany(data.data); }).catch(() => {});
+    window.addEventListener('company-settings-updated', update);
+    return () => window.removeEventListener('company-settings-updated', update);
+  }, []);
+  return company;
+}
 
 function MiniCard({ icon, tag, title, desc, accent = '#1e40af', accentBg = '#eff6ff' }) {
   return (
@@ -21,6 +35,7 @@ function MiniCard({ icon, tag, title, desc, accent = '#1e40af', accentBg = '#eff
 }
 
 export function AboutUsContent() {
+  const company = useCompanyProfile();
   return (
     <div>
       <div style={{
@@ -28,7 +43,7 @@ export function AboutUsContent() {
         borderRadius: 14, padding: '20px 20px', marginBottom: 16,
       }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#93c5fd', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>About the Platform</div>
-        <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', marginBottom: 6 }}>Astreablue Intelligence Inc.</div>
+        <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', marginBottom: 6 }}>{company.company_name || 'Astreablue Intelligence Inc.'}</div>
         <div style={{ fontSize: 12, color: '#bfdbfe', lineHeight: 1.6 }}>
           A comprehensive HRIS and Payroll platform for employee records, timekeeping, payroll computation, and government compliance - all in one system.
         </div>
@@ -105,6 +120,9 @@ export function HelpContent() {
 }
 
 export function ContactsContent() {
+  const company = useCompanyProfile();
+  const email = company.email || 'hris@astreablue.com';
+  const address = company.address || '20F Unit 2004, Philippine AXA Life Centre, 1286 Sen. Gil Puyat Ave., Makati City';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{
@@ -118,7 +136,7 @@ export function ContactsContent() {
         <div style={{ fontSize: 12, color: '#bfdbfe', lineHeight: 1.6, marginBottom: 14 }}>
           Reach out to our team for support, HR concerns, or payroll inquiries.
         </div>
-        <a href="mailto:astreablueintelligenceinc@gmail.com" style={{
+        <a href={`mailto:${email}`} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           background: '#fff', color: '#1e40af', borderRadius: 10,
           padding: '8px 16px', fontWeight: 800, fontSize: 12, textDecoration: 'none',
@@ -128,10 +146,11 @@ export function ContactsContent() {
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden' }}>
         {[
-          { icon: 'mail', color: '#eff6ff', iconColor: '#1e40af', label: 'Email', value: 'astreablueintelligenceinc@gmail.com', href: 'mailto:astreablueintelligenceinc@gmail.com' },
-          { icon: 'mapPin', color: '#fef3c7', iconColor: '#d97706', label: 'Address', value: '20F Unit 2004, Philippine AXA Life Centre, 1286 Sen. Gil Puyat Ave., Makati City' },
+          { icon: 'mail', color: '#eff6ff', iconColor: '#1e40af', label: 'Email', value: email, href: `mailto:${email}` },
+          { icon: 'mapPin', color: '#fef3c7', iconColor: '#d97706', label: 'Address', value: address },
+          company.phone && { icon: 'phone', color: '#f5f3ff', iconColor: '#7c3aed', label: 'Phone', value: company.phone },
           { icon: 'time', color: '#f0fdf4', iconColor: '#15803d', label: 'Hours', value: 'Mon - Fri, 8:00 AM - 5:00 PM (PST)' },
-        ].map((item, i) => (
+        ].filter(Boolean).map((item, i) => (
           <div key={item.label} style={{
             display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
             borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
