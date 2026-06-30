@@ -30,6 +30,10 @@ const ADMIN_WRITE_ONLY = [
   /^\/contribution_tables/
 ];
 
+const ADMIN_HR_WRITE_ONLY = [
+  /^\/company-calendar\/events(?:\/|$)/
+];
+
 const ADMIN_OR_HR = [
   /^\/admin\//,
   /^\/register$/,
@@ -49,8 +53,7 @@ const ADMIN_OR_HR = [
   /^\/system_lists/,
   /^\/allowances/,
   /^\/deductions/,
-  /^\/(?:sss|pagibig|philhealth|tax_exemptions|withholding_tax|regional_minimum)/,
-  /^\/company-calendar\/events/
+  /^\/(?:sss|pagibig|philhealth|tax_exemptions|withholding_tax|regional_minimum)/
 ];
 
 function normalizeRole(value) {
@@ -84,6 +87,9 @@ function apiSecurity(req, res, next) {
   }
   if (req.method !== 'GET' && matchesAny(path, ADMIN_WRITE_ONLY) && role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  if (req.method !== 'GET' && matchesAny(path, ADMIN_HR_WRITE_ONLY) && !['admin', 'hr'].includes(role)) {
+    return res.status(403).json({ success: false, message: 'Admin or HR access required.' });
   }
   if (matchesAny(path, ADMIN_OR_HR) && !['admin', 'hr'].includes(role)) {
     return res.status(403).json({ success: false, message: 'Admin or HR access required.' });

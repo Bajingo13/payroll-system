@@ -5,23 +5,37 @@ const { buildEmail } = require('./emailTemplate');
 
 module.exports = function (app, pool) {
   function getMailConfig() {
-    const user = process.env.GMAIL_USER || process.env.SMTP_USER || process.env.MAIL_USER;
-    const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.SMTP_PASS || process.env.MAIL_PASS;
+    const user = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.MAIL_USER;
+    const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.MAIL_PASS;
     if (!user || !pass) return null;
     return {
       user,
       pass,
-      from: { name: process.env.MAIL_FROM_NAME || 'Astreablue Intelligence Inc.', address: user }
+      host: process.env.SMTP_HOST || null,
+      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : null,
+      secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+      from: { name: process.env.MAIL_FROM_NAME || 'HRIS', address: process.env.MAIL_FROM_ADDRESS || user }
     };
   }
 
   let _transporter = null;
   function getTransporter(config) {
     if (!_transporter) {
-      _transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: config.user, pass: config.pass }
-      });
+      if (config.host) {
+        // Custom SMTP hosting (cPanel, Hostinger, GoDaddy, etc.)
+        _transporter = nodemailer.createTransport({
+          host: config.host,
+          port: config.port || 587,
+          secure: config.secure,
+          auth: { user: config.user, pass: config.pass }
+        });
+      } else {
+        // Gmail fallback
+        _transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: config.user, pass: config.pass }
+        });
+      }
     }
     return _transporter;
   }
