@@ -1675,6 +1675,9 @@ module.exports = function (app, pool) {
             }
 
             const employee = rows[0];
+            const hasExistingPayroll =
+                employeePayroll.length > 0 &&
+                employeePayroll[0].basic_salary != null;
 
             // Use the selected payroll group's period (Monthly/Semi-Monthly/Weekly) rather
             // than the employee's own payroll_period setting, so the computation always
@@ -1696,12 +1699,14 @@ module.exports = function (app, pool) {
                 if (runRow?.group_id) effectivePayrollPeriod = runRow.group_id;
             }
 
-            employee.basic_salary = computePeriodSalary(
-                employee.main_computation,
-                employee.payroll_rate,
-                effectivePayrollPeriod,
-                employee
-            );
+            if (!hasExistingPayroll) {
+                employee.basic_salary = computePeriodSalary(
+                    employee.main_computation,
+                    employee.payroll_rate,
+                    effectivePayrollPeriod,
+                    employee
+                );
+            }
 
             function prorateAmount(amount, payrollPeriod, employee) {
                 const value = Number(amount) || 0;
@@ -2086,24 +2091,26 @@ module.exports = function (app, pool) {
                 // 'fix' (or any unrecognized formula) keeps the stored ee_share as-is.
             }
             
-            // Map computed contribution amounts to the employee payroll fields when no
-            // saved values were loaded from the DB (i.e., the field is still NULL).
-            if (computeSSS && employee.sss_employee == null && sssRecord) {
-                employee.sss_employee = sssRecord.ee_share || 0;
-                employee.sss_employer = sssRecord.er_share || 0;
-                employee.sss_ecc      = sssRecord.ecc      || 0;
-            }
-            console.log(`Employee ${employee.employee_id}: SSS computed as ee_share=${employee.sss_employee}, er_share=${employee.sss_employer}, ecc=${employee.sss_ecc}`);
-            if (computePagibig && employee.pagibig_employee == null && pagibigRecord) {
-                employee.pagibig_employee = pagibigRecord.ee_share || 0;
-                employee.pagibig_employer = pagibigRecord.er_share || 0;
-            }
-            if (computePhilhealth && employee.philhealth_employee == null && philhealthRecord) {
-                employee.philhealth_employee = philhealthRecord.ee_share || 0;
-                employee.philhealth_employer = philhealthRecord.er_share || 0;
-            }
-            if (computeWtax && employee.tax_withheld == null && wtaxRecord) {
-                employee.tax_withheld = wtaxRecord.ee_share || 0;
+            if (!hasExistingPayroll) {
+                // Map computed contribution amounts to the employee payroll fields when no
+                // saved values were loaded from the DB (i.e., the field is still NULL).
+                if (computeSSS && employee.sss_employee == null && sssRecord) {
+                    employee.sss_employee = sssRecord.ee_share || 0;
+                    employee.sss_employer = sssRecord.er_share || 0;
+                    employee.sss_ecc      = sssRecord.ecc      || 0;
+                }
+                console.log(`Employee ${employee.employee_id}: SSS computed as ee_share=${employee.sss_employee}, er_share=${employee.sss_employer}, ecc=${employee.sss_ecc}`);
+                if (computePagibig && employee.pagibig_employee == null && pagibigRecord) {
+                    employee.pagibig_employee = pagibigRecord.ee_share || 0;
+                    employee.pagibig_employer = pagibigRecord.er_share || 0;
+                }
+                if (computePhilhealth && employee.philhealth_employee == null && philhealthRecord) {
+                    employee.philhealth_employee = philhealthRecord.ee_share || 0;
+                    employee.philhealth_employer = philhealthRecord.er_share || 0;
+                }
+                if (computeWtax && employee.tax_withheld == null && wtaxRecord) {
+                    employee.tax_withheld = wtaxRecord.ee_share || 0;
+                }
             }
 
             // Check if there is a payroll record for this employee and run_id
@@ -2195,7 +2202,7 @@ module.exports = function (app, pool) {
 
             conn.release();
 
-            return res.json({ success: true, data: employee });
+            return res.json({ success: true, hasExistingPayroll, data: employee });
         } catch (err) {
             console.error("Error fetching payroll settings:", err);
             return res.status(500).json({ success: false, message: "Server error" });

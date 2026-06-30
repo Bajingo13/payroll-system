@@ -924,15 +924,20 @@ export default function PayrollComputationPage() {
     });
     console.log('Payroll settings response for employee', empId, settingsResp);
     const { data } = settingsResp;
+    const hasExistingPayroll = data.hasExistingPayroll;
     console.log('Payroll settings response for employee', empId, data);
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
     const rec = data.data || {};
+    console.log(
+        rec.absence_time,
+        rec.absence_deduction
+    );
     console.log('Payroll settings for employee', empId, rec);
     console.log(JSON.stringify(rec, null, 2));
 
     // Compute basic_salary from settings so we can pass it to HRIS
     let computedBasicSalary = toNum(rec.basic_salary);
-    if (rec.main_computation) {
+    if (!hasExistingPayroll && rec.main_computation) {
       const rawSalary = toNum(rec.main_computation);
       if (rawSalary > 0) {
         const grp = (meta.payrollGroups || []).find(g => String(g.group_id) === String(filters.payroll_group));
@@ -946,12 +951,12 @@ export default function PayrollComputationPage() {
 
     // Fetch HRIS with the correct basic_salary so deductions are computed properly
     let hris = null;
-    if (filters.month && filters.year && filters.payroll_period) {
+    if (!hasExistingPayroll && filters.month && filters.year && filters.payroll_period) {
       try {
         const hrisResp = await api.get('/payroll/hris-data', {
           params:{ employee_id:empId, month_id:filters.month, year_id:filters.year, period_id:filters.payroll_period, run_id:effectiveRunId||'', group_id:filters.payroll_group||'', basic_salary:computedBasicSalary||'' }
         });
-        if (hrisResp.data?.success) hris = hrisResp.data;
+        if (hrisResp.data.success) hris = hrisResp.data;
       } catch { /* no HRIS data available */ }
     }
 
@@ -1021,30 +1026,34 @@ export default function PayrollComputationPage() {
       nextAtt.undertime_amt  = (hris.attendance?.undertime_deduction || 0).toFixed(2);
       nextAdj.ot_adj_rg_ot_time = hrisOtMinutes;
       nextAdj.ot_adj_rg_ot      = (hris.ot?.computed_amount || 0).toFixed(2);
+      console.log('HRIS data loaded for employee', empId, hris);
+      console.log(`absence_time: ${nextP.absence_time}, absence_deduction: ${nextP.absence_deduction}`);
     }
 
     Object.assign(nextP, applyContributionRows(nextP, rec.contributions || []));
     try {
-      const computed = await computePayrollDeductions(nextP, rec, allowList, deductionList);
-      console.log('Payroll deductions computed from HRIS and settings:', computed);
-      console.log('Computed deductions:', computed);
-      if (computed) {
-        [
-          'gsis_employee', 'gsis_employer', 'gsis_ecc',
-          'sss_employee', 'sss_employer', 'sss_ecc',
-          'pagibig_employee', 'pagibig_employer', 'pagibig_ecc',
-          'philhealth_employee', 'philhealth_employer', 'philhealth_ecc',
-          'tax_withheld'
-        ].forEach((field) => {
-          if (!toNum(nextP[field]) && computed[field] != null) { nextP[field] = (computed[field] ?? 0).toFixed(2); }
-        });
+      if (!hasExistingPayroll) {
+        const computed = await computePayrollDeductions(nextP, rec, allowList, deductionList);
+        console.log('Payroll deductions computed from HRIS and settings:', computed);
+        console.log('Computed deductions:', computed);
+        if (computed) {
+          [
+            'gsis_employee', 'gsis_employer', 'gsis_ecc',
+            'sss_employee', 'sss_employer', 'sss_ecc',
+            'pagibig_employee', 'pagibig_employer', 'pagibig_ecc',
+            'philhealth_employee', 'philhealth_employer', 'philhealth_ecc',
+            'tax_withheld'
+          ].forEach((field) => {
+            if (!toNum(nextP[field]) && computed[field] != null) { nextP[field] = (computed[field] ?? 0).toFixed(2); }
+          });
+        }
+        console.log('Computed payroll deductions:', computed);
       }
-      console.log('Computed payroll deductions:', computed);
     } catch {
       // Keep loaded payroll values if automatic statutory computation is unavailable.
     }
     
-    if (rec.previousYtd) {
+    if (!hasExistingPayroll && rec.previousYtd) {
       const ytd = rec.previousYtd;
 
       nextP.ytd_gsis = (
