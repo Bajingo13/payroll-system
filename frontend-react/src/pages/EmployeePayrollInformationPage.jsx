@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getReportCompanyName, getReportCompanyProfile, getReportMetadata } from '../utils/reportExport.js';
@@ -174,7 +175,7 @@ function buildPayslipFullPage(title, payslip, computed, companyProfile) {
 function printPayslipDocument(title, payslip, computed, companyProfile) {
   const printWindow = window.open('', '_blank', 'width=760,height=820');
   if (!printWindow) {
-    window.alert('Popup blocked. Please allow popups to print the payslip.');
+    toast.error('Popup blocked. Please allow popups to print the payslip.');
     return;
   }
   printWindow.document.write(buildPayslipFullPage(title, payslip, computed, companyProfile));

@@ -1,21 +1,34 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
-function readStoredUser() {
-  const userId = sessionStorage.getItem('user_id');
-  if (!userId) return null;
-
-  return {
-    user_id: userId,
-    full_name: sessionStorage.getItem('admin_name') || '',
-    role: sessionStorage.getItem('role') || ''
-  };
-}
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(readStoredUser);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const clearStoredUser = useCallback(() => {
+    sessionStorage.removeItem('user_id');
+    sessionStorage.removeItem('admin_name');
+    sessionStorage.removeItem('role');
+    sessionStorage.removeItem('employee_id');
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/session')
+      .then(({ data }) => {
+        if (active && data?.success && data.user) setAuthUser(data.user);
+      })
+      .catch(() => {
+        if (active) {
+          clearStoredUser();
+          setUser(null);
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [clearStoredUser]);
 
   async function login(username, password) {
     const { data } = await api.post('/login', { username, password });
@@ -50,19 +63,16 @@ export function AuthProvider({ children }) {
   }
 
   const logout = useCallback(async () => {
-    sessionStorage.removeItem('user_id');
-    sessionStorage.removeItem('admin_name');
-    sessionStorage.removeItem('role');
-    sessionStorage.removeItem('employee_id');
+    clearStoredUser();
     setUser(null);
     try {
       await api.post('/logout');
     } catch (err) {
       console.warn('Logout request failed:', err);
     }
-  }, []);
+  }, [clearStoredUser]);
 
-  const value = useMemo(() => ({ user, login, logout, setAuthUser }), [logout, user]);
+  const value = useMemo(() => ({ user, loading, login, logout, setAuthUser }), [loading, logout, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

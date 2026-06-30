@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
@@ -7,37 +7,37 @@ import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
-import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
-import DashboardPage from './pages/DashboardPage.jsx';
-import HRDashboardPage from './pages/HRDashboardPage.jsx';
-import EmployeeDashboardPage from './pages/EmployeeDashboardPage.jsx';
-import EmployeeAttendancePage from './pages/EmployeeAttendancePage.jsx';
-import LeaveManagementPage from './pages/LeaveManagementPage.jsx';
-import EmployeeLeaveRequestPage from './pages/EmployeeLeaveRequestPage.jsx';
-import OvertimeManagementPage from './pages/OvertimeManagementPage.jsx';
-import EmployeeOvertimeRequestPage from './pages/EmployeeOvertimeRequestPage.jsx';
-import EmployeeAttendanceCorrectionPage from './pages/EmployeeAttendanceCorrectionPage.jsx';
-import AttendanceCorrectionManagementPage from './pages/AttendanceCorrectionManagementPage.jsx';
-import EmployeePayrollInformationPage from './pages/EmployeePayrollInformationPage.jsx';
-import EmployeeSchedulePage from './pages/EmployeeSchedulePage.jsx';
-import PayrollComputationPage from './pages/PayrollComputationPage.jsx';
-import ProfileManagementPage from './pages/ProfileManagementPage.jsx';
-import EmployeeManagementPage from './pages/EmployeeManagementPage.jsx';
-import ScheduleManagementPage from './pages/ScheduleManagementPage.jsx';
-import AuditingPage from './pages/AuditingPage.jsx';
-import ReportsPage from './pages/ReportsPage.jsx';
-import UtilitiesPage from './pages/UtilitiesPage.jsx';
-import AdvancedModulesPage from './pages/AdvancedModulesPage.jsx';
-import EmployeeDocumentsPage from './pages/EmployeeDocumentsPage.jsx';
-import YearEndPayrollPage from './pages/YearEndPayrollPage.jsx';
-import LoanDeductionPage from './pages/LoanDeductionPage.jsx';
-import SystemConfigPage from './pages/SystemConfigPage.jsx';
-import GovernmentReportsPage from './pages/GovernmentReportsPage.jsx';
-import CompanySettingsPage from './pages/CompanySettingsPage.jsx';
-import UserSettingsPage from './pages/UserSettingsPage.jsx';
-import AboutUsPage from './pages/AboutUsPage.jsx';
-import HelpPage from './pages/HelpPage.jsx';
-import ContactsPage from './pages/ContactsPage.jsx';
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx'));
+const HRDashboardPage = lazy(() => import('./pages/HRDashboardPage.jsx'));
+const EmployeeDashboardPage = lazy(() => import('./pages/EmployeeDashboardPage.jsx'));
+const EmployeeAttendancePage = lazy(() => import('./pages/EmployeeAttendancePage.jsx'));
+const LeaveManagementPage = lazy(() => import('./pages/LeaveManagementPage.jsx'));
+const EmployeeLeaveRequestPage = lazy(() => import('./pages/EmployeeLeaveRequestPage.jsx'));
+const OvertimeManagementPage = lazy(() => import('./pages/OvertimeManagementPage.jsx'));
+const EmployeeOvertimeRequestPage = lazy(() => import('./pages/EmployeeOvertimeRequestPage.jsx'));
+const EmployeeAttendanceCorrectionPage = lazy(() => import('./pages/EmployeeAttendanceCorrectionPage.jsx'));
+const AttendanceCorrectionManagementPage = lazy(() => import('./pages/AttendanceCorrectionManagementPage.jsx'));
+const EmployeePayrollInformationPage = lazy(() => import('./pages/EmployeePayrollInformationPage.jsx'));
+const EmployeeSchedulePage = lazy(() => import('./pages/EmployeeSchedulePage.jsx'));
+const PayrollComputationPage = lazy(() => import('./pages/PayrollComputationPage.jsx'));
+const ProfileManagementPage = lazy(() => import('./pages/ProfileManagementPage.jsx'));
+const EmployeeManagementPage = lazy(() => import('./pages/EmployeeManagementPage.jsx'));
+const ScheduleManagementPage = lazy(() => import('./pages/ScheduleManagementPage.jsx'));
+const AuditingPage = lazy(() => import('./pages/AuditingPage.jsx'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'));
+const UtilitiesPage = lazy(() => import('./pages/UtilitiesPage.jsx'));
+const AdvancedModulesPage = lazy(() => import('./pages/AdvancedModulesPage.jsx'));
+const EmployeeDocumentsPage = lazy(() => import('./pages/EmployeeDocumentsPage.jsx'));
+const YearEndPayrollPage = lazy(() => import('./pages/YearEndPayrollPage.jsx'));
+const LoanDeductionPage = lazy(() => import('./pages/LoanDeductionPage.jsx'));
+const SystemConfigPage = lazy(() => import('./pages/SystemConfigPage.jsx'));
+const GovernmentReportsPage = lazy(() => import('./pages/GovernmentReportsPage.jsx'));
+const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage.jsx'));
+const UserSettingsPage = lazy(() => import('./pages/UserSettingsPage.jsx'));
+const AboutUsPage = lazy(() => import('./pages/AboutUsPage.jsx'));
+const HelpPage = lazy(() => import('./pages/HelpPage.jsx'));
+const ContactsPage = lazy(() => import('./pages/ContactsPage.jsx'));
 import { canAccessFeature, getAccessibleFeatures, normalizeRole } from './access/roleAccess.js';
 import './styles.css';
 
@@ -92,7 +92,8 @@ function hasRoleAccess(rawRole, allowedRoles) {
 }
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <main className="route-loading" role="status" aria-live="polite">Loading your account…</main>;
   return user?.user_id ? children : <Navigate to="/login" replace />;
 }
 
@@ -119,6 +120,7 @@ function DashboardRoute() {
 
 function AppRoutes() {
   return (
+    <Suspense fallback={<main className="route-loading" role="status" aria-live="polite">Loading page…</main>}>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -465,6 +467,7 @@ function AppRoutes() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 

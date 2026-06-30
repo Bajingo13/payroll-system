@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -84,7 +85,7 @@ export default function EmployeeAttendanceCorrectionPage() {
       await api.patch(`/employee/attendance-correction-requests/${correctionId}/cancel`, { user_id: user.user_id });
       load();
     } catch (err) {
-      alert(getApiMessage(err, 'Could not cancel request.'));
+      toast.error(getApiMessage(err, 'Could not cancel request.'));
     } finally {
       setCancellingId(null);
     }

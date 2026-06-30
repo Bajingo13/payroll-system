@@ -211,8 +211,16 @@ module.exports = function (app, pool) {
         LEFT JOIN employee_employment ee ON ee.employee_id = ep.employee_id
         LEFT JOIN payroll_runs pr ON pr.run_id = ep.run_id
         WHERE ep.payroll_id = ?
+          AND (
+            ? <> 'employee'
+            OR EXISTS (
+              SELECT 1 FROM users u
+              WHERE u.user_id = ?
+                AND LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+            )
+          )
         LIMIT 1
-      `, [payrollId]);
+      `, [payrollId, req.authUser?.normalizedRole || 'unknown', Number(req.authUser?.user_id || 0)]);
 
       if (!rows.length) return res.status(404).json({ success: false, message: 'Payslip not found' });
 

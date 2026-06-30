@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
 import { Navigate, useParams } from 'react-router-dom';
 import { api, getApiMessage } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -248,7 +249,7 @@ function printHtml(title, bodyHtml) {
   const meta = getReportMetadata(title);
   const printWindow = window.open('', '_blank', 'width=900,height=700');
   if (!printWindow) {
-    window.alert('Popup blocked. Please allow popups to export PDF.');
+    toast.error('Popup blocked. Please allow popups to export PDF.');
     return;
   }
 
@@ -403,7 +404,7 @@ function buildPayslipFullPage(title, payslip, computed, companyName) {
 function printPayslipDocument(title, payslip, computed, companyName) {
   const printWindow = window.open('', '_blank', 'width=760,height=820');
   if (!printWindow) {
-    window.alert('Popup blocked. Please allow popups to print the payslip.');
+    toast.error('Popup blocked. Please allow popups to print the payslip.');
     return;
   }
   printWindow.document.write(buildPayslipFullPage(title, payslip, computed, companyName));

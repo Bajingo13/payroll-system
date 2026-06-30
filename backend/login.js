@@ -629,11 +629,19 @@ module.exports = function (app, pool) {
   // ═══════════════════════════════════════════════════════════════════════════
   // LOGOUT
   // ═══════════════════════════════════════════════════════════════════════════
+  app.get('/api/session', (req, res) => {
+    const user = req.session?.user;
+    if (!user?.user_id) {
+      return res.status(401).json({ success: false, message: 'Not authenticated.' });
+    }
+    return res.json({ success: true, user });
+  });
+
   app.post('/api/logout', (req, res) => {
     if (!req.session) return res.json({ success: true });
     req.session.destroy(err => {
       if (err) return res.status(500).json({ success: false, message: 'Unable to sign out.' });
-      res.clearCookie('connect.sid');
+      res.clearCookie('payroll.sid');
       return res.json({ success: true });
     });
   });
