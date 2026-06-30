@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
 import { api, getApiMessage } from '../api/client.js';
 import Modal from '../components/Modal.jsx';
 import AppIcon from '../components/AppIcon.jsx';
@@ -151,7 +152,7 @@ export default function EmployeeAttendancePage() {
 
   function exportAttendance(format) {
     if (!filteredRecords.length) {
-      window.alert('No attendance records available to export.');
+      toast.info('No attendance records available to export.');
       return;
     }
 

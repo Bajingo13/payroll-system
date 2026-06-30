@@ -12,19 +12,29 @@ export function AuthProvider({ children }) {
   const [needsPasswordChange,  setNeedsPasswordChange]  = useState(false);
 
   useEffect(() => {
-    AsyncStorage.multiGet(['user_id', 'full_name', 'role'])
-      .then((pairs) => {
-        const userId = pairs[0][1];
-        if (userId) {
+    let active = true;
+    async function restoreSession() {
+      try {
+        const pairs = await AsyncStorage.multiGet(['user_id', 'session_cookie']);
+        if (!pairs[0][1] || !pairs[1][1]) throw new Error('No saved session');
+        const { data } = await api.get('/session');
+        if (!data?.success || !data.user) throw new Error('Session expired');
+        if (active) {
           setUser({
-            user_id: userId,
-            full_name: pairs[1][1] || '',
-            role: pairs[2][1] || '',
+            user_id: String(data.user.user_id),
+            full_name: data.user.full_name || '',
+            role: data.user.role || '',
           });
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      } catch (_) {
+        await AsyncStorage.multiRemove(['user_id', 'full_name', 'role', 'session_cookie']);
+        if (active) setUser(null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    restoreSession();
+    return () => { active = false; };
   }, []);
 
   // Step 1 — authenticate + persist, but do NOT navigate yet

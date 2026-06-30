@@ -7,6 +7,7 @@ const mysql = require('mysql2/promise');
 const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
+const crypto = require('crypto');
 const cors = require('cors');
 const cloudStorage = require('./backend/cloud_storage');
 
@@ -223,20 +224,9 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.set('trust proxy', 1);
 
-// ----------- SESSION CONFIGURATION -----------
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'payroll_secret_key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: isRunningOnRailway(),
-    httpOnly: true,
-    sameSite: 'lax',
-    // Default to 15 minutes; override with SESSION_MAX_AGE_MS when needed.
-    maxAge: Number(process.env.SESSION_MAX_AGE_MS || 15 * 60 * 1000)
-  },
-  rolling: false
-}));
+// Session middleware is initialized after the database connects so sessions
+// can be persisted in MySQL instead of process memory.
+let sessionMiddleware;
 
 // ----------- AUTH MIDDLEWARE -----------
 function isAuthenticated(req, res, next) {
@@ -296,7 +286,13 @@ if (fs.existsSync(reactDistPath)) {
   app.use('/assets', express.static(path.join(reactDistPath, 'assets')));
 }
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', (req, res, next) => {
+  if (!sessionMiddleware) return res.status(503).send('Server is starting.');
+  return sessionMiddleware(req, res, () => {
+    if (!req.session?.user?.user_id) return res.status(401).send('Authentication required.');
+    return next();
+  });
+}, express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads', (_req, res) => {
   res.status(404).send('Uploaded file not found.');
 });
@@ -314,12 +310,20 @@ async function serveCloudFileRef(ref, res) {
   }
 }
 
-app.get('/api/cloud-file', async (req, res) => {
-  return serveCloudFileRef(String(req.query.ref || '').trim(), res);
+app.get('/api/cloud-file', (req, res) => {
+  if (!sessionMiddleware) return res.status(503).json({ success: false, message: 'Server is starting.' });
+  return sessionMiddleware(req, res, () => {
+    if (!req.session?.user?.user_id) return res.status(401).json({ success: false, message: 'Authentication required.' });
+    return serveCloudFileRef(String(req.query.ref || '').trim(), res);
+  });
 });
 
-app.get('/api/cloud-file/:ref', async (req, res) => {
-  return serveCloudFileRef(String(req.params.ref || '').trim(), res);
+app.get('/api/cloud-file/:ref', (req, res) => {
+  if (!sessionMiddleware) return res.status(503).json({ success: false, message: 'Server is starting.' });
+  return sessionMiddleware(req, res, () => {
+    if (!req.session?.user?.user_id) return res.status(401).json({ success: false, message: 'Authentication required.' });
+    return serveCloudFileRef(String(req.params.ref || '').trim(), res);
+  });
 });
 
 if (useReactFrontend) {
@@ -459,6 +463,52 @@ if (useReactFrontend) {
 
     const { pool, dbMode } = await createWorkingPool();
 
+    let sessionSecret = String(process.env.SESSION_SECRET || '').trim();
+    if (!sessionSecret) {
+      const secretMaterial = [
+        process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+        process.env.RAILWAY_PROJECT_ID,
+        process.env.RAILWAY_SERVICE_ID,
+        process.env.RAILWAY_ENVIRONMENT_ID
+      ].filter(Boolean).join(':');
+
+      if (secretMaterial) {
+        sessionSecret = crypto.createHash('sha256').update(secretMaterial).digest('hex');
+        console.warn('WARN > SESSION_SECRET is not set; using a deployment-derived secret. Set SESSION_SECRET explicitly for key rotation control.');
+      } else {
+        sessionSecret = crypto.randomBytes(48).toString('hex');
+        console.warn('WARN > SESSION_SECRET is not set; using an ephemeral secret. Sessions will reset when the service restarts.');
+      }
+    }
+
+    const MySqlSessionStore = require('./backend/session_store');
+    let sessionStore;
+    try {
+      sessionStore = new MySqlSessionStore(pool);
+      await sessionStore.init();
+    } catch (sessionStoreError) {
+      sessionStore = undefined;
+      console.error('WARN > Persistent session store unavailable; using process memory:', sessionStoreError.message);
+    }
+    sessionMiddleware = session({
+      name: 'payroll.sid',
+      secret: sessionSecret || 'local-development-only-change-me',
+      ...(sessionStore ? { store: sessionStore } : {}),
+      resave: false,
+      saveUninitialized: false,
+      rolling: true,
+      cookie: {
+        secure: isRunningOnRailway(),
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: Number(process.env.SESSION_MAX_AGE_MS || 15 * 60 * 1000)
+      }
+    });
+    app.use(sessionMiddleware);
+
+    const { apiSecurity } = require('./backend/api_security');
+    app.use('/api', apiSecurity);
+
     require('./backend/notifications')(app, pool);
     require('./backend/login')(app, pool);
     require('./backend/profile_sidebar')(app, pool);
@@ -531,12 +581,20 @@ if (useReactFrontend) {
     const httpServer = http.createServer(app);
 
     const io = new SocketServer(httpServer, {
-      cors: { origin: '*', methods: ['GET', 'POST'] },
+      cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
+    });
+
+    io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
+    io.use((socket, next) => {
+      const sessionUserId = Number(socket.request.session?.user?.user_id || 0);
+      const requestedUserId = Number(socket.handshake.query.user_id || 0);
+      if (!sessionUserId || sessionUserId !== requestedUserId) return next(new Error('Unauthorized'));
+      return next();
     });
 
     // Each user joins their own room so we can push to specific users
     io.on('connection', (socket) => {
-      const userId = socket.handshake.query.user_id;
+      const userId = socket.request.session.user.user_id;
       if (userId) {
         socket.join(`user_${userId}`);
       }

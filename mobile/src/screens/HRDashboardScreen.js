@@ -12,10 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
-import { io } from 'socket.io-client';
-import { API_BASE_URL } from '../config';
+import { createAuthenticatedSocket } from '../api/socket';
 
-const BASE_URL = API_BASE_URL.replace('/api', '');
 
 // ── Design tokens (HR dark theme) ─────────────────────────────────────────
 const T = {
@@ -216,11 +214,18 @@ export default function HRDashboardScreen({ navigation }) {
     api.get('/notifications', { params: { user_id: user.user_id } })
       .then(({ data }) => setUnreadCount(Number(data.unread_count || 0)))
       .catch(() => {});
-    const socket = io(BASE_URL, { query: { user_id: user.user_id }, transports: ['websocket'], reconnectionAttempts: 5 });
-    socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
-    socket.on('connect_error', () => {});
-    socket.on('error', () => {});
-    return () => socket.disconnect();
+    let socket;
+    let cancelled = false;
+    createAuthenticatedSocket(user.user_id)
+      .then((nextSocket) => {
+        if (cancelled) return nextSocket.disconnect();
+        socket = nextSocket;
+        socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
+        socket.on('connect_error', () => {});
+        socket.on('error', () => {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; socket?.disconnect(); };
   }, [user?.user_id]);
 
   // ── Derived ──
