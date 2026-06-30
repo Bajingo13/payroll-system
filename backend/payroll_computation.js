@@ -299,111 +299,6 @@ module.exports = function (app, pool) {
         }
     }
 
-    async function lookupGsisContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(
-            `SELECT ee_rate_percent, er_rate_percent
-             FROM gsis_contribution_table
-             WHERE COALESCE(is_active, 1) = 1
-             ORDER BY date_effective DESC
-             LIMIT 1`
-        );
-        const rate = rows[0];
-        if (!rate) return null;
-        return {
-            ee_share: roundMoney(salaryBasis * (Number(rate.ee_rate_percent) / 100)),
-            er_share: roundMoney(salaryBasis * (Number(rate.er_rate_percent) / 100)),
-            ecc: 0
-        };
-    }
-
-    async function lookupSssContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(`
-            SELECT
-                employee_ss,
-                employer_ss,
-                employer_ec,
-                employee_mpf,
-                employer_mpf
-            FROM sss_contribution_table
-            WHERE salary_from <= ?
-            AND (salary_to >= ? OR salary_to IS NULL)
-            ORDER BY salary_from DESC
-            LIMIT 1
-        `, [salaryBasis, salaryBasis]);
-
-        if (!rows || rows.length === 0) {
-            return null;
-        }
-
-        const r = rows[0];
-
-        const ee_share =
-            toMoney(r.employee_ss) +
-            toMoney(r.employee_mpf);
-
-        const er_share =
-            toMoney(r.employer_ss) +
-            toMoney(r.employer_mpf);
-
-        return {
-            ee_share: roundMoney(ee_share),
-            er_share: roundMoney(er_share),
-            ecc: roundMoney(toMoney(r.employer_ec))
-        };
-    }
-
-    async function lookupPagibigContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(`
-            SELECT
-                employee_rate,
-                employer_rate,
-                employee_max,
-                employer_max
-            FROM pagibig_contribution_table
-            WHERE is_active = 1
-            ORDER BY effective_date DESC
-            LIMIT 1
-        `);
-
-        if (!rows.length) return null;
-
-        const rule = rows[0];
-
-        return {
-            ee_share: Math.min(
-                salaryBasis * Number(rule.employee_rate),
-                Number(rule.employee_max)
-            ),
-
-            er_share: Math.min(
-                salaryBasis * Number(rule.employer_rate),
-                Number(rule.employer_max)
-            ),
-
-            ecc: 0
-        };
-    }
-
-    async function lookupPhilhealthContribution(conn, salaryBasis) {
-        const [rows] = await conn.query(`
-            SELECT rate, employee_share, employer_share, min_base, max_base
-            FROM philhealth_contribution_table
-            WHERE is_active = 1
-            ORDER BY effective_date DESC
-            LIMIT 1
-        `);
-
-        const rule = rows[0];
-        if (!rule) return null;
-        const base = Math.min(Math.max(toMoney(salaryBasis), toMoney(rule.min_base)), toMoney(rule.max_base) || Infinity);
-        const totalPremium = base * toMoney(rule.rate);
-        return {
-            ...rule,
-            ee_share: roundMoney(totalPremium * (toMoney(rule.employee_share) || 0.5)),
-            er_share: roundMoney(totalPremium * (toMoney(rule.employer_share) || 0.5))
-        };
-    }
-
     async function lookupWithholdingTax(conn, taxableIncome, payPeriod, taxStatus) {
         const normalizedPeriod = normalizePayPeriod(payPeriod);
 
@@ -477,25 +372,6 @@ module.exports = function (app, pool) {
         const loans = toMoney(input.loans);
         const otherDeductions = toMoney(input.other_deductions);
         const premiumAdj = toMoney(input.premium_adj);
-
-        const salaryBasis = Math.max(0, toMoney(input.contribution_basis) || basicSalary + taxableAllowances + overtime + holidayPay);
-        // GSIS (government employees) and SSS (private employees) are mutually exclusive.
-        const isGovernmentEmployee = Boolean(input.is_government_employee || input.gsis_no);
-        await ensureGsisContributionTable(conn);
-        const gsis = isGovernmentEmployee ? await lookupGsisContribution(conn, salaryBasis) : null;
-        const sss = isGovernmentEmployee
-            ? null
-            : await lookupSssContribution(conn, salaryBasis);
-        const pagibig = await lookupPagibigContribution(conn, salaryBasis);
-        const philhealth = await lookupPhilhealthContribution(conn, salaryBasis);
-        const sssEmployee = roundMoney(sss?.ee_share || 0);
-        const gsisEmployee = roundMoney(gsis?.ee_share || 0);
-        const pagibigEmployee = roundMoney(pagibig?.ee_share || 0);
-        const philhealthEmployee = roundMoney(philhealth?.ee_share || 0);
-        const statutoryEmployee = sssEmployee + gsisEmployee + pagibigEmployee + philhealthEmployee;
-        const taxableIncome = Math.max(0, basicSalary + overtime + holidayPay + taxableAllowances + adjComp - absenceDeduction - lateDeduction - undertimeDeduction - statutoryEmployee);
-        const taxResult = await lookupWithholdingTax(conn, taxableIncome, input.payroll_period, input.tax_status);
-        const taxWithheld = roundMoney(taxResult.amount);
         const grossPay = roundMoney(
             basicSalary -
             absenceDeduction -
@@ -509,37 +385,14 @@ module.exports = function (app, pool) {
             adjNonComp +
             totalLeavesUsed
         );
-        const grandTotalDeductions = roundMoney(statutoryEmployee + taxWithheld + additionalDeductions + loans + otherDeductions + premiumAdj);
+        const grandTotalDeductions = roundMoney(additionalDeductions + loans + otherDeductions + premiumAdj);
         const netPay = roundMoney(grossPay - grandTotalDeductions);
 
         return {
             success: true,
-            salary_basis: roundMoney(salaryBasis),
-            taxable_income: roundMoney(taxableIncome),
-            sss_employee: sssEmployee,
-            sss_employer: roundMoney(sss?.er_share || 0),
-            sss_ecc: roundMoney(sss?.ecc || 0),
-            gsis_employee: gsisEmployee,
-            gsis_employer: roundMoney(gsis?.er_share || 0),
-            gsis_ecc: 0,
-            pagibig_employee: pagibigEmployee,
-            pagibig_employer: roundMoney(pagibig?.er_share || 0),
-            pagibig_ecc: 0,
-            philhealth_employee: philhealthEmployee,
-            philhealth_employer: roundMoney(philhealth?.er_share || 0),
-            philhealth_ecc: 0,
-            tax_withheld: taxWithheld,
             gross_pay: grossPay,
             grand_total_deductions: grandTotalDeductions,
-            net_pay: netPay,
-            tax_bracket: taxResult.bracket,
-            notes: {
-                sss: isGovernmentEmployee ? 'Skipped (government employee contributes to GSIS instead).' : (sss ? 'Matched SSS contribution table.' : 'No SSS contribution bracket matched.'),
-                gsis: isGovernmentEmployee ? (gsis ? 'Computed from GSIS contribution rate.' : 'No GSIS contribution rate configured.') : 'Skipped (private employee contributes to SSS instead).',
-                pagibig: pagibig ? 'Matched Pag-IBIG contribution table.' : 'No Pag-IBIG contribution bracket matched.',
-                philhealth: philhealth ? 'Matched PhilHealth contribution table.' : 'No PhilHealth contribution bracket matched.',
-                tax: taxResult.bracket ? 'Matched withholding tax table.' : 'No withholding tax bracket matched.'
-            }
+            net_pay: netPay
         };
     }
 
@@ -2999,7 +2852,7 @@ module.exports = function (app, pool) {
                     sss_employee, sss_employer, sss_ecc,
                     pagibig_employee, pagibig_employer, pagibig_ecc,
                     philhealth_employee, philhealth_employer, philhealth_ecc,
-                    tax_withheld, total_deductions, loans, other_deductions, premium_adj,
+                    tax_withheld, total_deductions, loans, loanRows = [], other_deductions, premium_adj,
                     ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
                     payroll_status, allowances = [], deductions = [], periodOption,
                     ot_nd_adj, att_adj
@@ -3312,8 +3165,76 @@ module.exports = function (app, pool) {
                 }
 
                 // ==================== LOANS ====================
-                if (Array.isArray(loans)) {
-                    //...
+                if (Array.isArray(loanRows)) {
+                    for (const loan of loanRows) {
+
+                        if (loan.skip) continue;
+
+                        // Don't process the same loan twice for the same payroll
+                        const [existingPayment] = await conn.query(
+                            `SELECT payment_id
+                            FROM employee_loan_payments
+                            WHERE loan_id = ?
+                            AND payroll_id = ?
+                            AND run_id = ?`,
+                            [loan.loan_id, payrollId, run_id]
+                        );
+
+                        if (existingPayment.length > 0) {
+                            continue;
+                        }
+
+                        const paymentAmount = Number(loan.payment || 0);
+                        const balanceBefore = Number(loan.balance || 0);
+                        const balanceAfter = Math.max(0, balanceBefore - paymentAmount);
+
+                        await conn.query(
+                            `INSERT INTO employee_loan_payments
+                            (
+                                loan_id,
+                                employee_id,
+                                payroll_id,
+                                run_id,
+                                payment_amount,
+                                balance_before,
+                                balance_after,
+                                paid_period
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [
+                                loan.loan_id,
+                                employee_id,
+                                payrollId,
+                                run_id,
+                                paymentAmount,
+                                balanceBefore,
+                                balanceAfter,
+                                periodOption
+                            ]
+                        );
+
+                        await conn.query(
+                            `UPDATE employee_loans
+                            SET
+                                balance_amount = ?,
+                                terms_paid = terms_paid + 1,
+                                status = CASE
+                                            WHEN ? <= 0 THEN 'Completed'
+                                            ELSE status
+                                        END,
+                                end_date = CASE
+                                            WHEN ? <= 0 THEN CURRENT_DATE
+                                            ELSE end_date
+                                        END
+                            WHERE loan_id = ?`,
+                            [
+                                balanceAfter,
+                                balanceAfter,
+                                balanceAfter,
+                                loan.loan_id
+                            ]
+                        );
+                    }
                 }
             }
             

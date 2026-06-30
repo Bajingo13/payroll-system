@@ -310,6 +310,7 @@ async function computePayrollDeductions(payroll, rec = {}, allowances = [], dedu
     total_leaves_used: toNum(payroll.total_leaves_used),
     total_deductions: deductionTotal,
     loans: toNum(payroll.loans),
+    loan_rows: rec.loan_rows || [],
     other_deductions: toNum(payroll.other_deductions),
     premium_adj: toNum(payroll.premium_adj),
     payroll_period: rec.payroll_period || '',
@@ -532,9 +533,6 @@ export default function PayrollComputationPage() {
   function upOtNd(k,v)    { setOtNd(p=>({...p,[k]:v})); }
   function upOtNdAdj(k,v) { setOtNdAdj(p=>({...p,[k]:v})); }
   function upAttAdj(k,v)  { setAttAdj(p=>({...p,[k]:v})); }
-  function addLoanRow() {
-    setLoanRows(prev => [...prev, { description:'', loan_amount:'', amortization:'', date_start:'', date_end:'', balance:'', skip:false, payment:'' }]);
-  }
   
   function handlePayrollGroupChange(value) {
     setFilters(f => ({
@@ -574,16 +572,6 @@ export default function PayrollComputationPage() {
     );
   }, [filters.payroll_group]);
 
-  function deleteLoanRow() {
-    if (selectedLoanRow === null) return;
-    setLoanRows(prev => {
-      const next = prev.filter((_, i) => i !== selectedLoanRow);
-      const total = next.filter(r=>!r.skip).reduce((s,r)=>s+toNum(r.payment),0);
-      setPayroll(p=>({...p, loans: total.toFixed(2)}));
-      return next;
-    });
-    setSelectedLoanRow(null);
-  }
   function upLoanRow(i, field, value) {
     setLoanRows(prev => {
       const next = prev.map((r,idx)=>idx===i?{...r,[field]:value}:r);
@@ -1029,6 +1017,7 @@ export default function PayrollComputationPage() {
     Object.assign(nextP, applyContributionRows(nextP, rec.contributions || []));
     try {
       const computed = await computePayrollDeductions(nextP, rec, allowList, deductionList);
+      console.log('Payroll deductions computed from HRIS and settings:', computed);
       console.log('Computed deductions:', computed);
       if (computed) {
         [
@@ -1107,6 +1096,7 @@ export default function PayrollComputationPage() {
       setEmpLeaveData({ leaveBalances: balances, leaveRequests: leavesResp.data.leaveRequests || [] });
       // Build loan rows from active loans
       const lrows = loans.map(l => ({
+        loan_id: l.loan_id,
         description: [l.loan_category, l.loan_reference].filter(Boolean).join(' — '),
         loan_amount: toNum(l.balance_amount),
         amortization: toNum(l.amortization_amount),
@@ -1207,7 +1197,7 @@ export default function PayrollComputationPage() {
     setLoading(true);
     try {
       const cache = {...empDataMap};
-      if (selectedEmp) cache[selectedEmp.employee_id] = { payroll, otNd, otNdAdj, attAdj, allowances, deductions };
+      if (selectedEmp) cache[selectedEmp.employee_id] = { payroll, otNd, otNdAdj, attAdj, allowances, deductions, loanRows };
       for (const emp of filteredEmps) {
         if (!cache[emp.employee_id]) {
           cache[emp.employee_id] = await loadEmpData(emp.employee_id);
@@ -1238,13 +1228,14 @@ export default function PayrollComputationPage() {
           ytd_gsis:toNum(p.ytd_gsis), ytd_pagibig:toNum(p.ytd_pagibig), ytd_gross:toNum(p.ytd_gross),
           payroll_status:p.payroll_status||'Active',
           gross_pay:gross, grand_total_deductions:ded, net_pay:gross-ded,
-          allowances:d.allowances, deductions:d.deductions,
+          allowances:d.allowances, deductions:d.deductions, loanRows: d.loanRows,
           ot_nd: normalizeAdjustmentTimes(d.otNd || {}),
           ot_nd_adj: normalizeAdjustmentTimes(d.otNdAdj || {}),
           att_adj: normalizeAdjustmentTimes(d.attAdj || {}),
           periodOption:selectedPeriod?.period_name||'',
         };
       });
+      console.log('Saving payrolls for run', runId, payrolls);
       const { data } = await api.post('/save_all_employee_payroll', {
         run_id:runId, payrolls, user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
@@ -1935,32 +1926,32 @@ export default function PayrollComputationPage() {
                             <tr key={i} onClick={()=>setSelectedLoanRow(i)}
                               style={{background:selectedLoanRow===i?'#d0e8ff':i%2===0?'#fff':'#f9f9f9',cursor:'pointer'}}>
                               <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
-                                <input type="text" disabled={!isEditing} value={row.description}
+                                <input type="text" disabled={true} value={row.description}
                                   onChange={e=>upLoanRow(i,'description',e.target.value)}
                                   style={{width:'100%',border:'none',background:'transparent',fontSize:13}} />
                               </td>
                               <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
-                                <input type="number" step="0.01" disabled={!isEditing} value={row.loan_amount}
+                                <input type="number" step="0.01" disabled={true} value={row.loan_amount}
                                   onChange={e=>upLoanRow(i,'loan_amount',e.target.value)}
                                   style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
                               </td>
                               <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
-                                <input type="number" step="0.01" disabled={!isEditing} value={row.amortization}
+                                <input type="number" step="0.01" disabled={true} value={row.amortization}
                                   onChange={e=>upLoanRow(i,'amortization',e.target.value)}
                                   style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
                               </td>
                               <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
-                                <input type="date" disabled={!isEditing} value={row.date_start}
+                                <input type="date" disabled={true} value={row.date_start}
                                   onChange={e=>upLoanRow(i,'date_start',e.target.value)}
                                   style={{width:'100%',border:'none',background:'transparent',fontSize:12}} />
                               </td>
                               <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
-                                <input type="date" disabled={!isEditing} value={row.date_end}
+                                <input type="date" disabled={true} value={row.date_end}
                                   onChange={e=>upLoanRow(i,'date_end',e.target.value)}
                                   style={{width:'100%',border:'none',background:'transparent',fontSize:12}} />
                               </td>
                               <td style={{padding:'3px 6px',border:'1px solid #ccc'}}>
-                                <input type="number" step="0.01" disabled={!isEditing} value={row.balance}
+                                <input type="number" step="0.01" disabled={true} value={row.balance}
                                   onChange={e=>upLoanRow(i,'balance',e.target.value)}
                                   style={{width:'100%',border:'none',background:'transparent',textAlign:'right',fontSize:13}} />
                               </td>
@@ -1979,10 +1970,6 @@ export default function PayrollComputationPage() {
                       </tbody>
                     </table>
                   )}
-                  <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:8}}>
-                    {isEditing && <button type="button" className="btn" style={{fontSize:13}} onClick={addLoanRow}>Add Loan</button>}
-                    {isEditing && <button type="button" className="btn delete-btn" style={{fontSize:13}} disabled={selectedLoanRow===null} onClick={deleteLoanRow}>Delete Loan</button>}
-                  </div>
                 </div>
               </div>
             )}
