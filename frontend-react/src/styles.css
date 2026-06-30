@@ -4987,8 +4987,32 @@ select:focus {
   background: #ffffff !important;
   border: 1px solid #222222 !important;
   color: #000000 !important;
-  overflow: visible !important;
+  overflow: hidden !important;
   box-shadow: none !important;
+  box-sizing: border-box !important;
+}
+
+/* The application-wide table rule has an 860px minimum width for data grids.
+   Payslip tables are document-layout tables and must stay inside the paper. */
+.payslip-paper table {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  box-sizing: border-box !important;
+}
+
+.payslip-paper td,
+.payslip-paper th {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  padding: 4px 6px;
+  border-bottom-color: #e5e7eb;
+  overflow-wrap: anywhere;
+}
+
+.payslip-paper img {
+  max-width: 100% !important;
 }
 
 .payslip-exact {
