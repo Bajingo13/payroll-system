@@ -35,7 +35,7 @@ The frontend now restores identity through `/api/session`. Browser storage is on
 
 ### Resolved: production sessions
 
-Production startup now fails when `SESSION_SECRET` is absent. Sessions are persisted in MySQL, use an HTTP-only cookie, and roll their expiry on activity.
+Sessions are persisted in MySQL, use an HTTP-only cookie, and roll their expiry on activity. Railway prefers an explicit `SESSION_SECRET`; if it is missing, the server derives a stable secret from existing deployment credentials so a configuration omission cannot crash the service. If the session table is temporarily unavailable, startup continues with in-memory sessions and logs a warning.
 
 ### Resolved: automated QA commands
 
@@ -58,5 +58,13 @@ npm run qa
 ```
 
 Current result: 8 tests passed, static QA passed, and the production build passed.
+
+Final live smoke check:
+
+- `/api/health`: `200`
+- `/login`: `200`
+- `/api/db-test` without a session: `401`
+- `/api/dashboard` without a session: `401`
+- `/api/company_settings` without a session: `401`
 
 The in-app and installed headless browsers both timed out in this environment, so a final manual visual pass on representative Admin, HR, and Employee accounts is still recommended before production deployment.

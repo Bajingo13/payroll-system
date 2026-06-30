@@ -7,6 +7,7 @@ const mysql = require('mysql2/promise');
 const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
+const crypto = require('crypto');
 const cors = require('cors');
 const cloudStorage = require('./backend/cloud_storage');
 
@@ -462,18 +463,37 @@ if (useReactFrontend) {
 
     const { pool, dbMode } = await createWorkingPool();
 
-    const sessionSecret = String(process.env.SESSION_SECRET || '').trim();
-    if (!sessionSecret && (process.env.NODE_ENV === 'production' || isRunningOnRailway())) {
-      throw new Error('SESSION_SECRET is required in production.');
+    let sessionSecret = String(process.env.SESSION_SECRET || '').trim();
+    if (!sessionSecret) {
+      const secretMaterial = [
+        process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+        process.env.RAILWAY_PROJECT_ID,
+        process.env.RAILWAY_SERVICE_ID,
+        process.env.RAILWAY_ENVIRONMENT_ID
+      ].filter(Boolean).join(':');
+
+      if (secretMaterial) {
+        sessionSecret = crypto.createHash('sha256').update(secretMaterial).digest('hex');
+        console.warn('WARN > SESSION_SECRET is not set; using a deployment-derived secret. Set SESSION_SECRET explicitly for key rotation control.');
+      } else {
+        sessionSecret = crypto.randomBytes(48).toString('hex');
+        console.warn('WARN > SESSION_SECRET is not set; using an ephemeral secret. Sessions will reset when the service restarts.');
+      }
     }
 
     const MySqlSessionStore = require('./backend/session_store');
-    const sessionStore = new MySqlSessionStore(pool);
-    await sessionStore.init();
+    let sessionStore;
+    try {
+      sessionStore = new MySqlSessionStore(pool);
+      await sessionStore.init();
+    } catch (sessionStoreError) {
+      sessionStore = undefined;
+      console.error('WARN > Persistent session store unavailable; using process memory:', sessionStoreError.message);
+    }
     sessionMiddleware = session({
       name: 'payroll.sid',
       secret: sessionSecret || 'local-development-only-change-me',
-      store: sessionStore,
+      ...(sessionStore ? { store: sessionStore } : {}),
       resave: false,
       saveUninitialized: false,
       rolling: true,

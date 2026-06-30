@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import { api, getAssetUrl } from '../api/client';
-import { API_BASE_URL } from '../config';
-
-const SOCKET_URL = API_BASE_URL.replace('/api', '');
+import { createAuthenticatedSocket } from '../api/socket';
 
 export default function HeaderActions({ navigation, photoUrl: photoUrlProp, employee: employeeProp }) {
   const { user } = useAuth();
@@ -43,19 +40,16 @@ export default function HeaderActions({ navigation, photoUrl: photoUrlProp, empl
     fetchCount();
 
     // ── Socket.io real-time updates ───────────────────────
-    const socket = io(SOCKET_URL, {
-      query: { user_id: user.user_id },
-      transports: ['websocket'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
-    });
-    socketRef.current = socket;
-
-    socket.on('notification_count', (count) => {
-      setUnreadCount(Number(count || 0));
-    });
-    socket.on('connect_error', () => {});
-    socket.on('error', () => {});
+    let cancelled = false;
+    createAuthenticatedSocket(user.user_id, { reconnectionDelay: 2000 })
+      .then((socket) => {
+        if (cancelled) return socket.disconnect();
+        socketRef.current = socket;
+        socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
+        socket.on('connect_error', () => {});
+        socket.on('error', () => {});
+      })
+      .catch(() => {});
 
     // ── Refresh on screen focus ───────────────────────────
     const unsub = navigation?.addListener('focus', () => {
@@ -64,7 +58,9 @@ export default function HeaderActions({ navigation, photoUrl: photoUrlProp, empl
     });
 
     return () => {
-      socket.disconnect();
+      cancelled = true;
+      socketRef.current?.disconnect();
+      socketRef.current = null;
       unsub?.();
     };
   }, [user?.user_id]);

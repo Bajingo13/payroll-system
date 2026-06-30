@@ -13,11 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage, getAssetUrl } from '../api/client';
-import { API_BASE_URL } from '../config';
-import { io } from 'socket.io-client';
+import { createAuthenticatedSocket } from '../api/socket';
 import AttendanceFlow from '../components/AttendanceFlow';
 
-const BASE_URL = API_BASE_URL.replace('/api', '');
 
 function parseDateTime(value) {
   if (!value) return null;
@@ -116,15 +114,18 @@ export default function DashboardScreen({ navigation }) {
       .then(({ data }) => setUnreadCount(Number(data.unread_count || 0)))
       .catch(() => {});
     // Socket.io live updates
-    const socket = io(BASE_URL, {
-      query: { user_id: user.user_id },
-      transports: ['websocket'],
-      reconnectionAttempts: 5,
-    });
-    socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
-    socket.on('connect_error', () => {});
-    socket.on('error', () => {});
-    return () => socket.disconnect();
+    let socket;
+    let cancelled = false;
+    createAuthenticatedSocket(user.user_id)
+      .then((nextSocket) => {
+        if (cancelled) return nextSocket.disconnect();
+        socket = nextSocket;
+        socket.on('notification_count', (count) => setUnreadCount(Number(count || 0)));
+        socket.on('connect_error', () => {});
+        socket.on('error', () => {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; socket?.disconnect(); };
   }, [user?.user_id]);
 
   const todayState = data?.todayTime || {};
