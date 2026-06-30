@@ -1616,6 +1616,7 @@ module.exports = function (app, pool) {
             // Fetch main payroll settings
             const [rows] = await conn.query(
                 `SELECT e.employee_id,
+                        ep.payroll_id,
                         ep.payroll_status,
                         ep.basic_salary,
                         ep.absence_time,
@@ -1675,9 +1676,9 @@ module.exports = function (app, pool) {
             }
 
             const employee = rows[0];
-            const hasExistingPayroll =
-                employeePayroll.length > 0 &&
-                employeePayroll[0].basic_salary != null;
+            const hasExistingPayroll = Boolean(
+                employee.payroll_id && employee.basic_salary != null
+            );
 
             // Use the selected payroll group's period (Monthly/Semi-Monthly/Weekly) rather
             // than the employee's own payroll_period setting, so the computation always
@@ -1760,7 +1761,7 @@ module.exports = function (app, pool) {
                         type_option, computation, ee_share, er_share, ecc, annualize
                 FROM employee_contributions
                 WHERE employee_id = ?`,
-                [employee.employee_id, run_id]
+                [employee.employee_id]
             );
 
             // GET previous YTD values based on actual payroll order
@@ -1822,7 +1823,7 @@ module.exports = function (app, pool) {
             const computePhilhealth = shouldCompute(philhealthRecord);
             const computeWtax = shouldCompute(wtaxRecord);
 
-            const isGovernmentEmployee = Boolean(employee.is_government_employee);
+            const isGovernmentEmployee = Boolean(employee.gsis_no);
 
             // === GSIS ===
             if (isGovernmentEmployee) {
@@ -2205,7 +2206,7 @@ module.exports = function (app, pool) {
             return res.json({ success: true, hasExistingPayroll, data: employee });
         } catch (err) {
             console.error("Error fetching payroll settings:", err);
-            return res.status(500).json({ success: false, message: "Server error" });
+            return res.status(500).json({ success: false, message: err.message || "Unable to load payroll settings." });
         }
     });
     
