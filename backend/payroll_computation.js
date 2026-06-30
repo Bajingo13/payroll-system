@@ -1899,7 +1899,15 @@ module.exports = function (app, pool) {
 
                     const monthlyEr =
                         toMoney(match.employer_ss) +
-                        toMoney(match.employer_mpf);
+                        toMoney(match.employer_mpf) +
+                        toMoney(match.employer_ec);
+
+                        console.log("SSS Monthly Computation:", {
+                            monthlySalarySSS,
+                            monthlyEe,
+                            monthlyEr,
+                            match
+                        });
 
                     // convert to payroll period
                     const periodEeShare =
@@ -1907,6 +1915,11 @@ module.exports = function (app, pool) {
 
                     const periodErShare =
                         Math.round((monthlyEr / periodDivisorSSS) * 100) / 100;
+                        console.log("SSS Period Computation:", {
+                            periodDivisorSSS,
+                            periodEeShare,
+                            periodErShare
+                        });
 
                     const periodEcc =
                         Math.round((toMoney(match.employer_ec) / periodDivisorSSS) * 100) / 100;
@@ -2075,6 +2088,7 @@ module.exports = function (app, pool) {
                 employee.sss_employer = sssRecord.er_share || 0;
                 employee.sss_ecc      = sssRecord.ecc      || 0;
             }
+            console.log(`Employee ${employee.employee_id}: SSS computed as ee_share=${employee.sss_employee}, er_share=${employee.sss_employer}, ecc=${employee.sss_ecc}`);
             if (computePagibig && employee.pagibig_employee == null && pagibigRecord) {
                 employee.pagibig_employee = pagibigRecord.ee_share || 0;
                 employee.pagibig_employer = pagibigRecord.er_share || 0;

@@ -915,7 +915,9 @@ export default function PayrollComputationPage() {
     const settingsResp = await api.get(`/employee_payroll_settings/${empId}`, {
       params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
     });
+    console.log('Payroll settings response for employee', empId, settingsResp);
     const { data } = settingsResp;
+    console.log('Payroll settings response for employee', empId, data);
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
     const rec = data.data || {};
     console.log('Payroll settings for employee', empId, rec);
