@@ -3076,6 +3076,22 @@ select:focus {
   margin-top: 8px;
 }
 
+.profile-picture-panel--centered {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 20px 0 16px;
+  text-align: center;
+  border-bottom: 1px solid #e7edf5;
+  margin-bottom: 4px;
+}
+
+.profile-picture-panel--centered .profile-picture-preview {
+  margin: 0 auto;
+  width: 100px;
+  height: 100px;
+}
+
 .employee-mgmt-header {
   align-items: center;
 }
@@ -7622,6 +7638,10 @@ select:focus {
 
 .employee-shell .profile-avatar-button {
   display: none !important;
+}
+
+.employee-shell .profile-picture-panel .profile-avatar-button {
+  display: grid !important;
 }
 
 .employee-shell .profile h3,

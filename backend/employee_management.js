@@ -189,6 +189,22 @@ module.exports = function (app, pool) {
         }));
     }
 
+    let employeeUserIdColumnEnsured = false;
+    async function ensureAndLinkEmployeeUserId(conn, employeeId, userId) {
+        if (!employeeId || !userId) return;
+        if (!employeeUserIdColumnEnsured) {
+            const [rows] = await conn.execute(
+                `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'employees' AND COLUMN_NAME = 'user_id'`
+            );
+            if (!rows.length) {
+                await conn.execute('ALTER TABLE employees ADD COLUMN user_id INT NULL');
+            }
+            employeeUserIdColumnEnsured = true;
+        }
+        await conn.execute('UPDATE employees SET user_id = ? WHERE employee_id = ?', [userId, employeeId]);
+    }
+
     function normalizeSystemAccount(body, fullName, employeeCode) {
         const account = body.systemAccount || {};
         const username = String(account.username || '').trim();
@@ -910,6 +926,7 @@ module.exports = function (app, pool) {
                 employeeCode: emp_code,
                 fullName: employeeFullName
             });
+            await ensureAndLinkEmployeeUserId(conn, employeeId, systemAccountResult?.user_id);
 
             await conn.commit();
             conn.release();
@@ -1117,6 +1134,7 @@ module.exports = function (app, pool) {
 
             await conn.beginTransaction();
             const account = await saveSystemAccount(conn, systemAccount, body.actor_role);
+            await ensureAndLinkEmployeeUserId(conn, employee.employee_id, account?.user_id);
             await conn.commit();
 
             await logAudit(pool, body.user_id, body.admin_name, `Saved Account for Employee ${empCode}`, 'Success');
@@ -2143,6 +2161,7 @@ module.exports = function (app, pool) {
                 previousEmployeeCode: empCode,
                 fullName: employeeFullName
             });
+            await ensureAndLinkEmployeeUserId(conn, employeeId, systemAccountResult?.user_id || systemAccount?.userId);
 
             await conn.commit();
             auditPayload = {
