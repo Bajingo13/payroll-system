@@ -2575,75 +2575,36 @@ module.exports = function (app, pool) {
                         WHERE emp_payroll_allowance_id = ?
                     `;
 
-                    const [rows] = await conn.query(
-                        `SELECT emp_payroll_allowance_id, source_emp_allowance_id
-                        FROM employee_payroll_allowances
-                        WHERE payroll_id = ? AND employee_id = ? AND period = ?
-                        ORDER BY emp_payroll_allowance_id`,
-                        [payrollId, employeeId, periodToUse]
-                    );
-
-                    const remainingRows = [...rows];
-
                     console.log("============== FOR ALLOWANCES ==============");
                     for (const a of allowances) {
-                        let existing;
-
-                        if (a.emp_allowance_id !== null) {
-                            existing = remainingRows.find(r => r.source_emp_allowance_id === a.emp_allowance_id);
-                        } else {
-                            existing = remainingRows.find(r => r.source_emp_allowance_id === null);
-                        }
-
+                        // DELETE
                         if (a.deleted) {
-                            if (existing) {
-                                console.log("DELETING record that is existing in the payroll...");
-
-                                let empPayrollAllowanceIdToUpdate = existing.emp_payroll_allowance_id;
-                                
-                                if (a.emp_allowance_id === null && existing.source_emp_allowance_id === null) {
-                                    console.log("DELETING record with null source_emp_allowance_id, using its emp_payroll_allowance_id:", empPayrollAllowanceIdToUpdate);
-                                } else {
-                                    console.log("DELETING record that matches emp_allowance_id:", empPayrollAllowanceIdToUpdate);
-                                }
-
-                                await conn.query(deleteQuery, [existing.emp_payroll_allowance_id]);
-                                remainingRows.splice(remainingRows.indexOf(existing), 1);
-                            } else {
-                                console.log("Deleted record that is not yet in the payroll or not yet existing");
+                            if (a.emp_payroll_allowance_id) {
+                                await conn.query(deleteQuery, [
+                                    a.emp_payroll_allowance_id
+                                ]);
                             }
                             continue;
                         }
 
-                        if (existing) {
-                            console.log("UPDATING record that is existing in the payroll...");
-                            
-                            let empPayrollAllowanceIdToUpdate = existing.emp_payroll_allowance_id;
-                            
-                            if (a.emp_allowance_id === null && existing.source_emp_allowance_id === null) {
-                                console.log("UPDATING record with null source_emp_allowance_id, using its emp_payroll_allowance_id:", empPayrollAllowanceIdToUpdate);
-                            } else {
-                                console.log("UPDATING record that matches emp_allowance_id:", empPayrollAllowanceIdToUpdate);
-                            }
-
+                        // UPDATE
+                        if (a.emp_payroll_allowance_id) {
                             await conn.query(updateQuery, [
                                 a.allowance_type_id,
                                 a.amount,
-                                existing.emp_payroll_allowance_id
+                                a.emp_payroll_allowance_id
                             ]);
-                            remainingRows.splice(remainingRows.indexOf(existing), 1);
                             continue;
                         }
 
-                        // Insert new allowance
-                        console.log("INSERTING/ADDING record that is not yet in the payroll or not yet existing:", a.emp_allowance_id || null);
+                        // INSERT
                         await conn.query(insertQuery, [
                             a.emp_allowance_id || null,
                             payrollId,
                             employeeId,
                             a.allowance_type_id,
                             a.amount,
-                            periodToUse
+                            a.period || periodToUse
                         ]);
                     }
                 }
@@ -2677,56 +2638,27 @@ module.exports = function (app, pool) {
 
                     console.log("============== FOR DEDUCTIONS ==============");
                     for (const d of deductions) {
-                        let existing;
-
-                        if (d.emp_deduction_id !== null) {
-                            existing = remainingRows.find(r => r.source_emp_deduction_id === d.emp_deduction_id);
-                        } else {
-                            existing = remainingRows.find(r => r.source_emp_deduction_id === null);
-                        }
-
+                        // DELETE
                         if (d.deleted) {
-                            if (existing) {
-                                console.log("DELETING record that is existing in the payroll...");
-                                
-                                let empPayrollDeductionIdToUpdate = existing.emp_payroll_deduction_id;
-                                
-                                if (d.emp_deduction_id === null && existing.source_emp_deduction_id === null) {
-                                    console.log("DELETING record with null source_emp_deduction_id, using its emp_payroll_deduction_id:", empPayrollDeductionIdToUpdate);
-                                } else {
-                                    console.log("DELETING record that matches emp_deduction_id:", empPayrollDeductionIdToUpdate);
-                                }
-
-                                await conn.query(deleteQuery, [existing.emp_payroll_deduction_id]);
-                                remainingRows.splice(remainingRows.indexOf(existing), 1);
-                            } else {
-                                console.log("Deleted record that is not yet in the payroll or not yet existing");
+                            if (d.emp_payroll_deduction_id) {
+                                await conn.query(deleteQuery, [
+                                    d.emp_payroll_deduction_id
+                                ]);
                             }
                             continue;
                         }
 
-                        if (existing) {
-                            console.log("UPDATING record that is existing in the payroll...");
-                            
-                            let empPayrollDeductionIdToUpdate = existing.emp_payroll_deduction_id;
-                            
-                            if (d.emp_deduction_id === null && existing.source_emp_deduction_id === null) {
-                                console.log("UPDATING record with null source_emp_deduction_id, using its emp_payroll_deduction_id:", empPayrollDeductionIdToUpdate);
-                            } else {
-                                console.log("UPDATING record that matches emp_deduction_id:", empPayrollDeductionIdToUpdate);
-                            }
-
+                        // UPDATE
+                        if (d.emp_payroll_deduction_id) {
                             await conn.query(updateQuery, [
                                 d.deduction_type_id,
                                 d.amount,
-                                existing.emp_payroll_deduction_id
+                                d.emp_payroll_deduction_id
                             ]);
-                            remainingRows.splice(remainingRows.indexOf(existing), 1);
                             continue;
                         }
 
-                        // Insert new deduction
-                        console.log("INSERTING/ADDING record that is not yet in the payroll or not yet existing:", d.emp_deduction_id || null);
+                        // INSERT
                         await conn.query(insertQuery, [
                             d.emp_deduction_id || null,
                             payrollId,
