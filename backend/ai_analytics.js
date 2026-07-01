@@ -47,135 +47,86 @@ module.exports = function (app, pool) {
       }
 
       const [attendanceSummaryRows] = await conn.execute(`
-        WITH RECURSIVE selected_dates AS (
-          SELECT DATE_SUB(CURDATE(), INTERVAL 29 DAY) AS attendance_date
-          UNION ALL
-          SELECT DATE_ADD(attendance_date, INTERVAL 1 DAY)
-          FROM selected_dates
-          WHERE attendance_date < CURDATE()
-        ),
-        employee_users AS (
-          SELECT
-            u.user_id,
-            COALESCE(e_code.employee_id, e_name.employee_id) AS employee_id,
-            COALESCE(e_code.emp_code, e_name.emp_code, u.username) AS emp_code,
-            COALESCE(CONCAT_WS(' ', e_code.first_name, e_code.last_name), CONCAT_WS(' ', e_name.first_name, e_name.last_name), u.full_name) AS employee_name,
-            COALESCE(ee.department, 'N/A') AS department,
-            ee.date_hired
-          FROM users u
-          LEFT JOIN employees e_code ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
-          LEFT JOIN employees e_name
-            ON e_code.employee_id IS NULL
-           AND LOWER(TRIM(CONCAT(e_name.first_name, ' ', e_name.last_name))) = LOWER(TRIM(u.full_name))
-          LEFT JOIN employee_employment ee
-            ON ee.employment_id = (
-              SELECT em.employment_id
-              FROM employee_employment em
-              WHERE em.employee_id = COALESCE(e_code.employee_id, e_name.employee_id)
-              ORDER BY em.employment_id DESC
-              LIMIT 1
-            )
-          WHERE LOWER(TRIM(u.role)) = 'employee'
-        ),
-        log_summary AS (
-          SELECT
-            user_id,
-            DATE(log_time) AS attendance_date,
-            MIN(CASE WHEN action = 'Employee Time In' THEN log_time END) AS time_in,
-            MAX(CASE WHEN action = 'Employee Time Out' THEN log_time END) AS time_out
-          FROM audit_logs
-          WHERE action IN ('Employee Time In', 'Employee Time Out')
-            AND DATE(log_time) BETWEEN DATE_SUB(CURDATE(), INTERVAL 29 DAY) AND CURDATE()
-          GROUP BY user_id, DATE(log_time)
-        )
         SELECT
           COUNT(*) AS scheduled_days,
-          SUM(CASE WHEN ls.time_in IS NULL THEN 1 ELSE 0 END) AS absent_days,
-          SUM(CASE WHEN ls.time_in IS NOT NULL AND TIME(ls.time_in) > '09:00:00' THEN 1 ELSE 0 END) AS late_days,
-          SUM(CASE WHEN ls.time_out IS NULL AND ls.time_in IS NOT NULL THEN 1 ELSE 0 END) AS incomplete_days,
-          ROUND(SUM(CASE WHEN ls.time_in IS NULL THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS absence_rate,
-          ROUND(SUM(CASE WHEN ls.time_in IS NOT NULL AND TIME(ls.time_in) > '09:00:00' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS tardiness_rate
-        FROM selected_dates sd
-        CROSS JOIN employee_users eu
-        LEFT JOIN log_summary ls
-          ON ls.user_id = eu.user_id
-         AND ls.attendance_date = sd.attendance_date
-        WHERE WEEKDAY(sd.attendance_date) < 5
-          AND (eu.date_hired IS NULL OR sd.attendance_date >= eu.date_hired)
+          SUM(LOWER(TRIM(ha.status)) = 'absent') AS absent_days,
+          SUM(COALESCE(ha.late_minutes, 0) > 0) AS late_days,
+          SUM(LOWER(TRIM(ha.status)) = 'incomplete') AS incomplete_days,
+          ROUND(SUM(LOWER(TRIM(ha.status)) = 'absent') * 100.0 / NULLIF(COUNT(*), 0), 2) AS absence_rate,
+          ROUND(SUM(COALESCE(ha.late_minutes, 0) > 0) * 100.0 / NULLIF(COUNT(*), 0), 2) AS tardiness_rate
+        FROM hris_attendance ha
+        JOIN employees e ON e.employee_id = ha.employee_id
+        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        LEFT JOIN employee_employment ee ON ee.employment_id = (
+          SELECT em.employment_id FROM employee_employment em
+          WHERE em.employee_id = e.employee_id ORDER BY em.employment_id DESC LIMIT 1
+        )
+        WHERE LOWER(TRIM(u.role)) = 'employee'
+          AND LOWER(TRIM(e.status)) = 'active'
+          AND (ee.date_hired IS NULL OR ha.attendance_date >= ee.date_hired)
           AND NOT EXISTS (
             SELECT 1 FROM employee_leave_requests elr
-            WHERE elr.employee_id = eu.employee_id
+            WHERE elr.employee_id = e.employee_id
               AND elr.status = 'Approved'
-              AND sd.attendance_date BETWEEN elr.start_date AND elr.end_date
+              AND ha.attendance_date BETWEEN elr.start_date AND elr.end_date
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM company_calendar_events cce
+            WHERE cce.event_date = ha.attendance_date
+              AND (
+                cce.is_paid_holiday = 1
+                OR LOWER(cce.event_type) LIKE '%holiday%'
+                OR LOWER(cce.event_type) LIKE '%non-working%'
+              )
           )
       `);
 
       const [tardinessRows] = await conn.execute(`
         SELECT
-          DAYNAME(log_time) AS day_name,
-          WEEKDAY(log_time) AS day_index,
+          DAYNAME(ha.attendance_date) AS day_name,
+          WEEKDAY(ha.attendance_date) AS day_index,
           COUNT(*) AS late_count
-        FROM audit_logs
-        WHERE action = 'Employee Time In'
-          AND TIME(log_time) > '09:00:00'
-          AND DATE(log_time) >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
-        GROUP BY DAYNAME(log_time), WEEKDAY(log_time)
+        FROM hris_attendance ha
+        JOIN employees e ON e.employee_id = ha.employee_id
+        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        WHERE LOWER(TRIM(u.role)) = 'employee'
+          AND LOWER(TRIM(e.status)) = 'active'
+          AND COALESCE(ha.late_minutes, 0) > 0
+        GROUP BY DAYNAME(ha.attendance_date), WEEKDAY(ha.attendance_date)
         ORDER BY day_index ASC
       `);
 
       const [absenceDepartmentRows] = await conn.execute(`
-        WITH RECURSIVE selected_dates AS (
-          SELECT DATE_SUB(CURDATE(), INTERVAL 29 DAY) AS attendance_date
-          UNION ALL
-          SELECT DATE_ADD(attendance_date, INTERVAL 1 DAY)
-          FROM selected_dates
-          WHERE attendance_date < CURDATE()
-        ),
-        employee_users AS (
-          SELECT
-            u.user_id,
-            COALESCE(e_code.employee_id, e_name.employee_id) AS employee_id,
-            COALESCE(ee.department, 'N/A') AS department,
-            ee.date_hired
-          FROM users u
-          LEFT JOIN employees e_code ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
-          LEFT JOIN employees e_name
-            ON e_code.employee_id IS NULL
-           AND LOWER(TRIM(CONCAT(e_name.first_name, ' ', e_name.last_name))) = LOWER(TRIM(u.full_name))
-          LEFT JOIN employee_employment ee
-            ON ee.employment_id = (
-              SELECT em.employment_id
-              FROM employee_employment em
-              WHERE em.employee_id = COALESCE(e_code.employee_id, e_name.employee_id)
-              ORDER BY em.employment_id DESC
-              LIMIT 1
-            )
-          WHERE LOWER(TRIM(u.role)) = 'employee'
-        ),
-        time_ins AS (
-          SELECT user_id, DATE(log_time) AS attendance_date
-          FROM audit_logs
-          WHERE action = 'Employee Time In'
-            AND DATE(log_time) BETWEEN DATE_SUB(CURDATE(), INTERVAL 29 DAY) AND CURDATE()
-          GROUP BY user_id, DATE(log_time)
-        )
         SELECT
-          eu.department,
-          SUM(CASE WHEN ti.user_id IS NULL THEN 1 ELSE 0 END) AS absence_days
-        FROM selected_dates sd
-        CROSS JOIN employee_users eu
-        LEFT JOIN time_ins ti
-          ON ti.user_id = eu.user_id
-         AND ti.attendance_date = sd.attendance_date
-        WHERE WEEKDAY(sd.attendance_date) < 5
-          AND (eu.date_hired IS NULL OR sd.attendance_date >= eu.date_hired)
+          COALESCE(ee.department, 'N/A') AS department,
+          COUNT(*) AS absence_days
+        FROM hris_attendance ha
+        JOIN employees e ON e.employee_id = ha.employee_id
+        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        LEFT JOIN employee_employment ee ON ee.employment_id = (
+          SELECT em.employment_id FROM employee_employment em
+          WHERE em.employee_id = e.employee_id ORDER BY em.employment_id DESC LIMIT 1
+        )
+        WHERE LOWER(TRIM(u.role)) = 'employee'
+          AND LOWER(TRIM(e.status)) = 'active'
+          AND LOWER(TRIM(ha.status)) = 'absent'
+          AND (ee.date_hired IS NULL OR ha.attendance_date >= ee.date_hired)
           AND NOT EXISTS (
             SELECT 1 FROM employee_leave_requests elr
-            WHERE elr.employee_id = eu.employee_id
+            WHERE elr.employee_id = e.employee_id
               AND elr.status = 'Approved'
-              AND sd.attendance_date BETWEEN elr.start_date AND elr.end_date
+              AND ha.attendance_date BETWEEN elr.start_date AND elr.end_date
           )
-        GROUP BY eu.department
+          AND NOT EXISTS (
+            SELECT 1 FROM company_calendar_events cce
+            WHERE cce.event_date = ha.attendance_date
+              AND (
+                cce.is_paid_holiday = 1
+                OR LOWER(cce.event_type) LIKE '%holiday%'
+                OR LOWER(cce.event_type) LIKE '%non-working%'
+              )
+          )
+        GROUP BY COALESCE(ee.department, 'N/A')
         ORDER BY absence_days DESC
         LIMIT 8
       `);
