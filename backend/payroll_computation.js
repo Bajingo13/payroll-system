@@ -267,11 +267,15 @@ module.exports = function (app, pool) {
              FROM INFORMATION_SCHEMA.COLUMNS
              WHERE TABLE_SCHEMA = DATABASE()
                AND TABLE_NAME = 'employee_payroll'
-               AND COLUMN_NAME = 'holiday_pay'`
+               AND COLUMN_NAME IN ('holiday_pay', 'leave_rows_json')`
         );
 
-        if (!columns.length) {
+        const existing = new Set(columns.map(c => c.COLUMN_NAME));
+        if (!existing.has('holiday_pay')) {
             await conn.query('ALTER TABLE employee_payroll ADD COLUMN holiday_pay DECIMAL(10,2) DEFAULT 0.00 AFTER overtime');
+        }
+        if (!existing.has('leave_rows_json')) {
+            await conn.query('ALTER TABLE employee_payroll ADD COLUMN leave_rows_json MEDIUMTEXT DEFAULT NULL');
         }
     }
 
@@ -1612,6 +1616,7 @@ module.exports = function (app, pool) {
             // Fetch main payroll settings
             const [rows] = await conn.query(
                 `SELECT e.employee_id,
+                        ep.payroll_id,
                         ep.payroll_status,
                         ep.basic_salary,
                         ep.absence_time,
@@ -1627,6 +1632,7 @@ module.exports = function (app, pool) {
                         ep.adj_comp,
                         ep.adj_non_comp,
                         ep.total_leaves_used,
+                        ep.leave_rows_json,
                         ep.gsis_employee, ep.gsis_employer, ep.gsis_ecc,
                         ep.sss_employee, ep.sss_employer, ep.sss_ecc,
                         ep.pagibig_employee, ep.pagibig_employer, ep.pagibig_ecc,
@@ -1764,7 +1770,7 @@ module.exports = function (app, pool) {
                         type_option, computation, ee_share, er_share, ecc, annualize
                 FROM employee_contributions
                 WHERE employee_id = ?`,
-                [employee.employee_id, run_id]
+                [employee.employee_id]
             );
 
             // GET previous YTD values based on actual payroll order
@@ -1826,7 +1832,7 @@ module.exports = function (app, pool) {
             const computePhilhealth = shouldCompute(philhealthRecord);
             const computeWtax = shouldCompute(wtaxRecord);
 
-            const isGovernmentEmployee = Boolean(employee.is_government_employee);
+            const isGovernmentEmployee = Boolean(employee.gsis_no);
 
             // === GSIS ===
             if (isGovernmentEmployee) {
@@ -2162,20 +2168,25 @@ module.exports = function (app, pool) {
             }
 
             // === FILTER ALLOWANCES & DEDUCTIONS BASED ON periodOption ===
+            // Items with no period set (null/empty) are always included regardless of period.
             if (periodOption && periodOption.toLowerCase() === "first half") {
-                employee.allowances = allAllowances.filter(a =>
-                    ["first half", "both"].includes((a.period || "").toLowerCase())
-                );
-                employee.deductions = allDeductions.filter(d =>
-                    ["first half", "both"].includes((d.period || "").toLowerCase())
-                );
+                employee.allowances = allAllowances.filter(a => {
+                    const p = (a.period || "").toLowerCase();
+                    return !p || ["first half", "both"].includes(p);
+                });
+                employee.deductions = allDeductions.filter(d => {
+                    const p = (d.period || "").toLowerCase();
+                    return !p || ["first half", "both"].includes(p);
+                });
             } else if (periodOption && periodOption.toLowerCase() === "second half") {
-                employee.allowances = allAllowances.filter(a =>
-                    ["second half", "both"].includes((a.period || "").toLowerCase())
-                );
-                employee.deductions = allDeductions.filter(d =>
-                    ["second half", "both"].includes((d.period || "").toLowerCase())
-                );
+                employee.allowances = allAllowances.filter(a => {
+                    const p = (a.period || "").toLowerCase();
+                    return !p || ["second half", "both"].includes(p);
+                });
+                employee.deductions = allDeductions.filter(d => {
+                    const p = (d.period || "").toLowerCase();
+                    return !p || ["second half", "both"].includes(p);
+                });
             } else {
                 // No filtering (return all)
                 employee.allowances = allAllowances;
@@ -2197,7 +2208,7 @@ module.exports = function (app, pool) {
             return res.json({ success: true, hasExistingPayroll, data: employee });
         } catch (err) {
             console.error("Error fetching payroll settings:", err);
-            return res.status(500).json({ success: false, message: "Server error" });
+            return res.status(500).json({ success: false, message: err.message || "Unable to load payroll settings." });
         }
     });
     
@@ -2205,15 +2216,19 @@ module.exports = function (app, pool) {
     app.put("/api/update_employee_payroll/:employeeId", async (req, res) => {
         const { employeeId } = req.params;
         const {
-            run_id, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction, 
+            run_id, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
             overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
             gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
             pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
             tax_withheld, total_deductions, loans, other_deductions, premium_adj,
             ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
             payroll_status, gross_pay, grand_total_deductions, net_pay, ot_nd, ot_nd_adj, att_adj,
-            periodOption, allowances, deductions, user_id, admin_name
+            periodOption, allowances, deductions, leave_rows, user_id, admin_name
         } = req.body;
+
+        const leaveRowsJson = Array.isArray(leave_rows) && leave_rows.length > 0
+            ? JSON.stringify(leave_rows.filter(r => r.leave_type_id))
+            : null;
 
         const periodToUse = periodOption || null;
         let conn;
@@ -2250,8 +2265,9 @@ module.exports = function (app, pool) {
                 // UPDATE existing payroll record
                 await conn.query(
                     `UPDATE employee_payroll SET
-                        basic_salary = ?, absence_time = ?, absence_deduction = ?, late_time = ?, late_deduction = ?, undertime = ?, undertime_deduction = ?, 
+                        basic_salary = ?, absence_time = ?, absence_deduction = ?, late_time = ?, late_deduction = ?, undertime = ?, undertime_deduction = ?,
                         overtime = ?, holiday_pay = ?, taxable_allowances = ?, non_taxable_allowances = ?, adj_comp = ?, adj_non_comp = ?, total_leaves_used = ?,
+                        leave_rows_json = COALESCE(?, leave_rows_json),
                         gsis_employee = ?, gsis_employer = ?, gsis_ecc = ?, sss_employee = ?, sss_employer = ?, sss_ecc = ?,
                         pagibig_employee = ?, pagibig_employer = ?, pagibig_ecc = ?, philhealth_employee = ?, philhealth_employer = ?, philhealth_ecc = ?,
                         tax_withheld = ?, deductions = ?, loans = ?, other_deductions = ?, premium_adj = ?,
@@ -2261,12 +2277,13 @@ module.exports = function (app, pool) {
                     [
                         basic_salary, safeAbsenceTime, absence_deduction, safeLateTime, late_deduction, safeUndertime, undertime_deduction,
                         overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        leaveRowsJson,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, total_deductions, loans, other_deductions, premium_adj,
                         ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
                         payroll_status || "null", gross_pay, grand_total_deductions, net_pay,
-                        employeeId, run_id, existing[0].payroll_id
+                        employeeId, run_id
                     ]
                 );
 
@@ -2704,17 +2721,17 @@ module.exports = function (app, pool) {
                 // INSERT new payroll record
                 const [insertedPayroll] = await conn.query(
                     `INSERT INTO employee_payroll
-                        (run_id, employee_id, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction, 
-                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        (run_id, employee_id, basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
+                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used, leave_rows_json,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, deductions, loans, other_deductions, premium_adj,
                         ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
                         payroll_status, gross_pay, total_deductions, net_pay)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         run_id, employeeId, basic_salary, safeAbsenceTime, absence_deduction, safeLateTime, late_deduction, safeUndertime, undertime_deduction,
-                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        overtime, holiday_pay, taxable_allowances, non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used, leaveRowsJson,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc, philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, total_deductions, loans, other_deductions, premium_adj,
@@ -2792,7 +2809,7 @@ module.exports = function (app, pool) {
         } catch (err) {
             if (conn) await conn.rollback();
             console.error("Error updating payroll:", err);
-            res.status(500).json({ success: false, message: "Server error" });
+            res.status(500).json({ success: false, message: err.message || "Unable to save payroll." });
         } finally {
             if (conn) conn.release();
         }
@@ -2860,6 +2877,9 @@ module.exports = function (app, pool) {
 
         try {
             conn = await pool.getConnection();
+            // Bulk save writes holiday_pay and leave_rows_json too. Prepare
+            // fresh/production schemas before opening the transaction.
+            await ensurePayrollAutomationColumns(conn);
             await conn.beginTransaction();
 
             for (const p of payrolls) {
@@ -2877,9 +2897,13 @@ module.exports = function (app, pool) {
                     philhealth_employee, philhealth_employer, philhealth_ecc,
                     tax_withheld, total_deductions, loans, loanRows = [], other_deductions, premium_adj,
                     ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
-                    payroll_status, allowances = [], deductions = [], periodOption,
+                    payroll_status, allowances = [], deductions = [], leave_rows = [], periodOption,
                     ot_nd_adj, att_adj
                 } = p;
+
+                const bulkLeaveRowsJson = Array.isArray(leave_rows) && leave_rows.length > 0
+                    ? JSON.stringify(leave_rows.filter(r => r.leave_type_id))
+                    : null;
 
                 const adjustedSalary = Number(basic_salary || 0);
                 const adjustedTaxableAllowances = Number(taxable_allowances || 0);
@@ -2992,6 +3016,7 @@ module.exports = function (app, pool) {
                     `UPDATE employee_payroll SET
                         basic_salary = ?, absence_time = ?, absence_deduction = ?, late_time = ?, late_deduction = ?, undertime = ?, undertime_deduction = ?,
                         overtime = ?, holiday_pay = ?, taxable_allowances = ?, non_taxable_allowances = ?, adj_comp = ?, adj_non_comp = ?, total_leaves_used = ?,
+                        leave_rows_json = COALESCE(?, leave_rows_json),
                         gsis_employee = ?, gsis_employer = ?, gsis_ecc = ?, sss_employee = ?, sss_employer = ?, sss_ecc = ?,
                         pagibig_employee = ?, pagibig_employer = ?, pagibig_ecc = ?, philhealth_employee = ?, philhealth_employer = ?, philhealth_ecc = ?,
                         tax_withheld = ?, deductions = ?, loans = ?, other_deductions = ?, premium_adj = ?,
@@ -3001,6 +3026,7 @@ module.exports = function (app, pool) {
                     [
                         p.basic_salary, absence_time, absence_deduction, late_time, late_deduction, undertime, undertime_deduction,
                         overtime, holiday_pay, p.taxable_allowances, p.non_taxable_allowances, adj_comp, adj_non_comp, total_leaves_used,
+                        bulkLeaveRowsJson,
                         gsis_employee, gsis_employer, gsis_ecc, sss_employee, sss_employer, sss_ecc,
                         pagibig_employee, pagibig_employer, pagibig_ecc,philhealth_employee, philhealth_employer, philhealth_ecc,
                         tax_withheld, p.total_deductions, loans, other_deductions, premium_adj,

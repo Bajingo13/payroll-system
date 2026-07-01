@@ -61,3 +61,13 @@ test('allows an employee to request their own account', () => {
   const result = run({ path: '/employee_dashboard', user: { user_id: 7, role: 'Employee' }, query: { user_id: 7 } });
   assert.equal(result.next, true);
 });
+
+test('allows employees to view the company calendar', () => {
+  const result = run({ path: '/company-calendar/events', user: { user_id: 7, role: 'Employee' } });
+  assert.equal(result.next, true);
+});
+
+test('prevents employees from changing company calendar events', () => {
+  const result = run({ method: 'POST', path: '/company-calendar/events', user: { user_id: 7, role: 'Employee' } });
+  assert.equal(result.status, 403);
+});

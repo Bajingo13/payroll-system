@@ -60,7 +60,8 @@ module.exports = function (app, pool) {
             COALESCE(e_code.employee_id, e_name.employee_id) AS employee_id,
             COALESCE(e_code.emp_code, e_name.emp_code, u.username) AS emp_code,
             COALESCE(CONCAT_WS(' ', e_code.first_name, e_code.last_name), CONCAT_WS(' ', e_name.first_name, e_name.last_name), u.full_name) AS employee_name,
-            COALESCE(ee.department, 'N/A') AS department
+            COALESCE(ee.department, 'N/A') AS department,
+            ee.date_hired
           FROM users u
           LEFT JOIN employees e_code ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
           LEFT JOIN employees e_name
@@ -92,14 +93,21 @@ module.exports = function (app, pool) {
           SUM(CASE WHEN ls.time_in IS NULL THEN 1 ELSE 0 END) AS absent_days,
           SUM(CASE WHEN ls.time_in IS NOT NULL AND TIME(ls.time_in) > '09:00:00' THEN 1 ELSE 0 END) AS late_days,
           SUM(CASE WHEN ls.time_out IS NULL AND ls.time_in IS NOT NULL THEN 1 ELSE 0 END) AS incomplete_days,
-          ROUND(AVG(CASE WHEN ls.time_in IS NULL THEN 1 ELSE 0 END) * 100, 2) AS absence_rate,
-          ROUND(AVG(CASE WHEN ls.time_in IS NOT NULL AND TIME(ls.time_in) > '09:00:00' THEN 1 ELSE 0 END) * 100, 2) AS tardiness_rate
+          ROUND(SUM(CASE WHEN ls.time_in IS NULL THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS absence_rate,
+          ROUND(SUM(CASE WHEN ls.time_in IS NOT NULL AND TIME(ls.time_in) > '09:00:00' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS tardiness_rate
         FROM selected_dates sd
         CROSS JOIN employee_users eu
         LEFT JOIN log_summary ls
           ON ls.user_id = eu.user_id
          AND ls.attendance_date = sd.attendance_date
         WHERE WEEKDAY(sd.attendance_date) < 5
+          AND (eu.date_hired IS NULL OR sd.attendance_date >= eu.date_hired)
+          AND NOT EXISTS (
+            SELECT 1 FROM employee_leave_requests elr
+            WHERE elr.employee_id = eu.employee_id
+              AND elr.status = 'Approved'
+              AND sd.attendance_date BETWEEN elr.start_date AND elr.end_date
+          )
       `);
 
       const [tardinessRows] = await conn.execute(`
@@ -126,7 +134,9 @@ module.exports = function (app, pool) {
         employee_users AS (
           SELECT
             u.user_id,
-            COALESCE(ee.department, 'N/A') AS department
+            COALESCE(e_code.employee_id, e_name.employee_id) AS employee_id,
+            COALESCE(ee.department, 'N/A') AS department,
+            ee.date_hired
           FROM users u
           LEFT JOIN employees e_code ON LOWER(TRIM(e_code.emp_code)) = LOWER(TRIM(u.username))
           LEFT JOIN employees e_name
@@ -158,6 +168,13 @@ module.exports = function (app, pool) {
           ON ti.user_id = eu.user_id
          AND ti.attendance_date = sd.attendance_date
         WHERE WEEKDAY(sd.attendance_date) < 5
+          AND (eu.date_hired IS NULL OR sd.attendance_date >= eu.date_hired)
+          AND NOT EXISTS (
+            SELECT 1 FROM employee_leave_requests elr
+            WHERE elr.employee_id = eu.employee_id
+              AND elr.status = 'Approved'
+              AND sd.attendance_date BETWEEN elr.start_date AND elr.end_date
+          )
         GROUP BY eu.department
         ORDER BY absence_days DESC
         LIMIT 8

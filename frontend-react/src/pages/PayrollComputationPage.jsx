@@ -150,7 +150,8 @@ function effectiveAllowanceTotals(payroll, rows = []) {
 }
 
 function effectiveDeductionTotal(payroll, rows = []) {
-  return rows.length ? rows.reduce((sum, row) => sum + toNum(row.amount), 0) : toNum(payroll.total_deductions);
+  const active = rows.filter(r => r.deduction_type_id);
+  return active.length ? active.reduce((sum, row) => sum + toNum(row.amount), 0) : toNum(payroll.total_deductions);
 }
 
 function makeEmptyPayroll() {
@@ -675,18 +676,24 @@ export default function PayrollComputationPage() {
         }
 
         const option = deductionTypes.find(type => String(type.id) === String(value));
+        const existing = index >= 0 ? next[index] : {};
         const row = {
-          ...(index >= 0 ? next[index] : {}),
-          emp_deduction_id: index >= 0 ? next[index].emp_deduction_id : null,
-          source_emp_deduction_id: index >= 0 ? next[index].source_emp_deduction_id : null,
+          ...existing,
+          emp_deduction_id: existing.emp_deduction_id ?? null,
+          source_emp_deduction_id: existing.source_emp_deduction_id ?? null,
           deduction_type_id: value,
           deduction_name: option?.name || '',
-          amount: index >= 0 ? next[index].amount : toNum(option?.amount).toFixed(2),
-          period: index >= 0 ? next[index].period : (selectedPeriod?.period_name || '')
+          amount: existing.amount != null ? existing.amount : toNum(option?.amount).toFixed(2),
+          period: existing.period ?? (selectedPeriod?.period_name || '')
         };
 
-        if (index >= 0) next[index] = row;
-        else next.push(row);
+        if (index >= 0) {
+          next[index] = row;
+        } else {
+          // Pad empty slots so the new row lands at slotIndex, not at next.length
+          while (next.length < slotIndex) next.push({});
+          next.push(row);
+        }
         return next;
       }
 
@@ -1080,10 +1087,14 @@ export default function PayrollComputationPage() {
       ).toFixed(2);
     }
     
-    return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris };
+    let savedLeaveRows = null;
+    if (rec.leave_rows_json) {
+      try { savedLeaveRows = JSON.parse(rec.leave_rows_json); } catch { /* ignore */ }
+    }
+    return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris, savedLeaveRows };
   }
 
-  async function loadLoansAndLeaves(empId, basicSalary = 0, periodHrisData = null) {
+  async function loadLoansAndLeaves(empId, basicSalary = 0, periodHrisData = null, savedLeaveRows = null) {
     setLoansLoading(true); setLeavesLoading(true);
     try {
       const [loansResp, leavesResp] = await Promise.all([
@@ -1112,8 +1123,11 @@ export default function PayrollComputationPage() {
       setPayroll(p=>({...p, loans: loanTotal.toFixed(2)}));
       setOtherDedRows([]);
       setSelectedDedRow(null);
-      // Build leave rows only from approved requests clipped to the selected payroll period.
-      const newRows = buildPeriodLeaveRows(periodHrisData, basicSalary, balances);
+      // Restore previously saved leave rows if they exist; otherwise build from HRIS.
+      const hasSaved = Array.isArray(savedLeaveRows) && savedLeaveRows.some(r => r.leave_type_id);
+      const newRows = hasSaved
+        ? savedLeaveRows
+        : buildPeriodLeaveRows(periodHrisData, basicSalary, balances);
       setLeaveRows(newRows);
       const totalLeavesAmt = newRows.reduce((s, r) => s + toNum(r.amount), 0);
       setPayroll(p => ({...p, total_leaves_used: totalLeavesAmt.toFixed(2)}));
@@ -1129,7 +1143,7 @@ export default function PayrollComputationPage() {
       setAllowances(d.allowances); setDeductions(d.deductions);
       setHrisData(d.hrisData || null);
       setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
-      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData);
+      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData, d.savedLeaveRows);
       return;
     }
     setLoading(true);
@@ -1140,7 +1154,7 @@ export default function PayrollComputationPage() {
       setAllowances(d.allowances); setDeductions(d.deductions);
       setHrisData(d.hrisData || null);
       setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
-      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData);
+      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData, d.savedLeaveRows);
     } catch(err) {
       flash(getApiMessage(err,'Failed to load employee payroll.'),'warning');
     } finally {
@@ -1197,7 +1211,7 @@ export default function PayrollComputationPage() {
     setLoading(true);
     try {
       const cache = {...empDataMap};
-      if (selectedEmp) cache[selectedEmp.employee_id] = { payroll, otNd, otNdAdj, attAdj, allowances, deductions, loanRows };
+      if (selectedEmp) cache[selectedEmp.employee_id] = { payroll, otNd, otNdAdj, attAdj, allowances, deductions, loanRows, leaveRows, savedLeaveRows: leaveRows };
       for (const emp of filteredEmps) {
         if (!cache[emp.employee_id]) {
           cache[emp.employee_id] = await loadEmpData(emp.employee_id);
@@ -1228,7 +1242,8 @@ export default function PayrollComputationPage() {
           ytd_gsis:toNum(p.ytd_gsis), ytd_pagibig:toNum(p.ytd_pagibig), ytd_gross:toNum(p.ytd_gross),
           payroll_status:p.payroll_status||'Active',
           gross_pay:gross, grand_total_deductions:ded, net_pay:gross-ded,
-          allowances:d.allowances, deductions:d.deductions, loanRows: d.loanRows,
+          allowances:d.allowances, deductions:(d.deductions||[]).filter(d => d.deduction_type_id), loanRows: d.loanRows,
+          leave_rows:(d.leaveRows||[]).filter(r => r.leave_type_id),
           ot_nd: normalizeAdjustmentTimes(d.otNd || {}),
           ot_nd_adj: normalizeAdjustmentTimes(d.otNdAdj || {}),
           att_adj: normalizeAdjustmentTimes(d.attAdj || {}),
@@ -1282,13 +1297,17 @@ export default function PayrollComputationPage() {
         gross_pay:totals.gross, grand_total_deductions:totals.ded, net_pay:totals.net,
         ot_nd:normalizeAdjustmentTimes(otNd), ot_nd_adj:normalizeAdjustmentTimes(otNdAdj), att_adj:normalizeAdjustmentTimes(attAdj),
         periodOption:selectedPeriod?.period_name||'',
-        allowances, deductions,
+        allowances, deductions: deductions.filter(d => d.deduction_type_id),
+        leave_rows: leaveRows.filter(r => r.leave_type_id),
         user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
-      
+
       if (!data.success) throw new Error(data.message||'Failed to save.');
       flash('Payroll saved successfully.','success');
-      setIsEditing(false); setShowSaveModal(false); setSelectedEmp(null);
+      setIsEditing(false); setShowSaveModal(false);
+      // Invalidate cache so re-selecting this employee fetches fresh data from the API
+      setEmpDataMap(prev => { const n = {...prev}; delete n[selectedEmp.employee_id]; return n; });
+      setSelectedEmp(null);
       await loadRunEmployees(runId);
     } catch(err) {
       flash(getApiMessage(err,'Failed to save payroll.'),'warning');
@@ -1718,8 +1737,8 @@ export default function PayrollComputationPage() {
                           <tr><td>Undertime (-)</td><td><Ti dis={true} v={payroll.undertime} set={v=>upPayroll('undertime',v)} /></td><td><Ni dis={true} v={payroll.undertime_deduction} set={v=>upPayroll('undertime_deduction',v)} /></td></tr>
                           <tr><td>Total Overtime (+)</td><td></td><td><Ni dis={true} v={payroll.overtime} set={v=>upPayroll('overtime',v)} /></td></tr>
                           <tr><td>Holiday Pay (+)</td><td></td><td><Ni dis={true} v={payroll.holiday_pay} set={v=>upPayroll('holiday_pay',v)} /></td></tr>
-                          <tr><td>Taxable Allowances (+)</td><td></td><td><Ni dis={true} v={payroll.taxable_allowances} set={v=>upPayroll('taxable_allowances',v)} /></td></tr>
-                          <tr><td>Non-Taxable Allow. (+)</td><td></td><td><Ni dis={true} v={payroll.non_taxable_allowances} set={v=>upPayroll('non_taxable_allowances',v)} /></td></tr>
+                          <tr><td>Taxable Allowances (+)</td><td></td><td><Ni dis={true} v={allowanceTotals.taxable} set={v=>upPayroll('taxable_allowances',v)} /></td></tr>
+                          <tr><td>Non-Taxable Allow. (+)</td><td></td><td><Ni dis={true} v={allowanceTotals.nontaxable} set={v=>upPayroll('non_taxable_allowances',v)} /></td></tr>
                           <tr><td>Adj. Compensation (+)</td><td></td><td><Ni dis={true} v={payroll.adj_comp} set={v=>upPayroll('adj_comp',v)} /></td></tr>
                           <tr><td>Adj. Non-Comp. (+)</td><td></td><td><Ni dis={!isEditing} v={payroll.adj_non_comp} set={v=>upPayroll('adj_non_comp',v)} /></td></tr>
                           <tr><td>Total Leaves Used (+)</td><td></td><td><Ni dis={true} v={payroll.total_leaves_used} set={v=>upPayroll('total_leaves_used',v)} /></td></tr>
@@ -1738,7 +1757,7 @@ export default function PayrollComputationPage() {
                           <tr><td>Pag-ibig</td><td><Ni dis={true} v={payroll.pagibig_employee} set={v=>upPayroll('pagibig_employee',v)} /></td><td><Ni dis={true} v={payroll.pagibig_employer} set={v=>upPayroll('pagibig_employer',v)} /></td><td><Ni dis={true} v={payroll.pagibig_ecc} set={v=>upPayroll('pagibig_ecc',v)} /></td></tr>
                           <tr><td>Philhealth</td><td><Ni dis={true} v={payroll.philhealth_employee} set={v=>upPayroll('philhealth_employee',v)} /></td><td><Ni dis={true} v={payroll.philhealth_employer} set={v=>upPayroll('philhealth_employer',v)} /></td><td><Ni dis={true} v={payroll.philhealth_ecc} set={v=>upPayroll('philhealth_ecc',v)} /></td></tr>
                           <tr><td>Tax Withheld</td><td><Ni dis={true} v={payroll.tax_withheld} set={v=>upPayroll('tax_withheld',v)} /></td><td colSpan={2}></td></tr>
-                          <tr><td>Total Deductions</td><td><Ni dis={true} v={payroll.total_deductions} set={v=>upPayroll('total_deductions',v)} /></td><td colSpan={2}></td></tr>
+                          <tr><td>Total Deductions</td><td><Ni dis={true} v={deductionRowsTotal} set={v=>upPayroll('total_deductions',v)} /></td><td colSpan={2}></td></tr>
                           <tr><td>Loans</td><td><Ni dis={true} v={payroll.loans} set={v=>upPayroll('loans',v)} /></td><td colSpan={2}></td></tr>
                           <tr><td>Other Deductions</td><td><Ni dis={true} v={payroll.other_deductions} set={v=>upPayroll('other_deductions',v)} /></td><td>Premium Adj.</td><td><Ni dis={true} v={payroll.premium_adj} set={v=>upPayroll('premium_adj',v)} /></td></tr>
                         </tbody>
