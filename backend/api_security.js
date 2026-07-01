@@ -40,7 +40,6 @@ const ADMIN_OR_HR = [
   /^\/dashboard$/,
   /^\/logs$/,
   /^\/attendance_overview/,
-  /^\/employee_profile_mgmt/,
   /^\/employees(?:$|\/)/,
   /^\/employee_list/,
   /^\/employee_documents/,
@@ -89,9 +88,11 @@ function apiSecurity(req, res, next) {
     return res.status(403).json({ success: false, message: 'Administrator access required.' });
   }
   if (req.method !== 'GET' && matchesAny(path, ADMIN_HR_WRITE_ONLY) && !['admin', 'hr'].includes(role)) {
+    console.warn(`[SECURITY 403] ADMIN_HR_WRITE_ONLY blocked: method=${req.method} path=${path} role=${role}`);
     return res.status(403).json({ success: false, message: 'Admin or HR access required.' });
   }
   if (matchesAny(path, ADMIN_OR_HR) && !['admin', 'hr'].includes(role)) {
+    console.warn(`[SECURITY 403] ADMIN_OR_HR blocked: method=${req.method} path=${path} role=${role}`);
     return res.status(403).json({ success: false, message: 'Admin or HR access required.' });
   }
 

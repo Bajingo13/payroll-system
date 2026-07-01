@@ -244,12 +244,15 @@ export default function ProfileManagementPage() {
             type="button"
             className="profile-avatar-button profile-picture-preview"
             onClick={() => inputRef.current?.click()}
-            title="Change profile picture"
+            title="Click to upload profile picture"
           >
             {avatar ? (
               <img src={avatar} alt={`${user?.full_name || 'User'} profile`} />
             ) : (
-              <span className="profile-avatar-placeholder">Upload your picture here</span>
+              <svg viewBox="0 0 64 64" width="60" height="60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="24" r="13" fill="rgba(255,255,255,0.85)" />
+                <ellipse cx="32" cy="56" rx="22" ry="14" fill="rgba(255,255,255,0.85)" />
+              </svg>
             )}
           </button>
 
@@ -289,34 +292,34 @@ export default function ProfileManagementPage() {
             </button>
           </div>
         </div>
-        <div className="profile-picture-panel">
+        <div className="profile-picture-panel profile-picture-panel--centered">
           <button
             type="button"
             className="profile-avatar-button profile-picture-preview"
             onClick={() => inputRef.current?.click()}
-            title="Change profile picture"
+            title="Click to upload profile picture"
           >
             {avatar ? (
               <img src={avatar} alt={`${user?.full_name || 'User'} profile`} />
             ) : (
-              <span className="profile-avatar-placeholder">Upload your picture here</span>
+              <svg viewBox="0 0 64 64" width="60" height="60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="24" r="13" fill="rgba(255,255,255,0.85)" />
+                <ellipse cx="32" cy="56" rx="22" ry="14" fill="rgba(255,255,255,0.85)" />
+              </svg>
             )}
           </button>
-
-          <div>
-            <h3>{user?.full_name || 'Employee'}</h3>
-            <p className="muted">{user?.role || 'Employee'}</p>
-            <button type="button" className="btn secondary" onClick={() => inputRef.current?.click()}>
-              Change Picture
-            </button>
-            <input
-              ref={inputRef}
-              className="profile-avatar-input"
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarChange}
-            />
-          </div>
+          <h3 style={{ margin: '8px 0 2px' }}>{user?.full_name || 'Employee'}</h3>
+          <p className="muted" style={{ margin: 0 }}>{user?.role || 'Employee'}</p>
+          <button type="button" className="btn secondary" style={{ marginTop: 8 }} onClick={() => inputRef.current?.click()}>
+            Change Picture
+          </button>
+          <input
+            ref={inputRef}
+            className="profile-avatar-input"
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarChange}
+          />
         </div>
 
         <form className="profile-edit-form" onSubmit={handleSaveProfile}>

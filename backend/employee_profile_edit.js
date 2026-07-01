@@ -49,6 +49,16 @@ module.exports = function (app, pool) {
     return typeof value === 'string' ? value.trim() : value;
   }
 
+  async function ensureEmployeeUserIdColumn(conn) {
+    const [rows] = await conn.execute(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'employees' AND COLUMN_NAME = 'user_id'`
+    );
+    if (!rows.length) {
+      await conn.execute('ALTER TABLE employees ADD COLUMN user_id INT NULL');
+    }
+  }
+
   async function ensureEmployeeDocumentsTable(conn) {
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS employee_documents (
@@ -96,6 +106,21 @@ module.exports = function (app, pool) {
   }
 
   async function findEmployeeByUser(conn, user) {
+    // Primary: direct user_id link (most reliable, immune to username/emp_code mismatch)
+    const userId = Number((user && user.user_id) || 0);
+    if (userId) {
+      const [uidRows] = await conn.execute(
+        `SELECT e.employee_id, e.emp_code, e.status
+         FROM employees e
+         WHERE e.user_id = ?
+         ORDER BY (e.status = 'Active') DESC, e.employee_id DESC
+         LIMIT 1`,
+        [userId]
+      );
+      if (uidRows[0]) return uidRows[0];
+    }
+
+    // Fallback: username = emp_code
     const username = String((user && user.username) || '').trim();
     if (username) {
       const [codeRows] = await conn.execute(
@@ -214,6 +239,7 @@ module.exports = function (app, pool) {
     let conn;
     try {
       conn = await pool.getConnection();
+      await ensureEmployeeUserIdColumn(conn);
       await ensureEmployeeDocumentsTable(conn);
       await ensureEncryptedGovernmentIdColumns(conn);
 
@@ -339,6 +365,7 @@ module.exports = function (app, pool) {
     let conn;
     try {
       conn = await pool.getConnection();
+      await ensureEmployeeUserIdColumn(conn);
       await ensureEmployeeDocumentsTable(conn);
       await ensureEncryptedGovernmentIdColumns(conn);
 
