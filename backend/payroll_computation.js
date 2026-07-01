@@ -2137,23 +2137,34 @@ module.exports = function (app, pool) {
             if (hasExistingPayroll) {
                 // Payroll record exists → use payroll-specific allowances/deductions
                 const payrollId = employeePayroll[0].payroll_id;
-                
+
                 const [payrollAllowances] = await pool.query(`
                     SELECT epa.*, at.allowance_name, at.is_taxable
                     FROM employee_payroll_allowances epa
-                    LEFT JOIN allowance_types at ON epa.allowance_type_id = at.allowance_type_id
-                    WHERE epa.employee_id = ? AND epa.payroll_id = ?
+                    LEFT JOIN allowance_types at
+                        ON epa.allowance_type_id = at.allowance_type_id
+                    WHERE epa.employee_id = ?
+                    AND epa.payroll_id = ?
                 `, [employee.employee_id, payrollId]);
-                
+
                 const [payrollDeductions] = await pool.query(`
                     SELECT epd.*, dt.deduction_name
                     FROM employee_payroll_deductions epd
-                    LEFT JOIN deduction_types dt ON epd.deduction_type_id = dt.deduction_type_id
-                    WHERE epd.employee_id = ? AND epd.payroll_id = ?
+                    LEFT JOIN deduction_types dt
+                        ON epd.deduction_type_id = dt.deduction_type_id
+                    WHERE epd.employee_id = ?
+                    AND epd.payroll_id = ?
                 `, [employee.employee_id, payrollId]);
 
-                allAllowances = payrollAllowances.map(a => ({ ...a, isPayrollOverride: true }));
-                allDeductions = payrollDeductions.map(d => ({ ...d, isPayrollOverride: true }));
+                allAllowances = payrollAllowances.map(a => ({
+                    ...a,
+                    isPayrollOverride: true
+                }));
+
+                allDeductions = payrollDeductions.map(d => ({
+                    ...d,
+                    isPayrollOverride: true
+                }));
             } else {
                 // Payroll record does not exist → use default allowances/deductions
                 const [allowances] = await pool.query(`
@@ -2201,21 +2212,17 @@ module.exports = function (app, pool) {
                 employee.deductions = allDeductions;
             }
 
-            employee.allowances = (employee.allowances || []).map(a => ({
-                ...a,
-                amount:
-                    a.source_emp_allowance_id != null
-                        ? prorateAmount(a.amount, effectivePayrollPeriod, employee)
-                        : a.amount
-            }));
+            if (!hasExistingPayroll) {
+                employee.allowances = (employee.allowances || []).map(a => ({
+                    ...a,
+                    amount: prorateAmount(a.amount, effectivePayrollPeriod, employee)
+                }));
 
-            employee.deductions = (employee.deductions || []).map(d => ({
-                ...d,
-                amount:
-                    d.source_emp_deduction_id != null
-                        ? prorateAmount(d.amount, effectivePayrollPeriod, employee)
-                        : d.amount
-            }));
+                employee.deductions = (employee.deductions || []).map(d => ({
+                    ...d,
+                    amount: prorateAmount(d.amount, effectivePayrollPeriod, employee)
+                }));
+            }
 
             conn.release();
 

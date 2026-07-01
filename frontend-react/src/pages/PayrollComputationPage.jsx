@@ -1850,7 +1850,6 @@ export default function PayrollComputationPage() {
                               <th className="allowance-row-num"></th>
                               <th>{title}</th>
                               <th className="allowance-amount-col">Amount</th>
-                              <th className="allowance-days-col">Input Days</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1874,13 +1873,6 @@ export default function PayrollComputationPage() {
                                     dis={!isEditing || !a.allowance_type_id}
                                     v={a.allowance_type_id ? a.amount : '0.00'}
                                     set={v=>updateAllowanceSlot(taxable, i, 'amount', v)}
-                                  />
-                                </td>
-                                <td>
-                                  <AllowanceTimeInput
-                                    dis={!isEditing || !a.allowance_type_id}
-                                    v={a.input_days || '00:00:00'}
-                                    set={v=>updateAllowanceSlot(taxable, i, 'input_days', v)}
                                   />
                                 </td>
                               </tr>
