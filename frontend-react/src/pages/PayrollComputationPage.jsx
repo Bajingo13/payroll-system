@@ -1922,11 +1922,6 @@ export default function PayrollComputationPage() {
                           </td>
                         </tr>
                       ))}
-                      <tr className="deduction-format-total-row">
-                        <td></td>
-                        <td></td>
-                        <td><strong>{fmt(deductionRowsTotal)}</strong></td>
-                      </tr>
                     </tbody>
                   </table>
                 </div>
