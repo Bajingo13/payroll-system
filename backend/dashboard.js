@@ -223,7 +223,7 @@ module.exports = function (app, pool) {
             )
           )
         LIMIT 1
-      `, [payrollId, req.authUser?.normalizedRole || 'unknown', Number(req.authUser?.user_id || 0)]);
+      `, [payrollId, req.session?.user?.normalizedRole || 'unknown', Number(req.session?.user?.user_id || 0)]);
 
       if (!rows.length) return res.status(404).json({ success: false, message: 'Payslip not found' });
 

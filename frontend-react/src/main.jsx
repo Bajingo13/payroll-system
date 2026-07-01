@@ -38,6 +38,7 @@ const UserSettingsPage = lazy(() => import('./pages/UserSettingsPage.jsx'));
 const AboutUsPage = lazy(() => import('./pages/AboutUsPage.jsx'));
 const HelpPage = lazy(() => import('./pages/HelpPage.jsx'));
 const ContactsPage = lazy(() => import('./pages/ContactsPage.jsx'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage.jsx'));
 import { canAccessFeature, getAccessibleFeatures, normalizeRole } from './access/roleAccess.js';
 import './styles.css';
 
@@ -124,6 +125,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/about-us" element={<AboutUsPage />} />
       <Route path="/help" element={<HelpPage />} />
       <Route path="/contacts" element={<ContactsPage />} />
