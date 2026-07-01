@@ -929,18 +929,7 @@ export default function PayrollComputationPage() {
     console.log(JSON.stringify(rec, null, 2));
 
     // Compute basic_salary from settings so we can pass it to HRIS
-    let computedBasicSalary = toNum(rec.basic_salary);
-    if (!hasExistingPayroll && rec.main_computation) {
-      const rawSalary = toNum(rec.main_computation);
-      if (rawSalary > 0) {
-        const grp = (meta.payrollGroups || []).find(g => String(g.group_id) === String(filters.payroll_group));
-        const gName = (grp?.group_name || '').toUpperCase();
-        const weekInYear = toNum(rec.week_in_year) || 52;
-        if (gName.includes('SEMI')) computedBasicSalary = Math.round(rawSalary / 2 * 100) / 100;
-        else if (gName.includes('WEEK')) computedBasicSalary = Math.round(rawSalary * 12 / weekInYear * 100) / 100;
-        else computedBasicSalary = rawSalary;
-      }
-    }
+    const computedBasicSalary = toNum(rec.basic_salary);
 
     // Fetch HRIS with the correct basic_salary so deductions are computed properly
     let hris = null;

@@ -1670,6 +1670,15 @@ module.exports = function (app, pool) {
             }
 
             const employee = rows[0];
+            
+            // Check if there is a payroll record for this employee and run_id
+            const [employeePayroll] = await pool.query(`
+                SELECT *
+                FROM employee_payroll
+                WHERE employee_id = ? AND run_id = ?
+            `, [employee.employee_id, run_id]);
+
+            // Determine if the employee has an existing payroll record with a non-null basic_salary
             const hasExistingPayroll =
                 employeePayroll.length > 0 &&
                 employeePayroll[0].basic_salary != null;
@@ -2108,17 +2117,10 @@ module.exports = function (app, pool) {
                 }
             }
 
-            // Check if there is a payroll record for this employee and run_id
-            const [employeePayroll] = await pool.query(`
-                SELECT *
-                FROM employee_payroll
-                WHERE employee_id = ? AND run_id = ?
-            `, [employee.employee_id, run_id]);
-
             let allAllowances = [];
             let allDeductions = [];
 
-            if (employeePayroll.length > 0 && employeePayroll[0].basic_salary !== null) {
+            if (hasExistingPayroll) {
                 // Payroll record exists → use payroll-specific allowances/deductions
                 const payrollId = employeePayroll[0].payroll_id;
                 
