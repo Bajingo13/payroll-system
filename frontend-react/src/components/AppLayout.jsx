@@ -232,7 +232,7 @@ export default function AppLayout() {
     { to: '/reports/payslip', label: 'Payslip', feature: 'reports' },
     { to: '/government-reports', label: 'Government Reports', feature: 'government-reports' },
     { to: '/report-builder', label: 'Report Builder', feature: 'report-builder' },
-    { to: '/reports/reconciliation-details', label: 'Reconciliation Details', feature: 'reports' }
+    { to: '/reports/reconciliation-details', label: 'Bank Reports', feature: 'reports' }
   ];
 
   const hrToolsNav = [

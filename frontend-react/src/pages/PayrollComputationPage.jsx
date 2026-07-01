@@ -229,7 +229,7 @@ function getHrisPeriodRange(hrisData) {
 function buildPeriodLeaveRows(hrisData, basicSalary = 0, leaveBalances = []) {
   const requests = hrisData?.absences?.requests || [];
   const { start: periodStart, end: periodEnd } = getHrisPeriodRange(hrisData);
-  const dailyRate = toNum(basicSalary) / 26;
+  const dailyRate = toNum(hrisData?.rates?.daily_rate) || (toNum(basicSalary) / 26);
   const grouped = new Map();
 
   leaveBalances.forEach((balance) => {
@@ -625,7 +625,7 @@ export default function PayrollComputationPage() {
     });
   }
   function upLeaveRow(i, field, value) {
-    const dailyRate = toNum(payroll.basic_salary) / 26;
+    const dailyRate = toNum(hrisData?.rates?.daily_rate) || (toNum(payroll.basic_salary) / 26);
     setLeaveRows(prev => {
       const next = prev.map((r, idx) => idx === i ? {...r, [field]: value} : r);
       if (field === 'used') {
@@ -1147,8 +1147,14 @@ export default function PayrollComputationPage() {
       setSelectedDedRow(null);
       // Restore previously saved leave rows if they exist; otherwise build from HRIS.
       const hasSaved = Array.isArray(savedLeaveRows) && savedLeaveRows.some(r => r.leave_type_id);
+      const dailyRate = toNum(periodHrisData?.rates?.daily_rate) || (toNum(basicSalary) / 26);
       const newRows = hasSaved
-        ? savedLeaveRows
+        ? savedLeaveRows.map((row) => ({
+            ...row,
+            amount: row.leave_type_id && toNum(row.used) > 0
+              ? Math.round(toNum(row.used) * dailyRate * 100) / 100
+              : row.amount
+          }))
         : buildPeriodLeaveRows(periodHrisData, basicSalary, balances);
       setLeaveRows(newRows);
       const totalLeavesAmt = newRows.reduce((s, r) => s + toNum(r.amount), 0);

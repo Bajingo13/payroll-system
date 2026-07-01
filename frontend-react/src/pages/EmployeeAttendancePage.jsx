@@ -148,7 +148,9 @@ export default function EmployeeAttendancePage() {
   }, [records, search]);
 
   const present = filteredRecords.filter((record) => attendanceStatus(record).label === 'Present').length;
-  const incomplete = filteredRecords.filter((record) => attendanceStatus(record).label === 'Incomplete').length;
+  const lateOrIncomplete = filteredRecords.filter((record) =>
+    Number(record.late_minutes || 0) > 0 || attendanceStatus(record).label === 'Incomplete'
+  ).length;
 
   function exportAttendance(format) {
     if (!filteredRecords.length) {
@@ -288,7 +290,7 @@ export default function EmployeeAttendancePage() {
         <div className="card"><span>Date</span><strong>{formatDateRangeLabel(appliedRange.from, appliedRange.to)}</strong><small>Selected Range</small></div>
         <div className="card"><span>Total Employees</span><strong>{filteredRecords.length}</strong></div>
         <div className="card"><span>Present</span><strong>{present}</strong></div>
-        <div className="card"><span>Late / Incomplete</span><strong>{incomplete}</strong></div>
+        <div className="card"><span>Late / Incomplete</span><strong>{lateOrIncomplete}</strong></div>
       </section>
 
       <section className="table-section">

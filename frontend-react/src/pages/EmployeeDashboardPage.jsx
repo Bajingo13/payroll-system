@@ -19,6 +19,15 @@ function money(value) {
   return Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function dataUrlToFile(dataUrl, filename) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mime });
+}
+
 function parseDateTime(value) {
   if (!value) return null;
   const date = new Date(String(value).replace(' ', 'T'));
@@ -161,12 +170,24 @@ export default function EmployeeDashboardPage() {
     ];
   }, [todayState]);
 
-  async function submitTimeEntry(type) {
+  async function submitTimeEntry(type, location, photoDataUrl) {
     if (!user?.user_id) return;
     setBusy(true);
     setMessage('Recording time entry...');
     try {
-      const { data: payload } = await api.post('/employee/time-entry', { user_id: user.user_id, type });
+      const formData = new FormData();
+      formData.append('user_id', String(user.user_id));
+      formData.append('type', type);
+      if (location?.latitude != null) formData.append('latitude', String(location.latitude));
+      if (location?.longitude != null) formData.append('longitude', String(location.longitude));
+      if (location?.distance_m != null) formData.append('distance_m', String(location.distance_m));
+      if (photoDataUrl) {
+        formData.append('camera_mode', 'front');
+        formData.append('photo', dataUrlToFile(photoDataUrl, `attendance_${user.user_id}_${Date.now()}.jpg`));
+      }
+      const { data: payload } = await api.post('/employee/time-entry', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       if (!payload.success) throw new Error(payload.message || 'Unable to record time entry.');
       setMessage(payload.message || 'Time entry recorded.');
       await loadDashboard();

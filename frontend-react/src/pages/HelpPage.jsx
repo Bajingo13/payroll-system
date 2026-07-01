@@ -14,7 +14,7 @@ const MODULES = [
   { icon: 'calendar', name: 'Leave Management', desc: 'Approve/reject leaves and track balances per employee.' },
   { icon: 'time', name: 'Overtime', desc: 'Review and approve OT requests - auto-applied to payroll.' },
   { icon: 'wallet', name: 'Loan Deductions', desc: 'Employee loans with automatic per-period deduction schedules.' },
-  { icon: 'document', name: 'Payroll', desc: 'Computation, payslips, payroll journal, and reconciliation.' },
+  { icon: 'document', name: 'Payroll', desc: 'Computation, payslips, payroll journal, and bank reports.' },
   { icon: 'building', name: 'Gov. Reports', desc: 'SSS, PhilHealth, Pag-IBIG, and BIR alphalist submissions.' },
   { icon: 'chart', name: 'Year-End', desc: '13th month pay computation and annualization.' },
   { icon: 'shield', name: 'Auditing', desc: 'Full action log - who did what and when for compliance.' },
