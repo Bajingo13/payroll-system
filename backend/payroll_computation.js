@@ -1832,7 +1832,8 @@ module.exports = function (app, pool) {
             const computePhilhealth = shouldCompute(philhealthRecord);
             const computeWtax = shouldCompute(wtaxRecord);
 
-            const isGovernmentEmployee = Boolean(employee.gsis_no);
+            const isGovernmentEmployee = Boolean(employee.gsis_no) && employee.gsis_no !== "N/A";
+            console.log(employee.gsis_no, "isGovernmentEmployee:", isGovernmentEmployee);
 
             // === GSIS ===
             if (isGovernmentEmployee) {
