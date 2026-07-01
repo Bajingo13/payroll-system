@@ -754,6 +754,7 @@ module.exports = function (app, pool) {
             ORDER BY em.employment_id DESC LIMIT 1
           )
         WHERE LOWER(TRIM(e.status)) = 'active'
+          AND LOWER(TRIM(u.role)) = 'employee'
       `);
 
       if (!empRows.length) return;

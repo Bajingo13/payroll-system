@@ -120,6 +120,13 @@ export default function DashboardPage() {
       setAnalytics(aRes.data?.success ? aRes.data : null);
     }
     load().catch(console.error);
+    const refreshTimer = window.setInterval(() => load().catch(console.error), 60_000);
+    const refreshOnFocus = () => load().catch(console.error);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
   }, [user?.user_id]);
 
   const as = analytics?.summary || {};
@@ -244,7 +251,7 @@ export default function DashboardPage() {
           <div className="dboard-ch">
             <div className="dboard-ch-icon" style={{ background: '#ede9fe' }}><AppIcon name="chart" /></div>
             <div><h3>Performance</h3><p>Attendance &amp; OT signals</p></div>
-            <span className="dboard-badge-period">7 Days</span>
+            <span className="dboard-badge-period">All Recorded Time</span>
           </div>
           <div className="dboard-metrics">
             {[
