@@ -940,12 +940,18 @@ export default function PayrollComputationPage() {
 
   async function loadEmpData(empId, rid) {
     const effectiveRunId = rid || runId;
-    // Fetch settings first so we can pass basic_salary to the HRIS endpoint
-    const settingsResp = await api.get(`/employee_payroll_settings/${empId}`, {
-      params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
-    });
+    // Fetch settings, loans, and leaves in parallel
+    const [settingsResp, loansResp, leavesResp] = await Promise.all([
+      api.get(`/employee_payroll_settings/${empId}`, {
+        params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
+      }),
+      api.get('/loan_deductions', { params: { employee_id: empId, status: 'Active' } }).catch(() => ({ data: { loans: [] } })),
+      api.get('/payroll/employee-leaves', { params: { employee_id: empId } }).catch(() => ({ data: { leaveBalances: [], leaveRequests: [] } })),
+    ]);
     console.log('Payroll settings response for employee', empId, settingsResp);
     const { data } = settingsResp;
+    const loans = loansResp.data.loans || [];
+    const balances = leavesResp.data.leaveBalances || [];
     const hasExistingPayroll = data.hasExistingPayroll;
     console.log('Payroll settings response for employee', empId, data);
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
@@ -1026,7 +1032,7 @@ export default function PayrollComputationPage() {
       nextP.undertime_deduction = (hris.attendance?.undertime_deduction || 0).toFixed(2);
       nextP.overtime            = (hris.ot?.computed_amount || 0).toFixed(2);
       nextP.holiday_pay         = (hris.holiday?.computed_amount || 0).toFixed(2);
-      nextP.total_leaves_used   = buildPeriodLeaveRows(hris, nextP.basic_salary, rec.leaveBalances || [])
+      nextP.total_leaves_used   = buildPeriodLeaveRows(hris, nextP.basic_salary, balances)
         .reduce((sum, row) => sum + toNum(row.amount), 0)
         .toFixed(2);
       nextAtt.absences_time  = hrisAbsenceMinutes;
@@ -1042,6 +1048,19 @@ export default function PayrollComputationPage() {
     }
 
     Object.assign(nextP, applyContributionRows(nextP, rec.contributions || []));
+    // Build loan rows and set loans total before statutory computation
+    const lrows = loans.map(l => ({
+      loan_id: l.loan_id,
+      description: [l.loan_category, l.loan_reference].filter(Boolean).join(' — '),
+      loan_amount: toNum(l.balance_amount),
+      amortization: toNum(l.amortization_amount),
+      date_start: l.start_date || '',
+      date_end: l.end_date || '',
+      balance: toNum(l.balance_amount),
+      skip: false,
+      payment: toNum(l.amortization_amount),
+    }));
+    nextP.loans = lrows.reduce((s,r)=>s+toNum(r.payment),0).toFixed(2);
     try {
       if (!hasExistingPayroll) {
         const computed = await computePayrollDeductions(nextP, rec, allowList, deductionList);
@@ -1113,70 +1132,47 @@ export default function PayrollComputationPage() {
     if (rec.leave_rows_json) {
       try { savedLeaveRows = JSON.parse(rec.leave_rows_json); } catch { /* ignore */ }
     }
-    return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris, savedLeaveRows };
+    // Build leave rows (restore saved or derive from HRIS) and finalize total
+    const hasSaved = Array.isArray(savedLeaveRows) && savedLeaveRows.some(r => r.leave_type_id);
+    const newLeaveRows = hasSaved
+      ? savedLeaveRows
+      : buildPeriodLeaveRows(hris, nextP.basic_salary, balances);
+    nextP.total_leaves_used = newLeaveRows.reduce((s, r) => s + toNum(r.amount), 0).toFixed(2);
+    return {
+      payroll: nextP, otNd: nextOt, otNdAdj: nextAdj, attAdj: nextAtt,
+      allowances: rec.allowances||[], deductions: rec.deductions||[], hrisData: hris, savedLeaveRows,
+      empLoans: loans,
+      leaveBalances: balances,
+      leaveRequests: leavesResp.data.leaveRequests || [],
+      loanRows: lrows,
+      leaveRows: newLeaveRows,
+    };
   }
 
-  async function loadLoansAndLeaves(empId, basicSalary = 0, periodHrisData = null, savedLeaveRows = null) {
-    setLoansLoading(true); setLeavesLoading(true);
-    try {
-      const [loansResp, leavesResp] = await Promise.all([
-        api.get('/loan_deductions', { params: { employee_id: empId, status: 'Active' } }).catch(() => ({ data: { loans: [] } })),
-        api.get('/payroll/employee-leaves', { params: { employee_id: empId } }).catch(() => ({ data: { leaveBalances: [], leaveRequests: [] } })),
-      ]);
-      const loans = loansResp.data.loans || [];
-      const balances = leavesResp.data.leaveBalances || [];
-      setEmpLoans(loans);
-      setEmpLeaveData({ leaveBalances: balances, leaveRequests: leavesResp.data.leaveRequests || [] });
-      // Build loan rows from active loans
-      const lrows = loans.map(l => ({
-        loan_id: l.loan_id,
-        description: [l.loan_category, l.loan_reference].filter(Boolean).join(' — '),
-        loan_amount: toNum(l.balance_amount),
-        amortization: toNum(l.amortization_amount),
-        date_start: l.start_date || '',
-        date_end: l.end_date || '',
-        balance: toNum(l.balance_amount),
-        skip: false,
-        payment: toNum(l.amortization_amount),
-      }));
-      setLoanRows(lrows);
-      setSelectedLoanRow(null);
-      const loanTotal = lrows.reduce((s,r)=>s+toNum(r.payment),0);
-      setPayroll(p=>({...p, loans: loanTotal.toFixed(2)}));
-      setOtherDedRows([]);
-      setSelectedDedRow(null);
-      // Restore previously saved leave rows if they exist; otherwise build from HRIS.
-      const hasSaved = Array.isArray(savedLeaveRows) && savedLeaveRows.some(r => r.leave_type_id);
-      const newRows = hasSaved
-        ? savedLeaveRows
-        : buildPeriodLeaveRows(periodHrisData, basicSalary, balances);
-      setLeaveRows(newRows);
-      const totalLeavesAmt = newRows.reduce((s, r) => s + toNum(r.amount), 0);
-      setPayroll(p => ({...p, total_leaves_used: totalLeavesAmt.toFixed(2)}));
-    } finally {
-      setLoansLoading(false); setLeavesLoading(false);
-    }
+  function applyEmpDataToState(d, emp) {
+    setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
+    setAllowances(d.allowances); setDeductions(d.deductions);
+    setHrisData(d.hrisData || null);
+    setEmpLoans(d.empLoans || []);
+    setEmpLeaveData({ leaveBalances: d.leaveBalances || [], leaveRequests: d.leaveRequests || [] });
+    setLoanRows(d.loanRows || []);
+    setSelectedLoanRow(null);
+    setOtherDedRows([]);
+    setSelectedDedRow(null);
+    setLeaveRows(d.leaveRows || makeEmptyLeaveRows());
+    setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
   }
 
   async function selectEmployee(emp) {
     if (empDataMap[emp.employee_id]) {
-      const d = empDataMap[emp.employee_id];
-      setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
-      setAllowances(d.allowances); setDeductions(d.deductions);
-      setHrisData(d.hrisData || null);
-      setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
-      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData, d.savedLeaveRows);
+      applyEmpDataToState(empDataMap[emp.employee_id], emp);
       return;
     }
     setLoading(true);
     try {
       const d = await loadEmpData(emp.employee_id);
       setEmpDataMap(prev=>({...prev,[emp.employee_id]:d}));
-      setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
-      setAllowances(d.allowances); setDeductions(d.deductions);
-      setHrisData(d.hrisData || null);
-      setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
-      loadLoansAndLeaves(emp.employee_id, toNum(d.payroll.basic_salary), d.hrisData, d.savedLeaveRows);
+      applyEmpDataToState(d, emp);
     } catch(err) {
       flash(getApiMessage(err,'Failed to load employee payroll.'),'warning');
     } finally {
