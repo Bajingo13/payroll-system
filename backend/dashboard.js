@@ -133,6 +133,9 @@ module.exports = function (app, pool) {
       conn = await pool.getConnection();
       await ensureAuditLogsLocationColumns(conn);
       await ensureUsersProfilePhoto(conn);
+      await ensureHrisAttendanceTable(conn);
+      await backfillHrisAttendance(conn);
+      await fillAbsentAttendance(conn);
     } catch (err) {
       console.error('Failed to ensure schema columns:', err.message);
     } finally {
@@ -593,15 +596,15 @@ module.exports = function (app, pool) {
 
     return nameLikeRows[0] || null;
   }
-  async function getTodayTimeEntries(conn, userId) {
+  async function getTimeEntriesForDate(conn, userId, attendanceDate = null) {
     const [rows] = await conn.execute(
       `SELECT action, status, log_time
        FROM audit_logs
        WHERE user_id = ?
          AND action IN ('Employee Time In', 'Employee Break Out', 'Employee Break In', 'Employee Time Out')
-         AND DATE(log_time) = CURDATE()
+         AND DATE(log_time) = COALESCE(?, CURDATE())
        ORDER BY log_time ASC`,
-      [userId]
+      [userId, attendanceDate]
     );
 
     const timeIn = rows.find((row) => row.action === 'Employee Time In') || null;
@@ -619,6 +622,197 @@ module.exports = function (app, pool) {
       hasBreakIn: !!breakIn,
       hasTimeOut: !!timeOut
     };
+  }
+
+  async function getTodayTimeEntries(conn, userId) {
+    return getTimeEntriesForDate(conn, userId, null);
+  }
+
+  async function ensureHrisAttendanceTable(conn) {
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS hris_attendance (
+        id INT NOT NULL AUTO_INCREMENT,
+        employee_id INT NOT NULL,
+        attendance_date DATE NOT NULL,
+        time_in VARCHAR(10) DEFAULT NULL,
+        time_out VARCHAR(10) DEFAULT NULL,
+        late_minutes INT NOT NULL DEFAULT 0,
+        undertime_minutes INT NOT NULL DEFAULT 0,
+        overtime_hours DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+        status VARCHAR(50) DEFAULT 'Absent',
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_employee_date (employee_id, attendance_date),
+        KEY idx_hris_att_employee (employee_id),
+        KEY idx_hris_att_date (attendance_date),
+        CONSTRAINT fk_hris_att_employee FOREIGN KEY (employee_id)
+          REFERENCES employees (employee_id) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  function attendanceClock(value) {
+    if (!value) return null;
+    const match = String(value).match(/(?:T|\s)(\d{2}):(\d{2})/);
+    return match ? `${match[1]}:${match[2]}` : null;
+  }
+
+  function clockMinutes(value) {
+    if (!value) return null;
+    const [hours, minutes] = String(value).split(':').map(Number);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+  }
+
+  async function syncHrisAttendance(conn, userId, state, attendanceDate = null) {
+    await ensureHrisAttendanceTable(conn);
+    const [[employee]] = await conn.execute(
+      `SELECT e.employee_id
+       FROM users u
+       JOIN employees e ON LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))
+       WHERE u.user_id = ? LIMIT 1`,
+      [userId]
+    );
+    if (!employee) return false;
+
+    const [[schedule]] = await conn.execute(
+      `SELECT COALESCE(time_in, '08:00') AS time_in,
+              COALESCE(hours_in_day, 8) AS hours_in_day
+       FROM employee_payroll_settings
+       WHERE employee_id = ? LIMIT 1`,
+      [employee.employee_id]
+    );
+    const [[today]] = attendanceDate
+      ? [[{ attendance_date: attendanceDate }]]
+      : await conn.query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS attendance_date");
+    const timeIn = attendanceClock(state.timeIn);
+    const breakOut = attendanceClock(state.breakOut);
+    const breakIn = attendanceClock(state.breakIn);
+    const timeOut = attendanceClock(state.timeOut);
+    const scheduledStart = clockMinutes(schedule?.time_in || '08:00');
+    const scheduledWork = Math.round(Number(schedule?.hours_in_day || 8) * 60);
+    const inMinutes = clockMinutes(timeIn);
+    const outMinutes = clockMinutes(timeOut);
+    let lateMinutes = inMinutes == null ? 0 : Math.max(0, inMinutes - scheduledStart);
+    let undertimeMinutes = 0;
+    let overtimeHours = 0;
+
+    if (inMinutes != null && outMinutes != null) {
+      let workedMinutes = Math.max(0, outMinutes - inMinutes);
+      const breakOutMinutes = clockMinutes(breakOut);
+      const breakInMinutes = clockMinutes(breakIn);
+      if (breakOutMinutes != null && breakInMinutes != null && breakInMinutes > breakOutMinutes) {
+        workedMinutes -= breakInMinutes - breakOutMinutes;
+      }
+      undertimeMinutes = Math.max(0, scheduledWork - workedMinutes);
+      overtimeHours = Math.round(Math.max(0, workedMinutes - scheduledWork) / 60 * 100) / 100;
+    }
+
+    const status = timeIn ? (timeOut ? 'Present' : 'Incomplete') : 'Absent';
+    await conn.execute(
+      `INSERT INTO hris_attendance
+         (employee_id, attendance_date, time_in, time_out, late_minutes, undertime_minutes, overtime_hours, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         time_in = VALUES(time_in), time_out = VALUES(time_out),
+         late_minutes = VALUES(late_minutes), undertime_minutes = VALUES(undertime_minutes),
+         overtime_hours = VALUES(overtime_hours), status = VALUES(status)`,
+      [employee.employee_id, today.attendance_date, timeIn, timeOut, lateMinutes, undertimeMinutes, overtimeHours, status]
+    );
+    return true;
+  }
+
+  async function backfillHrisAttendance(conn) {
+    const [days] = await conn.query(
+      `SELECT DISTINCT user_id, DATE_FORMAT(DATE(log_time), '%Y-%m-%d') AS attendance_date
+       FROM audit_logs
+       WHERE action IN ('Employee Time In', 'Employee Break Out', 'Employee Break In', 'Employee Time Out')
+         AND status = 'Success'
+       ORDER BY attendance_date ASC`
+    );
+    for (const day of days) {
+      const state = await getTimeEntriesForDate(conn, day.user_id, day.attendance_date);
+      await syncHrisAttendance(conn, day.user_id, state, day.attendance_date);
+    }
+  }
+
+  // Inserts Absent rows for every active employee for every working day (Mon–Fri)
+  // within the last 365 days where no hris_attendance record exists yet.
+  async function fillAbsentAttendance(conn) {
+    try {
+      // Get all active employees that have a linked user account
+      const [empRows] = await conn.query(`
+        SELECT
+          e.employee_id,
+          COALESCE(ee.date_hired, DATE_SUB(CURDATE(), INTERVAL 364 DAY)) AS date_hired
+        FROM employees e
+        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        LEFT JOIN employee_employment ee
+          ON ee.employment_id = (
+            SELECT em.employment_id FROM employee_employment em
+            WHERE em.employee_id = e.employee_id
+            ORDER BY em.employment_id DESC LIMIT 1
+          )
+        WHERE LOWER(TRIM(e.status)) = 'active'
+      `);
+
+      if (!empRows.length) return;
+
+      // Build the full list of working days in the last 364 days
+      const workingDays = [];
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
+      const start = new Date(today);
+      start.setDate(start.getDate() - 364);
+      for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+        const dow = d.getUTCDay();
+        if (dow >= 1 && dow <= 5) {
+          workingDays.push(d.toISOString().slice(0, 10));
+        }
+      }
+
+      // Batch insert per employee to avoid one giant query
+      let totalInserted = 0;
+      for (const emp of empRows) {
+        const hireDateStr = emp.date_hired instanceof Date
+          ? emp.date_hired.toISOString().slice(0, 10)
+          : String(emp.date_hired || '').slice(0, 10);
+
+        const eligibleDays = workingDays.filter((d) => !hireDateStr || d >= hireDateStr);
+        if (!eligibleDays.length) continue;
+
+        // Find which days already have a record
+        const [existing] = await conn.query(
+          `SELECT DATE_FORMAT(attendance_date, '%Y-%m-%d') AS d
+           FROM hris_attendance
+           WHERE employee_id = ?
+             AND attendance_date BETWEEN ? AND ?`,
+          [emp.employee_id, eligibleDays[0], eligibleDays[eligibleDays.length - 1]]
+        );
+        const existingSet = new Set(existing.map((r) => r.d));
+
+        const missing = eligibleDays.filter((d) => !existingSet.has(d));
+        if (!missing.length) continue;
+
+        // Insert in chunks of 100 to avoid oversized queries
+        for (let i = 0; i < missing.length; i += 100) {
+          const chunk = missing.slice(i, i + 100);
+          const placeholders = chunk.map(() => '(?, ?, NULL, NULL, 0, 0, 0.00, \'Absent\')').join(', ');
+          const values = chunk.flatMap((d) => [emp.employee_id, d]);
+          await conn.query(
+            `INSERT IGNORE INTO hris_attendance
+               (employee_id, attendance_date, time_in, time_out, late_minutes, undertime_minutes, overtime_hours, status)
+             VALUES ${placeholders}`,
+            values
+          );
+          totalInserted += chunk.length;
+        }
+      }
+
+      console.log(`OK > filled ${totalInserted} absent attendance records for ${empRows.length} employees`);
+    } catch (err) {
+      console.error('WARN > fillAbsentAttendance failed:', err.message);
+    }
   }
 
   // ── Schedule init ──────────────────────────────────────────────────────
@@ -760,6 +954,20 @@ module.exports = function (app, pool) {
       [employeeId]
     );
   }
+
+  // ========== MANUAL ABSENT FILL TRIGGER ==========
+  app.post('/api/admin/fill-absent-attendance', async (req, res) => {
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      await fillAbsentAttendance(conn);
+      return res.json({ success: true, message: 'Absent attendance records filled.' });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (conn) conn.release();
+    }
+  });
 
   // ========== DASHBOARD SUMMARY ==========
   app.get("/api/dashboard", async (req, res) => {
@@ -1249,6 +1457,7 @@ module.exports = function (app, pool) {
       );
 
       const updatedState = await getTodayTimeEntries(conn, userId);
+      await syncHrisAttendance(conn, userId, updatedState);
 
       return res.json({
         success: true,
