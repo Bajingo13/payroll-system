@@ -428,17 +428,39 @@ export default function PayrollComputationPage() {
   const deductionRowsTotal = useMemo(() => effectiveDeductionTotal(payroll, deductions), [payroll, deductions]);
   const totals = useMemo(() => {
     const gross =
-      toNum(payroll.basic_salary) - toNum(payroll.absence_deduction) -
-      toNum(payroll.late_deduction) - toNum(payroll.undertime_deduction) +
-      toNum(payroll.overtime) + toNum(payroll.holiday_pay) + allowanceTotals.taxable +
-      allowanceTotals.nontaxable + toNum(payroll.adj_comp) +
-      toNum(payroll.adj_non_comp) + toNum(payroll.total_leaves_used);
+      toNum(payroll.basic_salary) -
+      toNum(payroll.absence_deduction) -
+      toNum(payroll.late_deduction) -
+      toNum(payroll.undertime_deduction) +
+      toNum(payroll.overtime) +
+      toNum(payroll.holiday_pay) +
+      allowanceTotals.taxable +
+      allowanceTotals.nontaxable +
+      toNum(payroll.adj_comp) +
+      toNum(payroll.adj_non_comp) +
+      toNum(payroll.total_leaves_used);
+
     const ded =
-      toNum(payroll.gsis_employee) + toNum(payroll.sss_employee) +
-      toNum(payroll.pagibig_employee) + toNum(payroll.philhealth_employee) +
-      toNum(payroll.tax_withheld) + deductionRowsTotal +
-      toNum(payroll.loans) + toNum(payroll.other_deductions) + toNum(payroll.premium_adj);
-    return { gross, ded, net: gross - ded };
+      toNum(payroll.gsis_employee) +
+      toNum(payroll.sss_employee) +
+      toNum(payroll.pagibig_employee) +
+      toNum(payroll.philhealth_employee) +
+      toNum(payroll.tax_withheld) +
+      deductionRowsTotal +
+      toNum(payroll.loans) +
+      toNum(payroll.other_deductions) +
+      toNum(payroll.premium_adj);
+
+    const ytd_gross = (
+      parseFloat(payroll.ytd_gross || 0) + gross
+    ).toFixed(2);
+
+    return {
+      gross,
+      ded,
+      net: gross - ded,
+      ytd_gross
+    };
   }, [payroll, allowanceTotals, deductionRowsTotal]);
 
   const premiumAdj = useMemo(() => {
@@ -1083,7 +1105,7 @@ export default function PayrollComputationPage() {
         toNum(nextP.total_leaves_used);
 
       nextP.ytd_gross = (
-        parseFloat(ytd.ytd_gross || 0) + gross
+        parseFloat(ytd.ytd_gross || 0) + ytd.gross
       ).toFixed(2);
     }
     
@@ -1767,7 +1789,7 @@ export default function PayrollComputationPage() {
                         <tbody>
                           <tr><td>YTD SSS</td><td><Ni dis={true} v={payroll.ytd_sss} set={v=>upPayroll('ytd_sss',v)} /></td><td>YTD Wtax</td><td><Ni dis={true} v={payroll.ytd_wtax} set={v=>upPayroll('ytd_wtax',v)} /></td></tr>
                           <tr><td>YTD Philhealth</td><td><Ni dis={true} v={payroll.ytd_philhealth} set={v=>upPayroll('ytd_philhealth',v)} /></td><td>YTD GSIS</td><td><Ni dis={true} v={payroll.ytd_gsis} set={v=>upPayroll('ytd_gsis',v)} /></td></tr>
-                          <tr><td>YTD Pag-ibig</td><td><Ni dis={true} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} /></td><td>YTD Gross</td><td><Ni dis={true} v={payroll.ytd_gross} set={v=>upPayroll('ytd_gross',v)} /></td></tr>
+                          <tr><td>YTD Pag-ibig</td><td><Ni dis={true} v={payroll.ytd_pagibig} set={v=>upPayroll('ytd_pagibig',v)} /></td><td>YTD Gross</td><td><Ni dis={true} v={totals.ytd_gross} set={v=>upPayroll('ytd_gross',v)} /></td></tr>
                         </tbody>
                       </table>
                     </div>

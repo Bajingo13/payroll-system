@@ -1689,6 +1689,14 @@ module.exports = function (app, pool) {
                 employeePayroll.length > 0 &&
                 employeePayroll[0].basic_salary != null;
 
+            console.log(
+                `[Payroll] Employee ${employeeId}: ${
+                    hasExistingPayroll
+                        ? "Loading EXISTING payroll data"
+                        : "Loading INITIAL payroll data"
+                }`
+            );
+
             // Use the selected payroll group's period (Monthly/Semi-Monthly/Weekly) rather
             // than the employee's own payroll_period setting, so the computation always
             // matches what the admin selected in the UI.
@@ -1833,7 +1841,6 @@ module.exports = function (app, pool) {
             const computeWtax = shouldCompute(wtaxRecord);
 
             const isGovernmentEmployee = Boolean(employee.gsis_no) && employee.gsis_no !== "N/A";
-            console.log(employee.gsis_no, "isGovernmentEmployee:", isGovernmentEmployee);
 
             // === GSIS ===
             if (isGovernmentEmployee) {
@@ -2196,12 +2203,18 @@ module.exports = function (app, pool) {
 
             employee.allowances = (employee.allowances || []).map(a => ({
                 ...a,
-                amount: prorateAmount(a.amount, effectivePayrollPeriod, employee)
+                amount:
+                    a.source_emp_allowance_id != null
+                        ? prorateAmount(a.amount, effectivePayrollPeriod, employee)
+                        : a.amount
             }));
 
             employee.deductions = (employee.deductions || []).map(d => ({
                 ...d,
-                amount: prorateAmount(d.amount, effectivePayrollPeriod, employee)
+                amount:
+                    d.source_emp_deduction_id != null
+                        ? prorateAmount(d.amount, effectivePayrollPeriod, employee)
+                        : d.amount
             }));
 
             conn.release();
