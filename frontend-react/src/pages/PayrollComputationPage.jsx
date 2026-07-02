@@ -226,47 +226,62 @@ function getHrisPeriodRange(hrisData) {
   return { start: dateKey(start), end: dateKey(end) };
 }
 
-function buildPeriodLeaveRows(hrisData, basicSalary = 0, leaveBalances = []) {
-  const requests = hrisData?.absences?.requests || [];
-  const { start: periodStart, end: periodEnd } = getHrisPeriodRange(hrisData);
+function buildPeriodLeaveRows(
+  requests = [],
+  basicSalary = 0,
+  leaveBalances = []
+) {
+
   const dailyRate = toNum(basicSalary) / 26;
+
   const grouped = new Map();
 
-  leaveBalances.forEach((balance) => {
+  leaveBalances.forEach(balance => {
+
     if (!balance.leave_type_id) return;
+
     grouped.set(String(balance.leave_type_id), {
       leave_type_id: String(balance.leave_type_id),
       used: '',
       amount: ''
     });
+
   });
 
-  if (!periodStart || !periodEnd) {
-    const rows = Array.from(grouped.values());
-    while (rows.length < 8) rows.push({ leave_type_id: '', used: '', amount: '' });
-    return rows;
-  }
+  requests.forEach(request => {
 
-  requests.forEach((request) => {
     const leaveTypeId = request.leave_type_id;
-    const requestStart = dateKey(request.start_date);
-    const requestEnd = dateKey(request.end_date);
-    if (!leaveTypeId || !requestStart || !requestEnd) return;
 
-    const clippedStart = requestStart > periodStart ? requestStart : periodStart;
-    const clippedEnd = requestEnd < periodEnd ? requestEnd : periodEnd;
-    const used = inclusiveDays(clippedStart, clippedEnd);
-    if (used <= 0) return;
+    if (!leaveTypeId) return;
 
     const key = String(leaveTypeId);
-    const current = grouped.get(key) || { leave_type_id: key, used: 0, amount: 0 };
-    current.used = toNum(current.used) + used;
-    current.amount = Math.round(current.used * dailyRate * 100) / 100;
-    grouped.set(key, current);
+
+    const current = grouped.get(key) || {
+      leave_type_id: key,
+      used: 0,
+      amount: 0
+    };
+
+    current.used =
+      toNum(current.used) + toNum(request.total_days);
+
+    current.amount =
+      Math.round(current.used * dailyRate * 100) / 100;
+
+    grouped.set(key,current);
+
   });
 
   const rows = Array.from(grouped.values());
-  while (rows.length < 8) rows.push({ leave_type_id: '', used: '', amount: '' });
+
+  while(rows.length < 8){
+    rows.push({
+      leave_type_id:'',
+      used:'',
+      amount:''
+    });
+  }
+
   return rows;
 }
 
@@ -940,18 +955,64 @@ export default function PayrollComputationPage() {
 
   async function loadEmpData(empId, rid) {
     const effectiveRunId = rid || runId;
+    let periodLeaveRows = [];
     // Fetch settings, loans, and leaves in parallel
-    const [settingsResp, loansResp, leavesResp] = await Promise.all([
+    const [
+      settingsResp,
+      loansResp,
+      leaveBalanceResp,
+      periodLeavesResp
+    ] = await Promise.all([
+
       api.get(`/employee_payroll_settings/${empId}`, {
-        params:{ run_id:effectiveRunId, group_id:filters.payroll_group||'', periodOption:selectedPeriod?.period_name||'' }
+        params:{
+          run_id:effectiveRunId,
+          group_id:filters.payroll_group||'',
+          periodOption:selectedPeriod?.period_name||''
+        }
       }),
-      api.get('/loan_deductions', { params: { employee_id: empId, status: 'Active' } }).catch(() => ({ data: { loans: [] } })),
-      api.get('/payroll/employee-leaves', { params: { employee_id: empId } }).catch(() => ({ data: { leaveBalances: [], leaveRequests: [] } })),
+
+      api.get('/loan_deductions', {
+        params:{
+          employee_id:empId,
+          status:'Active'
+        }
+      }).catch(() => ({
+        data:{ loans:[] }
+      })),
+
+      // Existing API
+      api.get('/payroll/employee-leaves', {
+        params:{
+          employee_id:empId
+        }
+      }).catch(() => ({
+        data:{
+          leaveBalances:[],
+          leaveRequests:[]
+        }
+      })),
+
+      // New Payroll API
+      api.get('/payroll/employee-period-leaves', {
+        params:{
+          employee_id:empId,
+          run_id:effectiveRunId
+        }
+      }).catch(() => ({
+        data:{
+          leaves:[]
+        }
+      }))
+
     ]);
     console.log('Payroll settings response for employee', empId, settingsResp);
     const { data } = settingsResp;
     const loans = loansResp.data.loans || [];
-    const balances = leavesResp.data.leaveBalances || [];
+    const balances =
+      leaveBalanceResp.data.leaveBalances || [];
+    const leaveRequests =
+      periodLeavesResp.data.leaves || [];
     const hasExistingPayroll = data.hasExistingPayroll;
     console.log('Payroll settings response for employee', empId, data);
     if (!data.success) throw new Error(data.message||'Failed to load payroll data.');
@@ -1032,9 +1093,15 @@ export default function PayrollComputationPage() {
       nextP.undertime_deduction = (hris.attendance?.undertime_deduction || 0).toFixed(2);
       nextP.overtime            = (hris.ot?.computed_amount || 0).toFixed(2);
       nextP.holiday_pay         = (hris.holiday?.computed_amount || 0).toFixed(2);
-      nextP.total_leaves_used   = buildPeriodLeaveRows(hris, nextP.basic_salary, balances)
-        .reduce((sum, row) => sum + toNum(row.amount), 0)
-        .toFixed(2);
+      periodLeaveRows = buildPeriodLeaveRows(
+          leaveRequests,
+          nextP.basic_salary,
+          balances
+      );
+      console.log("periodLeaveRows", periodLeaveRows);
+      nextP.total_leaves_used = periodLeaveRows
+          .reduce((sum,row)=>sum+toNum(row.amount),0)
+          .toFixed(2);
       nextAtt.absences_time  = hrisAbsenceMinutes;
       nextAtt.absences_amt   = (hris.absences?.computed_deduction || 0).toFixed(2);
       nextAtt.late_time      = hrisLateMinutes;
@@ -1132,7 +1199,32 @@ export default function PayrollComputationPage() {
     if (rec.leave_rows_json) {
       try { savedLeaveRows = JSON.parse(rec.leave_rows_json); } catch { /* ignore */ }
     }
-    return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris, savedLeaveRows };
+
+    console.log({
+        savedLeaveRows,
+        periodLeaveRows
+    });
+    
+    return {
+      payroll: nextP,
+      otNd: nextOt,
+      otNdAdj: nextAdj,
+      attAdj: nextAtt,
+
+      allowances: rec.allowances || [],
+      deductions: rec.deductions || [],
+
+      hrisData: hris,
+
+      leaveBalances: balances,
+      leaveRequests: leaveRequests,
+
+      leaveRows: savedLeaveRows || periodLeaveRows,
+
+      savedLeaveRows,
+
+      loanRows: lrows
+    };
   }
 
   function applyEmpDataToState(d, emp) {

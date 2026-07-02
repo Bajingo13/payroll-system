@@ -1739,6 +1739,105 @@ module.exports = function (app, pool) {
             res.status(500).json({ success: false, message: "Server error", error: err.message });
         }
     });
+
+    // GET employee leaves for a specific payroll run period
+    app.get("/api/payroll/employee-period-leaves", async (req, res) => {
+
+        const employeeId = Number(req.query.employee_id);
+        const runId = Number(req.query.run_id);
+
+        let conn;
+
+        try {
+
+            conn = await pool.getConnection();
+
+            const [[run]] = await conn.query(`
+                SELECT
+                    month_id,
+                    year_id,
+                    period_id
+                FROM payroll_runs
+                WHERE run_id = ?
+            `, [runId]);
+
+            if (!run) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Payroll run not found"
+                });
+            }
+
+            const month = Number(run.month_id);
+            const year = Number(run.year_id);
+
+            let periodStart;
+            let periodEnd;
+
+            if (run.period_id.toLowerCase() === "first half") {
+
+                periodStart = new Date(year, month - 1, 1);
+                periodEnd   = new Date(year, month - 1, 15);
+
+            } else {
+
+                periodStart = new Date(year, month - 1, 16);
+                periodEnd   = new Date(year, month, 0); // last day of month
+
+            }
+
+            const formatDate = d => d.toISOString().slice(0, 10);
+
+            const start = formatDate(periodStart);
+            const end   = formatDate(periodEnd);
+
+            if (!run)
+                return res.status(404).json({
+                    success:false,
+                    message:"Payroll run not found"
+                });
+
+            const [rows] = await conn.query(`
+                SELECT
+                    request_id,
+                    leave_type_id,
+                    start_date,
+                    end_date,
+                    total_days
+                FROM employee_leave_requests
+                WHERE employee_id = ?
+                AND status = 'Approved'
+                AND start_date <= ?
+                AND end_date >= ?
+            `,
+            [
+                employeeId,
+                end,      // <-- computed period end
+                start     // <-- computed period start
+            ]);
+
+            res.json({
+                success:true,
+                leaves:rows
+            });
+            console.log(`[Payroll] Employee ${employeeId} leaves for run ${runId}:`, rows);
+
+        } catch(err){
+
+            console.error(err);
+
+            res.status(500).json({
+                success:false,
+                message:err.message
+            });
+
+        } finally{
+
+            if(conn) conn.release();
+
+        }
+
+    });
     
     // GET payroll settings for one employee
     app.get("/api/employee_payroll_settings/:employeeId", async (req, res) => {
