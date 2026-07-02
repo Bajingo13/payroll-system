@@ -401,6 +401,7 @@ export default function AppLayout() {
 
                 <li className="nav-section-label">Payroll & Reports</li>
                 <li>{sidebarLink('/payroll-computation', 'Payroll Computation')}</li>
+                <li>{sidebarLink('/payroll-history', 'Payroll History')}</li>
                 <li>{sidebarLink('/year-end-payroll', 'Year-End Payroll')}</li>
                 <li>{sidebarLink('/loan-deduction-management', 'Loan Deductions')}</li>
                 {visibleAdminReportNav.length ? (

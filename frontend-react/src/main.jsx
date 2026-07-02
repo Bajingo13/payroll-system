@@ -21,6 +21,7 @@ const AttendanceCorrectionManagementPage = lazy(() => import('./pages/Attendance
 const EmployeePayrollInformationPage = lazy(() => import('./pages/EmployeePayrollInformationPage.jsx'));
 const EmployeeSchedulePage = lazy(() => import('./pages/EmployeeSchedulePage.jsx'));
 const PayrollComputationPage = lazy(() => import('./pages/PayrollComputationPage.jsx'));
+const PayrollHistoryPage = lazy(() => import('./pages/PayrollHistoryPage.jsx'));
 const ProfileManagementPage = lazy(() => import('./pages/ProfileManagementPage.jsx'));
 const EmployeeManagementPage = lazy(() => import('./pages/EmployeeManagementPage.jsx'));
 const ScheduleManagementPage = lazy(() => import('./pages/ScheduleManagementPage.jsx'));
@@ -281,6 +282,15 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['admin']} feature="payroll-computation">
               <PayrollComputationPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="payroll-history"
+          element={
+            <RoleRoute roles={['admin']} feature="payroll-history">
+              <PayrollHistoryPage />
             </RoleRoute>
           }
         />

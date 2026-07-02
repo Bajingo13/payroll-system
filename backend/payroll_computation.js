@@ -1248,6 +1248,107 @@ module.exports = function (app, pool) {
         }
     });
 
+    // GET /api/payroll_runs_history — every payroll run ever created, with totals, for the admin Payroll History page
+    app.get("/api/payroll_runs_history", async (req, res) => {
+        const { year_id, month_id, group_id, status, search } = req.query;
+
+        const conditions = [];
+        const params = [];
+
+        if (year_id) { conditions.push("pr.year_id = ?"); params.push(year_id); }
+        if (month_id) { conditions.push("pr.month_id = ?"); params.push(month_id); }
+        if (group_id) { conditions.push("pr.group_id = ?"); params.push(group_id); }
+        if (status) { conditions.push("pr.status = ?"); params.push(status); }
+        if (search) { conditions.push("pr.payroll_range LIKE ?"); params.push(`%${search}%`); }
+
+        const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            const [rows] = await conn.query(
+                `SELECT
+                    pr.run_id,
+                    pr.payroll_range,
+                    pr.status,
+                    pr.date_created,
+                    pr.date_completed,
+                    pg.group_name,
+                    pp.period_name,
+                    pm.month_name,
+                    py.year_value,
+                    COUNT(ep.payroll_id) AS employee_count,
+                    COALESCE(SUM(ep.gross_pay), 0) AS total_gross,
+                    COALESCE(SUM(ep.total_deductions), 0) AS total_deductions,
+                    COALESCE(SUM(ep.net_pay), 0) AS total_net
+                FROM payroll_runs pr
+                LEFT JOIN payroll_groups pg ON pg.group_id = pr.group_id
+                LEFT JOIN payroll_periods pp ON pp.period_id = pr.period_id
+                LEFT JOIN payroll_months pm ON pm.month_id = pr.month_id
+                LEFT JOIN payroll_years py ON py.year_id = pr.year_id
+                LEFT JOIN employee_payroll ep ON ep.run_id = pr.run_id
+                ${whereClause}
+                GROUP BY pr.run_id
+                ORDER BY pr.date_created DESC, pr.run_id DESC`,
+                params
+            );
+
+            return res.json({ success: true, runs: rows });
+        } catch (err) {
+            console.error("Error fetching payroll runs history:", err);
+            res.status(500).json({ success: false, message: "Server error" });
+        } finally {
+            if (conn) conn.release();
+        }
+    });
+
+    // GET /api/payroll_runs/:run_id/payslips — full payslip data for every employee in a saved payroll run
+    app.get("/api/payroll_runs/:run_id/payslips", async (req, res) => {
+        const { run_id } = req.params;
+
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            const [rows] = await conn.query(`
+                SELECT
+                    e.employee_id, e.emp_code, e.first_name, e.last_name, e.middle_name, e.status,
+
+                    ee.company, ee.location, ee.branch, ee.division, ee.department, ee.class,
+                    ee.position, ee.employee_type, ee.date_hired,
+
+                    ea.salary_type,
+
+                    ep.payroll_id, ep.run_id, ep.payroll_status, ep.date_generated,
+                    ep.basic_salary, ep.absence_time, ep.absence_deduction,
+                    ep.late_time, ep.late_deduction, ep.undertime, ep.undertime_deduction,
+                    ep.overtime, ep.holiday_pay, ep.taxable_allowances, ep.non_taxable_allowances,
+                    ep.adj_comp, ep.adj_non_comp, ep.total_leaves_used,
+                    ep.gsis_employee, ep.gsis_employer, ep.gsis_ecc,
+                    ep.sss_employee, ep.sss_employer, ep.sss_ecc,
+                    ep.pagibig_employee, ep.pagibig_employer, ep.pagibig_ecc,
+                    ep.philhealth_employee, ep.philhealth_employer, ep.philhealth_ecc,
+                    ep.tax_withheld, ep.deductions, ep.loans, ep.other_deductions, ep.premium_adj,
+                    ep.gross_pay, ep.total_deductions, ep.net_pay,
+
+                    pr.group_id, pr.period_id, pr.month_id, pr.year_id, pr.payroll_range, pr.status AS run_status
+                FROM employee_payroll ep
+                JOIN employees e ON e.employee_id = ep.employee_id
+                LEFT JOIN employee_employment ee ON ee.employee_id = e.employee_id
+                LEFT JOIN employee_accounts ea ON ea.employee_id = e.employee_id
+                LEFT JOIN payroll_runs pr ON pr.run_id = ep.run_id
+                WHERE ep.run_id = ?
+                ORDER BY e.last_name ASC, e.first_name ASC
+            `, [run_id]);
+
+            return res.json({ success: true, payslips: rows });
+        } catch (err) {
+            console.error("Error fetching payslips for payroll run:", err);
+            res.status(500).json({ success: false, message: "Server error" });
+        } finally {
+            if (conn) conn.release();
+        }
+    });
+
     // POST /api/payroll_runs
     app.post("/api/payroll_runs", async (req, res) => {
         const { group_id, period_id, month_id, year_id, payroll_range, user_id, admin_name } = req.body;
