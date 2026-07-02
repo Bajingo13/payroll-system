@@ -2380,7 +2380,7 @@ module.exports = function (app, pool) {
             tax_withheld, total_deductions, loans, other_deductions, premium_adj,
             ytd_sss, ytd_wtax, ytd_philhealth, ytd_gsis, ytd_pagibig, ytd_gross,
             payroll_status, gross_pay, grand_total_deductions, net_pay, ot_nd, ot_nd_adj, att_adj,
-            periodOption, allowances, deductions, leave_rows, user_id, admin_name
+            periodOption, allowances, deductions, loanRows, leave_rows, user_id, admin_name
         } = req.body;
 
         const leaveRowsJson = Array.isArray(leave_rows) && leave_rows.length > 0
@@ -2696,113 +2696,241 @@ module.exports = function (app, pool) {
 
                 // ==================== ALLOWANCES ====================
                 if (Array.isArray(allowances)) {
+
                     const updateQuery = `
                         UPDATE employee_payroll_allowances
-                        SET allowance_type_id = ?, amount = ?
+                        SET
+                            allowance_type_id = ?,
+                            amount = ?,
+                            period = ?
                         WHERE emp_payroll_allowance_id = ?
                     `;
+
                     const insertQuery = `
                         INSERT INTO employee_payroll_allowances
-                        (source_emp_allowance_id, payroll_id, employee_id, allowance_type_id, amount, period)
+                        (
+                            source_emp_allowance_id,
+                            payroll_id,
+                            employee_id,
+                            allowance_type_id,
+                            amount,
+                            period
+                        )
                         VALUES (?, ?, ?, ?, ?, ?)
                     `;
+
                     const deleteQuery = `
                         DELETE FROM employee_payroll_allowances
                         WHERE emp_payroll_allowance_id = ?
                     `;
 
-                    console.log("============== FOR ALLOWANCES ==============");
                     for (const a of allowances) {
+
                         // DELETE
                         if (a.deleted) {
+
                             if (a.emp_payroll_allowance_id) {
                                 await conn.query(deleteQuery, [
                                     a.emp_payroll_allowance_id
                                 ]);
                             }
+
                             continue;
                         }
 
+                        const payrollAllowanceId = a.emp_payroll_allowance_id ?? null;
+
+                        const sourceAllowanceId =
+                            a.source_emp_allowance_id ??
+                            a.emp_allowance_id ??
+                            null;
+
                         // UPDATE
-                        if (a.emp_payroll_allowance_id) {
+                        if (payrollAllowanceId) {
+
                             await conn.query(updateQuery, [
                                 a.allowance_type_id,
                                 a.amount,
-                                a.emp_payroll_allowance_id
+                                a.period || periodToUse,
+                                payrollAllowanceId
                             ]);
-                            continue;
+
                         }
 
                         // INSERT
-                        await conn.query(insertQuery, [
-                            a.emp_allowance_id || null,
-                            payrollId,
-                            employeeId,
-                            a.allowance_type_id,
-                            a.amount,
-                            a.period || periodToUse
-                        ]);
+                        else {
+
+                            await conn.query(insertQuery, [
+                                sourceAllowanceId,
+                                payrollId,
+                                employeeId,
+                                a.allowance_type_id,
+                                a.amount,
+                                a.period || periodToUse
+                            ]);
+
+                        }
                     }
                 }
 
                 // ==================== DEDUCTIONS ====================
                 if (Array.isArray(deductions)) {
+
                     const updateQuery = `
                         UPDATE employee_payroll_deductions
-                        SET deduction_type_id = ?, amount = ?
+                        SET
+                            deduction_type_id = ?,
+                            amount = ?,
+                            period = ?
                         WHERE emp_payroll_deduction_id = ?
                     `;
+
                     const insertQuery = `
                         INSERT INTO employee_payroll_deductions
-                        (source_emp_deduction_id, payroll_id, employee_id, deduction_type_id, amount, period)
+                        (
+                            source_emp_deduction_id,
+                            payroll_id,
+                            employee_id,
+                            deduction_type_id,
+                            amount,
+                            period
+                        )
                         VALUES (?, ?, ?, ?, ?, ?)
                     `;
+
                     const deleteQuery = `
                         DELETE FROM employee_payroll_deductions
                         WHERE emp_payroll_deduction_id = ?
                     `;
 
-                    const [rows] = await conn.query(
-                        `SELECT emp_payroll_deduction_id, source_emp_deduction_id
-                        FROM employee_payroll_deductions
-                        WHERE payroll_id = ? AND employee_id = ? AND period = ?
-                        ORDER BY emp_payroll_deduction_id`,
-                        [payrollId, employeeId, periodToUse]
-                    );
-
-                    const remainingRows = [...rows];
-
-                    console.log("============== FOR DEDUCTIONS ==============");
                     for (const d of deductions) {
-                        // DELETE
+
                         if (d.deleted) {
+
                             if (d.emp_payroll_deduction_id) {
                                 await conn.query(deleteQuery, [
                                     d.emp_payroll_deduction_id
                                 ]);
                             }
+
                             continue;
                         }
 
+                        const payrollDeductionId =
+                            d.emp_payroll_deduction_id ?? null;
+
+                        const sourceDeductionId =
+                            d.source_emp_deduction_id ??
+                            d.emp_deduction_id ??
+                            null;
+
                         // UPDATE
-                        if (d.emp_payroll_deduction_id) {
+                        if (payrollDeductionId) {
+
                             await conn.query(updateQuery, [
                                 d.deduction_type_id,
                                 d.amount,
-                                d.emp_payroll_deduction_id
+                                d.period || periodToUse,
+                                payrollDeductionId
                             ]);
-                            continue;
+
                         }
 
                         // INSERT
-                        await conn.query(insertQuery, [
-                            d.emp_deduction_id || null,
-                            payrollId,
-                            employeeId,
-                            d.deduction_type_id,
-                            d.amount,
-                            d.period || periodToUse
-                        ]);
+                        else {
+
+                            await conn.query(insertQuery, [
+                                sourceDeductionId,
+                                payrollId,
+                                employeeId,
+                                d.deduction_type_id,
+                                d.amount,
+                                d.period || periodToUse
+                            ]);
+
+                        }
+                    }
+                }
+
+                // ==================== LOANS ====================
+                if (Array.isArray(loanRows)) {
+                    for (const loan of loanRows) {
+
+                        const paymentAmount = Number(loan.payment || 0);
+                        const balanceBefore = Number(loan.balance || 0);
+                        const balanceAfter = Math.max(
+                            0,
+                            balanceBefore - paymentAmount
+                        );
+
+                        // already saved for this payroll?
+                        const [existingPayment] = await conn.query(
+                            `SELECT payment_id
+                            FROM employee_loan_payments
+                            WHERE loan_id = ?
+                            AND payroll_id = ?
+                            AND run_id = ?`,
+                            [
+                                loan.loan_id,
+                                payrollId,
+                                run_id
+                            ]
+                        );
+
+                        if (existingPayment.length > 0) {
+
+                            // UPDATE snapshot only
+                            await conn.query(
+                                `UPDATE employee_loan_payments
+                                SET
+                                    payment_amount = ?,
+                                    balance_before = ?,
+                                    balance_after = ?,
+                                    paid_period = ?,
+                                    skipped = ?
+                                WHERE payment_id = ?`,
+                                [
+                                    paymentAmount,
+                                    balanceBefore,
+                                    balanceAfter,
+                                    periodOption,
+                                    loan.skip ? 1 : 0,
+                                    existingPayment[0].payment_id
+                                ]
+                            );
+
+                        } else {
+
+                            // INSERT snapshot
+                            await conn.query(
+                                `INSERT INTO employee_loan_payments
+                                (
+                                    loan_id,
+                                    employee_id,
+                                    payroll_id,
+                                    run_id,
+                                    payment_amount,
+                                    balance_before,
+                                    balance_after,
+                                    paid_period,
+                                    skipped
+                                )
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                [
+                                    loan.loan_id,
+                                    employeeId,
+                                    payrollId,
+                                    run_id,
+                                    paymentAmount,
+                                    balanceBefore,
+                                    balanceAfter,
+                                    periodOption,
+                                    loan.skip ? 1 : 0
+                                ]
+                            );
+
+                        }
+
                     }
                 }
             } else {
@@ -3186,26 +3314,20 @@ module.exports = function (app, pool) {
 
                     for (const a of allowances) {
 
-                        if (a.emp_payroll_allowance_id) {
+                        const sourceAllowanceId =
+                            a.source_emp_allowance_id ??
+                            a.emp_allowance_id ??
+                            null;
 
-                            // Existing payroll allowance -> UPDATE
-                            await conn.query(updateQuery, [
-                                a.allowance_type_id,
-                                a.amount,
-                                a.period || periodToUse,
-                                a.emp_payroll_allowance_id
-                            ]);
+                        let payrollAllowanceId = null;
 
-                            console.log(
-                                "Updated payroll allowance:",
-                                a.emp_payroll_allowance_id
-                            );
+                        // -------------------------
+                        // NEW RECORD -> INSERT
+                        // -------------------------
+                        if (!a.emp_payroll_allowance_id) {
 
-                        } else {
-
-                            // New payroll allowance -> INSERT
                             await conn.query(insertQuery, [
-                                a.source_emp_allowance_id || null,
+                                sourceAllowanceId,
                                 payrollId,
                                 employee_id,
                                 a.allowance_type_id,
@@ -3213,8 +3335,51 @@ module.exports = function (app, pool) {
                                 a.period || periodToUse
                             ]);
 
-                            console.log("Inserted new payroll allowance");
+                            console.log("Inserted payroll allowance");
+                            continue;
                         }
+
+                        // -------------------------
+                        // Existing payroll record
+                        // -------------------------
+
+                        if (sourceAllowanceId) {
+
+                            // Prefer lookup by source
+                            const [rows] = await conn.query(
+                                `
+                                SELECT emp_payroll_allowance_id
+                                FROM employee_payroll_allowances
+                                WHERE payroll_id = ?
+                                AND employee_id = ?
+                                AND source_emp_allowance_id = ?
+                                LIMIT 1
+                                `,
+                                [
+                                    payrollId,
+                                    employee_id,
+                                    sourceAllowanceId
+                                ]
+                            );
+
+                            if (rows.length) {
+                                payrollAllowanceId = rows[0].emp_payroll_allowance_id;
+                            }
+
+                        } else {
+
+                            // No source available, use payroll id directly
+                            payrollAllowanceId = a.emp_payroll_allowance_id;
+                        }
+
+                        await conn.query(updateQuery, [
+                            a.allowance_type_id,
+                            a.amount,
+                            a.period || periodToUse,
+                            payrollAllowanceId
+                        ]);
+
+                        console.log("Updated payroll allowance:", payrollAllowanceId);
                     }
                 }
 
@@ -3245,26 +3410,20 @@ module.exports = function (app, pool) {
 
                     for (const d of deductions) {
 
-                        if (d.emp_payroll_deduction_id) {
+                        const sourceDeductionId =
+                            d.source_emp_deduction_id ??
+                            d.emp_deduction_id ??
+                            null;
 
-                            // Existing payroll deduction -> UPDATE
-                            await conn.query(updateQuery, [
-                                d.deduction_type_id,
-                                d.amount,
-                                d.period || periodToUse,
-                                d.emp_payroll_deduction_id
-                            ]);
+                        let payrollDeductionId = null;
 
-                            console.log(
-                                "Updated payroll deduction:",
-                                d.emp_payroll_deduction_id
-                            );
+                        // -------------------------
+                        // NEW RECORD -> INSERT
+                        // -------------------------
+                        if (!d.emp_payroll_deduction_id) {
 
-                        } else {
-
-                            // New payroll deduction -> INSERT
                             await conn.query(insertQuery, [
-                                d.source_emp_deduction_id || null,
+                                sourceDeductionId,
                                 payrollId,
                                 employee_id,
                                 d.deduction_type_id,
@@ -3272,11 +3431,124 @@ module.exports = function (app, pool) {
                                 d.period || periodToUse
                             ]);
 
-                            console.log("Inserted new payroll deduction");
+                            console.log("Inserted payroll deduction");
+                            continue;
                         }
+
+                        // -------------------------
+                        // Existing payroll record
+                        // -------------------------
+
+                        if (sourceDeductionId) {
+
+                            const [rows] = await conn.query(
+                                `
+                                SELECT emp_payroll_deduction_id
+                                FROM employee_payroll_deductions
+                                WHERE payroll_id = ?
+                                AND employee_id = ?
+                                AND source_emp_deduction_id = ?
+                                LIMIT 1
+                                `,
+                                [
+                                    payrollId,
+                                    employee_id,
+                                    sourceDeductionId
+                                ]
+                            );
+
+                            if (rows.length) {
+                                payrollDeductionId = rows[0].emp_payroll_deduction_id;
+                            }
+
+                        } else {
+
+                            payrollDeductionId = d.emp_payroll_deduction_id;
+                        }
+
+                        await conn.query(updateQuery, [
+                            d.deduction_type_id,
+                            d.amount,
+                            d.period || periodToUse,
+                            payrollDeductionId
+                        ]);
+
+                        console.log("Updated payroll deduction:", payrollDeductionId);
                     }
                 }
 
+                // ==================== LOANS ====================
+                if (Array.isArray(loanRows)) {
+                    for (const loan of loanRows) {
+
+                        if (loan.skip) continue;
+
+                        // Don't process the same loan twice for the same payroll
+                        const [existingPayment] = await conn.query(
+                            `SELECT payment_id
+                            FROM employee_loan_payments
+                            WHERE loan_id = ?
+                            AND payroll_id = ?
+                            AND run_id = ?`,
+                            [loan.loan_id, payrollId, run_id]
+                        );
+
+                        if (existingPayment.length > 0) {
+                            continue;
+                        }
+
+                        const paymentAmount = Number(loan.payment || 0);
+                        const balanceBefore = Number(loan.balance || 0);
+                        const balanceAfter = Math.max(0, balanceBefore - paymentAmount);
+
+                        await conn.query(
+                            `INSERT INTO employee_loan_payments
+                            (
+                                loan_id,
+                                employee_id,
+                                payroll_id,
+                                run_id,
+                                payment_amount,
+                                balance_before,
+                                balance_after,
+                                paid_period
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [
+                                loan.loan_id,
+                                employee_id,
+                                payrollId,
+                                run_id,
+                                paymentAmount,
+                                balanceBefore,
+                                balanceAfter,
+                                periodOption
+                            ]
+                        );
+
+                        await conn.query(
+                            `UPDATE employee_loans
+                            SET
+                                balance_amount = ?,
+                                terms_paid = terms_paid + 1,
+                                status = CASE
+                                            WHEN ? <= 0 THEN 'Paid'
+                                            ELSE status
+                                        END,
+                                end_date = CASE
+                                            WHEN ? <= 0 THEN CURRENT_DATE
+                                            ELSE end_date
+                                        END
+                            WHERE loan_id = ?`,
+                            [
+                                balanceAfter,
+                                balanceAfter,
+                                balanceAfter,
+                                loan.loan_id
+                            ]
+                        );
+                    }
+                }
             }
             
             // --- MARK PAYROLL RUN AS GENERATED ---
