@@ -1135,6 +1135,20 @@ export default function PayrollComputationPage() {
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris, savedLeaveRows };
   }
 
+  function applyEmpDataToState(d, emp) {
+    setPayroll(d.payroll); setOtNd(d.otNd); setOtNdAdj(d.otNdAdj); setAttAdj(d.attAdj);
+    setAllowances(d.allowances); setDeductions(d.deductions);
+    setHrisData(d.hrisData || null);
+    setEmpLoans(d.empLoans || []);
+    setEmpLeaveData({ leaveBalances: d.leaveBalances || [], leaveRequests: d.leaveRequests || [] });
+    setLoanRows(d.loanRows || []);
+    setSelectedLoanRow(null);
+    setOtherDedRows([]);
+    setSelectedDedRow(null);
+    setLeaveRows(d.leaveRows || makeEmptyLeaveRows());
+    setSelectedEmp(emp); setActiveTab('payroll'); setIsEditing(false);
+  }
+  
   async function selectEmployee(emp) {
     if (empDataMap[emp.employee_id]) {
       applyEmpDataToState(empDataMap[emp.employee_id], emp);
