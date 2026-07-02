@@ -13,11 +13,25 @@ const REPORT_TITLES = {
   'gross-pay': 'Gross Pay',
   'net-pay': 'Net Pay',
   payslip: 'Payslip',
-  'reconciliation-details': 'Reconciliation Details'
+  'reconciliation-details': 'Bank Reports'
 };
 
 const DEFAULT_COMPANY_NAME = getReportCompanyName();
 const PAYSLIP_WIDTH = 70;
+
+const BANK_REPORT_OPTIONS = [
+  ['standard', 'Standard Bank Request'],
+  ['Equitable PCI', 'Equitable PCI'],
+  ['METROBANK', 'METROBANK'],
+  ['RCBC', 'RCBC'],
+  ['BPI', 'BPI'],
+  ['BDO', 'BDO'],
+  ['ALLIED BANK', 'ALLIED BANK'],
+  ['BancNET', 'BancNET'],
+  ['HSBC', 'HSBC'],
+  ['AUB', 'AUB'],
+  ['Citibank', 'Citibank']
+];
 
 const ORDER_OPTIONS = [
   ['department_surname', 'Department / Surname'],
@@ -453,21 +467,15 @@ function getReportExportRows(type, rows) {
 
   if (type === 'reconciliation-details') {
     return {
-      headers: ['Employee ID', 'Name', 'Gross', 'Deductions', 'Net', 'Delta'],
-      rows: rows.map((row) => {
-        const gross = Number(row.gross_pay || 0);
-        const deductions = Number(row.total_deductions || 0);
-        const net = Number(row.net_pay || 0);
-
-        return [
-          row.emp_code || row.employee_id || '',
-          `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-          money(gross),
-          money(deductions),
-          money(net),
-          money(gross - deductions - net)
-        ];
-      })
+      headers: ['Employee ID', 'Name', 'Bank', 'Branch', 'Account / ATM No.', 'Net Pay'],
+      rows: rows.map((row) => [
+        row.emp_code || row.employee_id || '',
+        `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+        row.bank_name || '',
+        row.bank_branch || '',
+        row.atm_no || '',
+        money(row.net_pay)
+      ])
     };
   }
 
@@ -531,6 +539,15 @@ function PayrollAggregateSection({ type, roleSettings }) {
   const [loading, setLoading] = useState(false);
   const [exportFormat, setExportFormat] = useState('excel');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [bankFilter, setBankFilter] = useState('');
+  const [bankReportType, setBankReportType] = useState('PAYROLL');
+  const [bankCompany, setBankCompany] = useState('');
+  const [bankBranch, setBankBranch] = useState('');
+  const [bankTransactionDate, setBankTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [bankWithAtm, setBankWithAtm] = useState(true);
+  const [bonusScope, setBonusScope] = useState('one');
+  const [thirteenthScope, setThirteenthScope] = useState('one');
+  const [bankDiskDrive, setBankDiskDrive] = useState('C:\\');
 
   const allowedOrderOptions = useMemo(
     () => ORDER_OPTIONS.filter(([value]) => roleSettings.allowedOrderBy.includes(value)),
@@ -584,6 +601,13 @@ function PayrollAggregateSection({ type, roleSettings }) {
       );
     }
 
+    if (type === 'reconciliation-details' && bankFilter && bankFilter !== 'standard') {
+      const selectedBank = bankFilter.trim().toLowerCase();
+      result = result.filter((row) => String(row.bank_name || '').trim().toLowerCase() === selectedBank);
+      if (bankCompany) result = result.filter((row) => row.company === bankCompany);
+      if (bankBranch) result = result.filter((row) => row.branch === bankBranch);
+    }
+
     const query = filters.employeeSearch.trim().toLowerCase();
     if (query) {
       result = result.filter((row) => {
@@ -599,7 +623,7 @@ function PayrollAggregateSection({ type, roleSettings }) {
     }
 
     return result;
-  }, [filters.employeeSearch, filters.hideNoData, rows]);
+  }, [bankBranch, bankCompany, bankFilter, filters.employeeSearch, filters.hideNoData, rows, type]);
 
   const totals = useMemo(() => {
     return visibleRows.reduce(
@@ -618,6 +642,13 @@ function PayrollAggregateSection({ type, roleSettings }) {
       { gross: 0, deductions: 0, net: 0, reconciliationDelta: 0 }
     );
   }, [visibleRows]);
+
+  const bankCompanies = useMemo(() => [...new Set(rows.map((row) => row.company).filter(Boolean))].sort(), [rows]);
+  const bankBranches = useMemo(() => [...new Set(rows
+    .filter((row) => !bankCompany || row.company === bankCompany)
+    .map((row) => row.branch)
+    .filter(Boolean))].sort(), [bankCompany, rows]);
+  const isMetrobankRequest = bankFilter === 'METROBANK';
 
   function updateFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -787,6 +818,19 @@ function PayrollAggregateSection({ type, roleSettings }) {
     downloadExcel(`${filenameBase}.xls`, title, headers, exportRows);
   }
 
+  function createBankDisk() {
+    if (!visibleRows.length) {
+      setMessage('Generate a prooflist before creating the bank file.');
+      return;
+    }
+    const { headers, rows: exportRows } = getReportExportRows('reconciliation-details', visibleRows);
+    const diskHeaders = bankWithAtm ? headers : headers.filter((header) => header !== 'Account / ATM No.');
+    const diskRows = bankWithAtm ? exportRows : exportRows.map((row) => row.filter((_cell, index) => index !== 4));
+    const bankName = bankFilter === 'standard' ? 'standard-bank-request' : bankFilter.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    downloadCsv(`${bankName}-${bankTransactionDate}.csv`, `BANK REQUEST - ${bankFilter === 'standard' ? 'STANDARD' : bankFilter}`, diskHeaders, diskRows);
+    setMessage(`${bankFilter} bank file created for ${bankTransactionDate}.`);
+  }
+
   return (
     <>
       <header className="header">
@@ -795,9 +839,94 @@ function PayrollAggregateSection({ type, roleSettings }) {
       </header>
 
       <section className="table-section">
-        <h3>Filters</h3>
+        <h3>{type === 'reconciliation-details' ? 'Bank File Center' : 'Filters'}</h3>
 
-        <div className="report-filter-grid">
+        {type === 'reconciliation-details' && !bankFilter ? (
+          <div className="bank-report-home">
+            <div className="bank-report-home-copy">
+              <span>Payroll disbursement</span>
+              <h3>Select a bank request format</h3>
+              <p>Choose the receiving bank to prepare its prooflist and downloadable payroll transfer file.</p>
+            </div>
+            <div className="bank-report-option-grid">
+              {BANK_REPORT_OPTIONS.map(([value, label], index) => (
+                <button type="button" key={value} className="bank-report-option" onClick={() => setBankFilter(value)}>
+                  <span className="bank-report-option-mark">{index === 0 ? '★' : label.slice(0, 2).toUpperCase()}</span>
+                  <span><strong>{label}</strong><small>{index === 0 ? 'All supported banks' : 'Generate bank-specific file'}</small></span>
+                  <b aria-hidden="true">›</b>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {type === 'reconciliation-details' && bankFilter ? (
+          <div className="bank-request-panel">
+            <div className="bank-request-header">
+              <span className="bank-request-icon" aria-hidden="true">₱</span>
+              <div>
+                <small>Secure payroll disbursement</small>
+                <h3>Bank Request · {bankFilter}</h3>
+                <p>Prepare, review, and export the bank transfer file for the selected payroll run.</p>
+              </div>
+              <span className="bank-request-badge">Bank file</span>
+            </div>
+            {isMetrobankRequest ? (
+              <fieldset>
+                <legend>Report Type</legend>
+                <select value={bankReportType} onChange={(event) => setBankReportType(event.target.value)}>
+                  <option>PAYROLL</option>
+                  <option>BONUS</option>
+                  <option>13TH MONTH</option>
+                  <option>BONUS &amp; 13TH MONTH</option>
+                </select>
+              </fieldset>
+            ) : (
+              <div className="bank-request-standard-note">
+                <strong>Payroll bank file</strong>
+                <span>This bank uses the standard payroll transfer dataset: employee account details and net pay.</span>
+              </div>
+            )}
+
+            <fieldset className="bank-request-grid">
+              <legend>Payroll Setup</legend>
+              <label>Payroll Group<select value={filters.payroll_group} onChange={(event) => changePayrollGroup(event.target.value)}><option value="">Select</option>{meta.payrollGroups.map((item) => <option key={item.group_id} value={item.group_id}>{item.group_name}</option>)}</select></label>
+              <label>Year<select value={filters.year} onChange={(event) => updateFilter('year', event.target.value)}><option value="">Select</option>{meta.payrollYears.map((item) => <option key={item.year_id} value={item.year_id}>{item.year_value}</option>)}</select></label>
+              <label>Month<select value={filters.month} onChange={(event) => updateFilter('month', event.target.value)}><option value="">Select</option>{meta.payrollMonths.map((item) => <option key={item.month_id} value={item.month_id}>{item.month_name}</option>)}</select></label>
+              <label>Period<select value={filters.payroll_period} onChange={(event) => updateFilter('payroll_period', event.target.value)}><option value="">Select</option>{meta.payrollPeriods.map((item) => <option key={item.period_id} value={item.period_id}>{periodLabel(item.period_name)}</option>)}</select></label>
+              <div className="bank-request-wide bank-radio-row"><span>Payroll Options</span>{roleSettings.allowedStatuses.map((status) => <label key={status}><input type="radio" name="bank-payroll-status" checked={filters.status === status} onChange={() => updateFilter('status', status)} /> {status[0].toUpperCase()}{status.slice(1)}</label>)}</div>
+            </fieldset>
+
+            {isMetrobankRequest ? (
+              <fieldset className="bank-request-grid">
+                <legend>Bonus Options</legend>
+                <div className="bank-radio-row"><label><input type="radio" name="bonus-scope" checked={bonusScope === 'all'} onChange={() => setBonusScope('all')} /> All Bonus</label><label><input type="radio" name="bonus-scope" checked={bonusScope === 'one'} onChange={() => setBonusScope('one')} /> One Bonus</label></div>
+                <div className="bank-radio-row"><label><input type="radio" name="thirteenth-scope" checked={thirteenthScope === 'all'} onChange={() => setThirteenthScope('all')} /> All 13th Month</label><label><input type="radio" name="thirteenth-scope" checked={thirteenthScope === 'one'} onChange={() => setThirteenthScope('one')} /> 13th Month</label></div>
+              </fieldset>
+            ) : null}
+
+            <fieldset className="bank-request-grid">
+              <legend>Bank File</legend>
+              <label>Company<select value={bankCompany} onChange={(event) => { setBankCompany(event.target.value); setBankBranch(''); }}><option value="">All Companies</option>{bankCompanies.map((company) => <option key={company}>{company}</option>)}</select></label>
+              <label>Branch<select value={bankBranch} onChange={(event) => setBankBranch(event.target.value)}><option value="">All Branches</option>{bankBranches.map((branch) => <option key={branch}>{branch}</option>)}</select></label>
+              <label>Transaction Date<input type="date" value={bankTransactionDate} onChange={(event) => setBankTransactionDate(event.target.value)} /></label>
+              {isMetrobankRequest ? <label>Disk Drive<input value={bankDiskDrive} onChange={(event) => setBankDiskDrive(event.target.value)} /></label> : null}
+              {isMetrobankRequest ? <div className="bank-radio-row bank-request-wide"><label><input type="radio" name="atm-mode" checked={bankWithAtm} onChange={() => setBankWithAtm(true)} /> w/ ATM</label><label><input type="radio" name="atm-mode" checked={!bankWithAtm} onChange={() => setBankWithAtm(false)} /> w/o ATM</label></div> : null}
+            </fieldset>
+
+            <div className="bank-request-actions">
+              <div className="bank-request-action-note">
+                <strong>{visibleRows.length}</strong>
+                <span>employees ready for transfer</span>
+              </div>
+              <button type="button" className="btn secondary" onClick={() => setBankFilter('')}>Close</button>
+              <button type="button" className="btn secondary" onClick={generateReport}>Preview Prooflist</button>
+              <button type="button" className="btn bank-create-btn" onClick={createBankDisk}>Create Bank File</button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="report-filter-grid" style={{ display: type === 'reconciliation-details' ? 'none' : undefined }}>
           <label>
             Payroll Group
             <select value={filters.payroll_group} onChange={(event) => changePayrollGroup(event.target.value)}>
@@ -856,11 +985,22 @@ function PayrollAggregateSection({ type, roleSettings }) {
             </select>
           </label>
 
+          {type === 'reconciliation-details' ? (
+            <label>
+              Bank Report
+              <select value={bankFilter} onChange={(event) => setBankFilter(event.target.value)}>
+                {BANK_REPORT_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
 
 
         </div>
 
-        <div className="toolbar">
+        <div className="toolbar" style={{ display: type === 'reconciliation-details' ? 'none' : undefined }}>
           <button type="button" className="btn" onClick={generateReport} disabled={!roleSettings.canGenerate}>
             Refresh
           </button>
@@ -891,7 +1031,7 @@ function PayrollAggregateSection({ type, roleSettings }) {
         <p className="message">{message}</p>
       </section>
 
-      <section className="summary react-summary">
+      <section className="summary react-summary" style={{ display: type === 'reconciliation-details' && !bankFilter ? 'none' : undefined }}>
         <div className="card"><span>Run ID</span><strong>{runId || '-'}</strong></div>
         <div className="card"><span>Last Updated</span><strong>{lastUpdated ? formatDate(lastUpdated) : '-'}</strong></div>
         <div className="card"><span>Employees</span><strong>{visibleRows.length}</strong></div>
@@ -899,15 +1039,9 @@ function PayrollAggregateSection({ type, roleSettings }) {
         <div className="card"><span>Total Deductions</span><strong>{money(totals.deductions)}</strong></div>
         <div className="card"><span>Total Net</span><strong>{money(totals.net)}</strong></div>
 
-        {type === 'reconciliation-details' ? (
-          <div className="card">
-            <span>Gross - Deductions - Net</span>
-            <strong>{money(totals.reconciliationDelta)}</strong>
-          </div>
-        ) : null}
       </section>
 
-      <section className="table-section">
+      <section className="table-section" style={{ display: type === 'reconciliation-details' && !bankFilter ? 'none' : undefined }}>
         <h3>{REPORT_TITLES[type]} Rows</h3>
 
         <div className="table-scroll">
@@ -947,10 +1081,10 @@ function PayrollAggregateSection({ type, roleSettings }) {
                 <tr>
                   <th>Employee ID</th>
                   <th>Name</th>
-                  <th>Gross</th>
-                  <th>Deductions</th>
-                  <th>Net</th>
-                  <th>Delta</th>
+                  <th>Bank</th>
+                  <th>Branch</th>
+                  <th>Account / ATM No.</th>
+                  <th>Net Pay</th>
                 </tr>
               ) : null}
             </thead>
@@ -999,23 +1133,14 @@ function PayrollAggregateSection({ type, roleSettings }) {
                   );
                 }
 
-                const gross = Number(row.gross_pay || 0);
-                const deductions = Number(row.total_deductions || 0);
-                const net = Number(row.net_pay || 0);
-                const delta = gross - deductions - net;
-
                 return (
                   <tr key={row.employee_id}>
                     <td>{row.emp_code || row.employee_id}</td>
                     <td>{name}</td>
-                    <td>{money(gross)}</td>
-                    <td>{money(deductions)}</td>
-                    <td>{money(net)}</td>
-                    <td>
-                      <span className={`status ${Math.abs(delta) < 0.005 ? 'approved' : 'rejected'}`}>
-                        {money(delta)}
-                      </span>
-                    </td>
+                    <td>{row.bank_name || '-'}</td>
+                    <td>{row.bank_branch || '-'}</td>
+                    <td>{row.atm_no || '-'}</td>
+                    <td>{money(row.net_pay)}</td>
                   </tr>
                 );
               })}

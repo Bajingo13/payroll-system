@@ -18,6 +18,7 @@ export const FEATURE_OPTIONS = [
   { key: 'leave-calendar', label: 'Company Calendar' },
   { key: 'performance-management', label: 'Performance Management' },
   { key: 'payroll-computation', label: 'Payroll Computation' },
+  { key: 'payroll-history', label: 'Payroll History' },
   { key: 'reports', label: 'Payroll Reports' },
   { key: 'government-reports', label: 'Government Reports' },
   { key: 'report-builder', label: 'Report Builder' },

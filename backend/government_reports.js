@@ -1811,4 +1811,647 @@ ${signaturesHtml(['Prepared By', 'Checked By', 'Authorized Signatory'])}`;
       conn.release();
     }
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BPI BANK REQUEST REPORT ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get('/api/government-reports/bpi/options', async (req, res) => {
+    const conn = await pool.getConnection();
+    try {
+      // Fetch filter options
+      const [companies] = await conn.query(
+        `SELECT DISTINCT TRIM(company) AS value FROM employee_employment WHERE company IS NOT NULL AND TRIM(company) <> '' ORDER BY value ASC`
+      );
+      const [branches] = await conn.query(
+        `SELECT DISTINCT TRIM(branch) AS value FROM employee_employment WHERE branch IS NOT NULL AND TRIM(branch) <> '' ORDER BY value ASC`
+      );
+      const [payrollGroups] = await conn.query(
+        `SELECT group_id AS id, group_name AS name FROM payroll_groups ORDER BY group_name ASC`
+      );
+      const [years] = await conn.query(
+        `SELECT DISTINCT year_id AS id, year_value AS name FROM payroll_years ORDER BY year_value DESC`
+      );
+      const [months] = await conn.query(
+        `SELECT DISTINCT month_id AS id, month_name AS name FROM payroll_months ORDER BY month_id ASC`
+      );
+
+      const periods = [
+        { id: 'semi-monthly', name: 'Semi-Monthly' },
+        { id: 'monthly', name: 'Monthly' },
+        { id: 'bi-weekly', name: 'Bi-Weekly' },
+        { id: 'weekly', name: 'Weekly' }
+      ];
+
+      const formats = [
+        { id: 'diskette', name: 'VIA DISKETTE' },
+        { id: 'email', name: 'VIA EMAIL' },
+        { id: 'online', name: 'ONLINE SUBMISSION' }
+      ];
+
+      res.json({
+        success: true,
+        companies: companies.map((r) => r.value).filter(Boolean),
+        branches: branches.map((r) => r.value).filter(Boolean),
+        payrollGroups: payrollGroups.map((r) => ({ id: String(r.id), name: r.name })),
+        years: years.map((r) => ({ id: String(r.id), name: String(r.name) })),
+        months: months.map((r) => ({ id: String(r.id), name: r.name })),
+        periods,
+        formats,
+        atmOptions: [
+          { id: 'all', name: 'All' },
+          { id: 'w_atm', name: 'w/ ATM' },
+          { id: 'wo_atm', name: 'w/o ATM' },
+          { id: 'active', name: 'Active' },
+          { id: 'hold', name: 'Hold' }
+        ]
+      });
+    } catch (err) {
+      console.error('BPI options error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  });
+
+  app.get('/api/government-reports/bpi', async (req, res) => {
+    const year = asNumber(req.query.year);
+    const month = asNumber(req.query.month);
+    const company = normalizeString(req.query.company);
+    const branch = normalizeString(req.query.branch);
+    const payrollGroup = normalizeString(req.query.payroll_group);
+    const period = normalizeString(req.query.period || 'semi-monthly');
+    const atmOption = normalizeString(req.query.atm_option || 'all');
+    const transactionDate = normalizeString(req.query.transaction_date);
+    const payrollSeq = parsePositiveInt(req.query.payroll_sequence || 1);
+
+    if (!year || !month) {
+      return res.status(400).json({ success: false, message: 'year and month are required' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      // Build WHERE clause
+      const where = ['r.year_id = ? AND r.month_id = ?'];
+      const params = [String(year), String(month)];
+
+      if (company) {
+        where.push('TRIM(em.company) = TRIM(?)');
+        params.push(company);
+      }
+      if (branch) {
+        where.push('TRIM(em.branch) = TRIM(?)');
+        params.push(branch);
+      }
+      if (payrollGroup) {
+        where.push('r.group_id = ?');
+        params.push(payrollGroup);
+      }
+
+      // Filter by ATM option
+      let atmWhere = '';
+      if (atmOption === 'active' || atmOption === 'hold') {
+        atmWhere = ` AND p.payroll_status = '${atmOption === 'active' ? 'Active' : 'Hold'}'`;
+      } else if (atmOption === 'w_atm') {
+        atmWhere = ` AND TRIM(ea.atm_no) <> ''`;
+      } else if (atmOption === 'wo_atm') {
+        atmWhere = ` AND (TRIM(ea.atm_no) = '' OR ea.atm_no IS NULL)`;
+      }
+
+      const [rows] = await conn.query(`
+        SELECT
+          e.employee_id,
+          e.emp_code,
+          e.last_name,
+          e.first_name,
+          e.middle_name,
+          em.company,
+          em.branch,
+          em.position,
+          ea.atm_no,
+          ea.bank_name,
+          ea.bank_branch,
+          SUM(p.gross_pay) AS gross_pay,
+          SUM(p.basic_salary) AS basic_salary,
+          SUM(p.total_deductions) AS total_deductions,
+          SUM(p.net_pay) AS net_pay
+        FROM employee_payroll p
+        INNER JOIN payroll_runs r ON r.run_id = p.run_id
+        INNER JOIN employees e ON e.employee_id = p.employee_id
+        LEFT JOIN employee_employment em ON em.employee_id = e.employee_id
+        LEFT JOIN employee_accounts ea ON ea.employee_id = e.employee_id
+        WHERE ${where.join(' AND ')}${atmWhere}
+        GROUP BY
+          e.employee_id, e.emp_code, e.last_name, e.first_name, e.middle_name,
+          em.company, em.branch, em.position, ea.atm_no, ea.bank_name, ea.bank_branch
+        ORDER BY
+          em.company ASC, em.branch ASC, e.emp_code ASC
+      `, params);
+
+      // Format data for BPI bank request
+      const data = rows.map((row) => ({
+        emp_code: row.emp_code || '',
+        employee_name: buildName(row),
+        company: normalizeString(row.company) || 'Business Setup',
+        branch: normalizeString(row.branch) || 'Main',
+        position: normalizeString(row.position) || '',
+        atm_no: String(row.atm_no || '').trim() || 'N/A',
+        bank_name: String(row.bank_name || '').trim() || 'BPI',
+        bank_branch: String(row.bank_branch || '').trim() || '',
+        gross_pay: Number(row.gross_pay || 0),
+        basic_salary: Number(row.basic_salary || 0),
+        deductions: Number(row.total_deductions || 0),
+        net_pay: Number(row.net_pay || 0)
+      }));
+
+      // Calculate totals
+      const totals = data.reduce((acc, row) => ({
+        count: acc.count + 1,
+        gross_pay: acc.gross_pay + row.gross_pay,
+        basic_salary: acc.basic_salary + row.basic_salary,
+        deductions: acc.deductions + row.deductions,
+        net_pay: acc.net_pay + row.net_pay
+      }), { count: 0, gross_pay: 0, basic_salary: 0, deductions: 0, net_pay: 0 });
+
+      res.json({
+        success: true,
+        data,
+        totals,
+        parameters: {
+          year,
+          month,
+          company,
+          branch,
+          payroll_group: payrollGroup,
+          period,
+          atm_option: atmOption,
+          transaction_date: transactionDate,
+          payroll_sequence: payrollSeq
+        }
+      });
+    } catch (err) {
+      console.error('BPI report error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  });
+
+  app.get('/api/government-reports/bpi/export', async (req, res) => {
+    const year = asNumber(req.query.year);
+    const month = asNumber(req.query.month);
+    const company = normalizeString(req.query.company);
+    const branch = normalizeString(req.query.branch);
+    const payrollGroup = normalizeString(req.query.payroll_group);
+    const format = normalizeString(req.query.format || 'csv').toLowerCase();
+    const atmOption = normalizeString(req.query.atm_option || 'all');
+    const transactionDate = normalizeString(req.query.transaction_date);
+    const payrollSeq = parsePositiveInt(req.query.payroll_sequence || 1);
+
+    if (!year || !month) {
+      return res.status(400).json({ success: false, message: 'year and month are required' });
+    }
+
+    if (!['csv', 'text', 'txt'].includes(format)) {
+      return res.status(400).json({ success: false, message: 'Invalid format. Supported: csv, text' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      // Build WHERE clause
+      const where = ['r.year_id = ? AND r.month_id = ?'];
+      const params = [String(year), String(month)];
+
+      if (company) {
+        where.push('TRIM(em.company) = TRIM(?)');
+        params.push(company);
+      }
+      if (branch) {
+        where.push('TRIM(em.branch) = TRIM(?)');
+        params.push(branch);
+      }
+      if (payrollGroup) {
+        where.push('r.group_id = ?');
+        params.push(payrollGroup);
+      }
+
+      // Filter by ATM option
+      let atmWhere = '';
+      if (atmOption === 'active' || atmOption === 'hold') {
+        atmWhere = ` AND p.payroll_status = '${atmOption === 'active' ? 'Active' : 'Hold'}'`;
+      } else if (atmOption === 'w_atm') {
+        atmWhere = ` AND TRIM(ea.atm_no) <> ''`;
+      } else if (atmOption === 'wo_atm') {
+        atmWhere = ` AND (TRIM(ea.atm_no) = '' OR ea.atm_no IS NULL)`;
+      }
+
+      const [rows] = await conn.query(`
+        SELECT
+          e.emp_code,
+          e.last_name,
+          e.first_name,
+          e.middle_name,
+          em.company,
+          em.branch,
+          em.position,
+          ea.atm_no,
+          ea.bank_name,
+          ea.bank_branch,
+          SUM(p.gross_pay) AS gross_pay,
+          SUM(p.basic_salary) AS basic_salary,
+          SUM(p.total_deductions) AS total_deductions,
+          SUM(p.net_pay) AS net_pay
+        FROM employee_payroll p
+        INNER JOIN payroll_runs r ON r.run_id = p.run_id
+        INNER JOIN employees e ON e.employee_id = p.employee_id
+        LEFT JOIN employee_employment em ON em.employee_id = e.employee_id
+        LEFT JOIN employee_accounts ea ON ea.employee_id = e.employee_id
+        WHERE ${where.join(' AND ')}${atmWhere}
+        GROUP BY
+          e.employee_id, e.emp_code, e.last_name, e.first_name, e.middle_name,
+          em.company, em.branch, em.position, ea.atm_no, ea.bank_name, ea.bank_branch
+        ORDER BY
+          em.company ASC, em.branch ASC, e.emp_code ASC
+      `, params);
+
+      const outputRows = rows.map((row) => [
+        row.emp_code || '',
+        `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ''}`.trim(),
+        normalizeString(row.company) || 'Business Setup',
+        normalizeString(row.branch) || 'Main',
+        row.position || '',
+        String(row.atm_no || '').trim() || 'N/A',
+        String(row.bank_name || '').trim() || 'BPI',
+        String(row.bank_branch || '').trim() || '',
+        Number(row.gross_pay || 0).toFixed(2),
+        Number(row.net_pay || 0).toFixed(2)
+      ]);
+
+      // Calculate totals
+      const totals = rows.reduce((acc, row) => {
+        acc.gross_pay += Number(row.gross_pay || 0);
+        acc.net_pay += Number(row.net_pay || 0);
+        return acc;
+      }, { gross_pay: 0, net_pay: 0 });
+
+      outputRows.push(['TOTAL', '', '', '', '', '', '', '', totals.gross_pay.toFixed(2), totals.net_pay.toFixed(2)]);
+      outputRows.unshift(['', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`Period: ${normalizeString(transactionDate) || `${month}/${year}`}`, '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`Payroll Sequence: ${payrollSeq}`, '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift(['BPI BANK REQUEST - PAYROLL FUND TRANSFER', '', '', '', '', '', '', '', '', '']);
+
+      sendCsv(
+        res,
+        `BPI-Bank-Request-${year}-${String(month).padStart(2, '0')}-${payrollSeq}.csv`,
+        [
+          'Employee ID',
+          'Employee Name',
+          'Company',
+          'Branch',
+          'Position',
+          'ATM No.',
+          'Bank Name',
+          'Bank Branch',
+          'Gross Pay',
+          'Net Pay'
+        ],
+        outputRows
+      );
+    } catch (err) {
+      console.error('BPI export error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BDO BANK REQUEST REPORT ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.get('/api/government-reports/bdo/options', async (req, res) => {
+    const conn = await pool.getConnection();
+    try {
+      // Fetch filter options
+      const [companies] = await conn.query(
+        `SELECT DISTINCT TRIM(company) AS value FROM employee_employment WHERE company IS NOT NULL AND TRIM(company) <> '' ORDER BY value ASC`
+      );
+      const [branches] = await conn.query(
+        `SELECT DISTINCT TRIM(branch) AS value FROM employee_employment WHERE branch IS NOT NULL AND TRIM(branch) <> '' ORDER BY value ASC`
+      );
+      const [payrollGroups] = await conn.query(
+        `SELECT group_id AS id, group_name AS name FROM payroll_groups ORDER BY group_name ASC`
+      );
+      const [years] = await conn.query(
+        `SELECT DISTINCT year_id AS id, year_value AS name FROM payroll_years ORDER BY year_value DESC`
+      );
+      const [months] = await conn.query(
+        `SELECT DISTINCT month_id AS id, month_name AS name FROM payroll_months ORDER BY month_id ASC`
+      );
+
+      const periods = [
+        { id: '1st-half', name: '1st Half' },
+        { id: '2nd-half', name: '2nd Half' },
+        { id: 'monthly', name: 'Monthly' },
+        { id: 'bi-weekly', name: 'Bi-Weekly' },
+        { id: 'weekly', name: 'Weekly' }
+      ];
+
+      const modes = [
+        { id: 'manual', name: 'Manual' },
+        { id: 'automated', name: 'Automated' }
+      ];
+
+      res.json({
+        success: true,
+        companies: companies.map((r) => r.value).filter(Boolean),
+        branches: branches.map((r) => r.value).filter(Boolean),
+        payrollGroups: payrollGroups.map((r) => ({ id: String(r.id), name: r.name })),
+        years: years.map((r) => ({ id: String(r.id), name: String(r.name) })),
+        months: months.map((r) => ({ id: String(r.id), name: r.name })),
+        periods,
+        modes,
+        atmOptions: [
+          { id: 'all', name: 'All' },
+          { id: 'w_atm', name: 'w/ ATM' },
+          { id: 'wo_atm', name: 'w/o ATM' },
+          { id: 'active', name: 'Active' },
+          { id: 'hold', name: 'Hold' }
+        ]
+      });
+    } catch (err) {
+      console.error('BDO options error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  });
+
+  app.get('/api/government-reports/bdo', async (req, res) => {
+    const year = asNumber(req.query.year);
+    const month = asNumber(req.query.month);
+    const company = normalizeString(req.query.company);
+    const branchCode = normalizeString(req.query.branch_code);
+    const payrollGroup = normalizeString(req.query.payroll_group);
+    const period = normalizeString(req.query.period || 'monthly');
+    const atmOption = normalizeString(req.query.atm_option || 'all');
+    const creditDate = normalizeString(req.query.credit_date);
+    const filePrefix = normalizeString(req.query.file_prefix);
+    const fundingAccount = normalizeString(req.query.funding_account);
+    const batch = normalizeString(req.query.batch);
+    const mode = normalizeString(req.query.mode || 'manual');
+
+    if (!year || !month) {
+      return res.status(400).json({ success: false, message: 'year and month are required' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      // Build WHERE clause
+      const where = ['r.year_id = ? AND r.month_id = ?'];
+      const params = [String(year), String(month)];
+
+      if (company) {
+        where.push('TRIM(em.company) = TRIM(?)');
+        params.push(company);
+      }
+      if (branchCode) {
+        where.push('TRIM(em.branch) = TRIM(?)');
+        params.push(branchCode);
+      }
+      if (payrollGroup) {
+        where.push('r.group_id = ?');
+        params.push(payrollGroup);
+      }
+
+      // Filter by ATM option
+      let atmWhere = '';
+      if (atmOption === 'active' || atmOption === 'hold') {
+        atmWhere = ` AND p.payroll_status = '${atmOption === 'active' ? 'Active' : 'Hold'}'`;
+      } else if (atmOption === 'w_atm') {
+        atmWhere = ` AND TRIM(ea.atm_no) <> ''`;
+      } else if (atmOption === 'wo_atm') {
+        atmWhere = ` AND (TRIM(ea.atm_no) = '' OR ea.atm_no IS NULL)`;
+      }
+
+      const [rows] = await conn.query(`
+        SELECT
+          e.employee_id,
+          e.emp_code,
+          e.last_name,
+          e.first_name,
+          e.middle_name,
+          em.company,
+          em.branch,
+          em.position,
+          ea.account_number,
+          ea.atm_no,
+          ea.bank_name,
+          ea.bank_branch,
+          SUM(p.gross_pay) AS gross_pay,
+          SUM(p.basic_salary) AS basic_salary,
+          SUM(p.total_deductions) AS total_deductions,
+          SUM(p.net_pay) AS net_pay
+        FROM employee_payroll p
+        INNER JOIN payroll_runs r ON r.run_id = p.run_id
+        INNER JOIN employees e ON e.employee_id = p.employee_id
+        LEFT JOIN employee_employment em ON em.employee_id = e.employee_id
+        LEFT JOIN employee_accounts ea ON ea.employee_id = e.employee_id
+        WHERE ${where.join(' AND ')}${atmWhere}
+        GROUP BY
+          e.employee_id, e.emp_code, e.last_name, e.first_name, e.middle_name,
+          em.company, em.branch, em.position, ea.account_number, ea.atm_no, ea.bank_name, ea.bank_branch
+        ORDER BY
+          em.company ASC, em.branch ASC, e.emp_code ASC
+      `, params);
+
+      // Format data for BDO bank request
+      const data = rows.map((row) => ({
+        emp_code: row.emp_code || '',
+        employee_name: buildName(row),
+        company: normalizeString(row.company) || 'Business Setup',
+        branch: normalizeString(row.branch) || 'Main',
+        position: normalizeString(row.position) || '',
+        account_number: String(row.account_number || '').trim() || 'N/A',
+        atm_no: String(row.atm_no || '').trim() || 'N/A',
+        bank_name: String(row.bank_name || '').trim() || 'BDO',
+        bank_branch: String(row.bank_branch || '').trim() || '',
+        gross_pay: Number(row.gross_pay || 0),
+        basic_salary: Number(row.basic_salary || 0),
+        deductions: Number(row.total_deductions || 0),
+        net_pay: Number(row.net_pay || 0)
+      }));
+
+      // Calculate totals
+      const totals = data.reduce((acc, row) => ({
+        count: acc.count + 1,
+        gross_pay: acc.gross_pay + row.gross_pay,
+        basic_salary: acc.basic_salary + row.basic_salary,
+        deductions: acc.deductions + row.deductions,
+        net_pay: acc.net_pay + row.net_pay
+      }), { count: 0, gross_pay: 0, basic_salary: 0, deductions: 0, net_pay: 0 });
+
+      res.json({
+        success: true,
+        data,
+        totals,
+        parameters: {
+          year,
+          month,
+          company,
+          branch_code: branchCode,
+          payroll_group: payrollGroup,
+          period,
+          atm_option: atmOption,
+          credit_date: creditDate,
+          file_prefix: filePrefix,
+          funding_account: fundingAccount,
+          batch,
+          mode
+        }
+      });
+    } catch (err) {
+      console.error('BDO report error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  });
+
+  app.get('/api/government-reports/bdo/export', async (req, res) => {
+    const year = asNumber(req.query.year);
+    const month = asNumber(req.query.month);
+    const company = normalizeString(req.query.company);
+    const branchCode = normalizeString(req.query.branch_code);
+    const payrollGroup = normalizeString(req.query.payroll_group);
+    const format = normalizeString(req.query.format || 'csv').toLowerCase();
+    const atmOption = normalizeString(req.query.atm_option || 'all');
+    const creditDate = normalizeString(req.query.credit_date);
+    const filePrefix = normalizeString(req.query.file_prefix || 'BDO');
+    const fundingAccount = normalizeString(req.query.funding_account);
+    const batch = normalizeString(req.query.batch);
+    const mode = normalizeString(req.query.mode || 'manual');
+
+    if (!year || !month) {
+      return res.status(400).json({ success: false, message: 'year and month are required' });
+    }
+
+    if (!['csv', 'text', 'txt'].includes(format)) {
+      return res.status(400).json({ success: false, message: 'Invalid format. Supported: csv, text' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      // Build WHERE clause
+      const where = ['r.year_id = ? AND r.month_id = ?'];
+      const params = [String(year), String(month)];
+
+      if (company) {
+        where.push('TRIM(em.company) = TRIM(?)');
+        params.push(company);
+      }
+      if (branchCode) {
+        where.push('TRIM(em.branch) = TRIM(?)');
+        params.push(branchCode);
+      }
+      if (payrollGroup) {
+        where.push('r.group_id = ?');
+        params.push(payrollGroup);
+      }
+
+      // Filter by ATM option
+      let atmWhere = '';
+      if (atmOption === 'active' || atmOption === 'hold') {
+        atmWhere = ` AND p.payroll_status = '${atmOption === 'active' ? 'Active' : 'Hold'}'`;
+      } else if (atmOption === 'w_atm') {
+        atmWhere = ` AND TRIM(ea.atm_no) <> ''`;
+      } else if (atmOption === 'wo_atm') {
+        atmWhere = ` AND (TRIM(ea.atm_no) = '' OR ea.atm_no IS NULL)`;
+      }
+
+      const [rows] = await conn.query(`
+        SELECT
+          e.emp_code,
+          e.last_name,
+          e.first_name,
+          e.middle_name,
+          em.company,
+          em.branch,
+          em.position,
+          ea.account_number,
+          ea.atm_no,
+          ea.bank_name,
+          ea.bank_branch,
+          SUM(p.gross_pay) AS gross_pay,
+          SUM(p.basic_salary) AS basic_salary,
+          SUM(p.total_deductions) AS total_deductions,
+          SUM(p.net_pay) AS net_pay
+        FROM employee_payroll p
+        INNER JOIN payroll_runs r ON r.run_id = p.run_id
+        INNER JOIN employees e ON e.employee_id = p.employee_id
+        LEFT JOIN employee_employment em ON em.employee_id = e.employee_id
+        LEFT JOIN employee_accounts ea ON ea.employee_id = e.employee_id
+        WHERE ${where.join(' && ')}${atmWhere}
+        GROUP BY
+          e.employee_id, e.emp_code, e.last_name, e.first_name, e.middle_name,
+          em.company, em.branch, em.position, ea.account_number, ea.atm_no, ea.bank_name, ea.bank_branch
+        ORDER BY
+          em.company ASC, em.branch ASC, e.emp_code ASC
+      `, params);
+
+      const outputRows = rows.map((row) => [
+        row.emp_code || '',
+        `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ''}`.trim(),
+        normalizeString(row.company) || 'Business Setup',
+        normalizeString(row.branch) || 'Main',
+        row.position || '',
+        String(row.account_number || '').trim() || 'N/A',
+        String(row.atm_no || '').trim() || 'N/A',
+        String(row.bank_name || '').trim() || 'BDO',
+        String(row.bank_branch || '').trim() || '',
+        Number(row.gross_pay || 0).toFixed(2),
+        Number(row.net_pay || 0).toFixed(2)
+      ]);
+
+      // Calculate totals
+      const totals = rows.reduce((acc, row) => {
+        acc.gross_pay += Number(row.gross_pay || 0);
+        acc.net_pay += Number(row.net_pay || 0);
+        return acc;
+      }, { gross_pay: 0, net_pay: 0 });
+
+      outputRows.push(['TOTAL', '', '', '', '', '', '', '', '', totals.gross_pay.toFixed(2), totals.net_pay.toFixed(2)]);
+      outputRows.unshift(['', '', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`Credit Date: ${creditDate || `${month}/${year}`}`, '', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`Batch: ${batch || 'N/A'}`, '', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`Funding Account: ${fundingAccount || 'N/A'}`, '', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`Mode: ${mode}`, '', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift([`File Prefix: ${filePrefix}`, '', '', '', '', '', '', '', '', '', '']);
+      outputRows.unshift(['BDO BANK REQUEST - PAYROLL FUND TRANSFER', '', '', '', '', '', '', '', '', '', '']);
+
+      sendCsv(
+        res,
+        `${filePrefix}-Bank-Request-${year}-${String(month).padStart(2, '0')}.csv`,
+        [
+          'Employee ID',
+          'Employee Name',
+          'Company',
+          'Branch',
+          'Position',
+          'Account Number',
+          'ATM No.',
+          'Bank Name',
+          'Bank Branch',
+          'Gross Pay',
+          'Net Pay'
+        ],
+        outputRows
+      );
+    } catch (err) {
+      console.error('BDO export error:', err);
+      res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  });
 };

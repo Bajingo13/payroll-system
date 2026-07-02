@@ -21,6 +21,7 @@ const AttendanceCorrectionManagementPage = lazy(() => import('./pages/Attendance
 const EmployeePayrollInformationPage = lazy(() => import('./pages/EmployeePayrollInformationPage.jsx'));
 const EmployeeSchedulePage = lazy(() => import('./pages/EmployeeSchedulePage.jsx'));
 const PayrollComputationPage = lazy(() => import('./pages/PayrollComputationPage.jsx'));
+const PayrollHistoryPage = lazy(() => import('./pages/PayrollHistoryPage.jsx'));
 const ProfileManagementPage = lazy(() => import('./pages/ProfileManagementPage.jsx'));
 const EmployeeManagementPage = lazy(() => import('./pages/EmployeeManagementPage.jsx'));
 const ScheduleManagementPage = lazy(() => import('./pages/ScheduleManagementPage.jsx'));
@@ -38,6 +39,7 @@ const UserSettingsPage = lazy(() => import('./pages/UserSettingsPage.jsx'));
 const AboutUsPage = lazy(() => import('./pages/AboutUsPage.jsx'));
 const HelpPage = lazy(() => import('./pages/HelpPage.jsx'));
 const ContactsPage = lazy(() => import('./pages/ContactsPage.jsx'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage.jsx'));
 import { canAccessFeature, getAccessibleFeatures, normalizeRole } from './access/roleAccess.js';
 import './styles.css';
 
@@ -124,6 +126,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/about-us" element={<AboutUsPage />} />
       <Route path="/help" element={<HelpPage />} />
       <Route path="/contacts" element={<ContactsPage />} />
@@ -279,6 +282,15 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['admin']} feature="payroll-computation">
               <PayrollComputationPage />
+            </RoleRoute>
+          }
+        />
+
+        <Route
+          path="payroll-history"
+          element={
+            <RoleRoute roles={['admin']} feature="payroll-history">
+              <PayrollHistoryPage />
             </RoleRoute>
           }
         />

@@ -806,7 +806,10 @@ module.exports = function (app, pool) {
 
                     -- Account info
                     ea.projects,
-                    ea.salary_type
+                    ea.salary_type,
+                    ea.bank_name,
+                    ea.bank_branch,
+                    ea.atm_no
 
                 FROM employee_payroll ep
                 JOIN employees e ON ep.employee_id = e.employee_id
@@ -849,6 +852,9 @@ module.exports = function (app, pool) {
                     ee.company,
                     ea.projects,
                     ea.salary_type,
+                    ea.bank_name,
+                    ea.bank_branch,
+                    ea.atm_no,
                     tet.code
 
                 ORDER BY ${orderClause};

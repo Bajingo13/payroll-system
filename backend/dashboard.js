@@ -190,6 +190,10 @@ module.exports = function (app, pool) {
     const payrollId = Number(req.params.payrollId);
     if (!payrollId) return res.status(400).json({ success: false, message: 'Invalid payroll ID' });
 
+    // Check authentication - either from session or x-user-id header (mobile app)
+    const userId = req.session?.user?.user_id || req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ success: false, message: 'Authentication required' });
+
     let conn;
     try {
       conn = await pool.getConnection();
@@ -223,7 +227,7 @@ module.exports = function (app, pool) {
             )
           )
         LIMIT 1
-      `, [payrollId, req.authUser?.normalizedRole || 'unknown', Number(req.authUser?.user_id || 0)]);
+      `, [payrollId, req.session?.user?.normalizedRole || 'unknown', Number(userId)]);
 
       if (!rows.length) return res.status(404).json({ success: false, message: 'Payslip not found' });
 
@@ -669,8 +673,12 @@ module.exports = function (app, pool) {
     const [[employee]] = await conn.execute(
       `SELECT e.employee_id
        FROM users u
-       JOIN employees e ON LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))
-       WHERE u.user_id = ? LIMIT 1`,
+       JOIN employees e
+         ON LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))
+         OR LOWER(TRIM(CONCAT(e.first_name, ' ', e.last_name))) = LOWER(TRIM(u.full_name))
+       WHERE u.user_id = ?
+       ORDER BY (LOWER(TRIM(e.emp_code)) = LOWER(TRIM(u.username))) DESC
+       LIMIT 1`,
       [userId]
     );
     if (!employee) return false;
@@ -746,7 +754,9 @@ module.exports = function (app, pool) {
           e.employee_id,
           COALESCE(ee.date_hired, DATE_SUB(CURDATE(), INTERVAL 364 DAY)) AS date_hired
         FROM employees e
-        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        JOIN users u
+          ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+          OR LOWER(TRIM(u.full_name)) = LOWER(TRIM(CONCAT(e.first_name, ' ', e.last_name)))
         LEFT JOIN employee_employment ee
           ON ee.employment_id = (
             SELECT em.employment_id FROM employee_employment em

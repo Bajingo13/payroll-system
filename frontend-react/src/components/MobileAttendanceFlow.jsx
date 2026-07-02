@@ -92,8 +92,6 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
   const streamRef = useRef(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [matchAccuracy, setMatchAccuracy] = useState(null);
   const [cameraError, setCameraError] = useState('');
 
   useEffect(() => {
@@ -110,7 +108,6 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
       setDistance(null);
       setUserLocation(null);
       setCapturedPhoto(null);
-      setMatchAccuracy(null);
       setCameraError('');
     }
   }, [open]);
@@ -184,13 +181,12 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
   function goBack() {
     stopCamera();
     if (step === 'location') setStep('recording');
-    else if (step === 'face') { setCapturedPhoto(null); setMatchAccuracy(null); setStep('location'); }
+    else if (step === 'face') { setCapturedPhoto(null); setStep('location'); }
   }
 
   function confirmLocation() {
     stopCamera();
     setCapturedPhoto(null);
-    setMatchAccuracy(null);
     setStep('face');
   }
 
@@ -203,22 +199,24 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
     canvas.getContext('2d').drawImage(video, 0, 0);
     setCapturedPhoto(canvas.toDataURL('image/jpeg', 0.85));
     stopCamera();
-    setAnalyzing(true);
-    setTimeout(() => {
-      setMatchAccuracy(95 + Math.floor(Math.random() * 4));
-      setAnalyzing(false);
-    }, 1800);
   }
 
   function retake() {
     setCapturedPhoto(null);
-    setMatchAccuracy(null);
     startCamera();
   }
 
   async function saveRecord() {
     if (!pendingAction) return;
-    await onSubmit(pendingAction);
+    await onSubmit(
+      pendingAction,
+      {
+        latitude: userLocation?.lat ?? null,
+        longitude: userLocation?.lng ?? null,
+        distance_m: distance !== null ? Math.round(distance) : null,
+      },
+      capturedPhoto
+    );
     onClose();
   }
 
@@ -252,7 +250,7 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
             </button>
           ) : <span className="mat-nav-btn" />}
           <h2 className="mat-title">
-            {step === 'recording' ? 'Time Recording' : step === 'location' ? 'Location Point' : 'Face Capture'}
+            {step === 'recording' ? 'Time Recording' : step === 'location' ? 'Location Point' : 'Take Selfie'}
           </h2>
           <button className="mat-nav-btn" onClick={onClose} type="button" aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -396,22 +394,20 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
           </div>
         )}
 
-        {/* ── Step 3: Face Capture ── */}
+        {/* ── Step 3: Selfie ── */}
         {step === 'face' && (
           <div className="mat-face-wrap">
             <div className="mat-cam-view">
               {!capturedPhoto ? (
                 <>
                   <video ref={videoRef} className="mat-cam-video" autoPlay playsInline muted />
-                  {cameraActive && (
-                    <div className="mat-face-guide-wrap">
-                      <div className="mat-face-guide" />
-                    </div>
-                  )}
                   {cameraError && <div className="mat-cam-error">{cameraError}</div>}
                 </>
               ) : (
-                <img src={capturedPhoto} className="mat-cam-photo" alt="Captured face" />
+                <>
+                  <img src={capturedPhoto} className="mat-cam-photo" alt="Captured selfie" />
+                  <div className="mat-cam-badge"><AppIcon name="check" size={13} /> Photo captured</div>
+                </>
               )}
               <canvas ref={canvasRef} className="mat-cap-canvas" />
             </div>
@@ -435,38 +431,15 @@ export default function MobileAttendanceFlow({ open, onClose, employee, todaySta
                 </button>
               )}
 
-              {analyzing && (
-                <div className="mat-analyzing">
-                  <span className="mat-spinner" />
-                  Analyzing face match…
+              {capturedPhoto && (
+                <div className="mat-face-actions">
+                  <button className="mat-btn-secondary" onClick={retake} type="button">
+                    Retake Photo
+                  </button>
+                  <button className="mat-btn-primary mat-btn-save" onClick={saveRecord} type="button" disabled={busy}>
+                    {busy ? 'Saving…' : 'Save Record'}
+                  </button>
                 </div>
-              )}
-
-              {matchAccuracy !== null && (
-                <>
-                  <div className="mat-match-row">
-                    <div className="mat-match-left">
-                      <svg className="mat-face-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <path d="M12 3C9.24 3 7 5.24 7 8v2c0 2.76 2.24 5 5 5s5-2.24 5-5V8c0-2.76-2.24-5-5-5z" />
-                        <path d="M20 21c0-4.42-3.58-8-8-8s-8 3.58-8 8" />
-                      </svg>
-                      <div>
-                        <small className="mat-match-label">Face Match:</small>
-                        <strong className="mat-match-pct">{matchAccuracy}% Accuracy</strong>
-                      </div>
-                    </div>
-                    <img src={capturedPhoto} className="mat-match-thumb" alt="face thumb" />
-                  </div>
-
-                  <div className="mat-face-actions">
-                    <button className="mat-btn-secondary" onClick={retake} type="button">
-                      Retake Photo
-                    </button>
-                    <button className="mat-btn-primary mat-btn-save" onClick={saveRecord} type="button" disabled={busy}>
-                      {busy ? 'Saving…' : 'Save Record'}
-                    </button>
-                  </div>
-                </>
               )}
             </div>
           </div>

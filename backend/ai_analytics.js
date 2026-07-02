@@ -56,13 +56,14 @@ module.exports = function (app, pool) {
           ROUND(SUM(COALESCE(ha.late_minutes, 0) > 0) * 100.0 / NULLIF(COUNT(*), 0), 2) AS tardiness_rate
         FROM hris_attendance ha
         JOIN employees e ON e.employee_id = ha.employee_id
-        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        JOIN users u
+          ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+          OR LOWER(TRIM(u.full_name)) = LOWER(TRIM(CONCAT(e.first_name, ' ', e.last_name)))
         LEFT JOIN employee_employment ee ON ee.employment_id = (
           SELECT em.employment_id FROM employee_employment em
           WHERE em.employee_id = e.employee_id ORDER BY em.employment_id DESC LIMIT 1
         )
         WHERE LOWER(TRIM(u.role)) = 'employee'
-          AND LOWER(TRIM(e.status)) = 'active'
           AND (ee.date_hired IS NULL OR ha.attendance_date >= ee.date_hired)
           AND NOT EXISTS (
             SELECT 1 FROM employee_leave_requests elr
@@ -88,9 +89,10 @@ module.exports = function (app, pool) {
           COUNT(*) AS late_count
         FROM hris_attendance ha
         JOIN employees e ON e.employee_id = ha.employee_id
-        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        JOIN users u
+          ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+          OR LOWER(TRIM(u.full_name)) = LOWER(TRIM(CONCAT(e.first_name, ' ', e.last_name)))
         WHERE LOWER(TRIM(u.role)) = 'employee'
-          AND LOWER(TRIM(e.status)) = 'active'
           AND COALESCE(ha.late_minutes, 0) > 0
         GROUP BY DAYNAME(ha.attendance_date), WEEKDAY(ha.attendance_date)
         ORDER BY day_index ASC
@@ -102,7 +104,9 @@ module.exports = function (app, pool) {
           COUNT(*) AS absence_days
         FROM hris_attendance ha
         JOIN employees e ON e.employee_id = ha.employee_id
-        JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+        JOIN users u
+          ON LOWER(TRIM(u.username)) = LOWER(TRIM(e.emp_code))
+          OR LOWER(TRIM(u.full_name)) = LOWER(TRIM(CONCAT(e.first_name, ' ', e.last_name)))
         LEFT JOIN employee_employment ee ON ee.employment_id = (
           SELECT em.employment_id FROM employee_employment em
           WHERE em.employee_id = e.employee_id ORDER BY em.employment_id DESC LIMIT 1
