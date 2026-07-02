@@ -5,13 +5,19 @@
   "build": {
     "preview": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "env": {
+          "GRADLE_OPTS": "-Xmx2048m"
+        }
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "env": {
+          "GRADLE_OPTS": "-Xmx2048m"
+        }
       }
     }
   },
