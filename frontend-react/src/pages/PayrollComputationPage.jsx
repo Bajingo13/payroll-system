@@ -1234,6 +1234,7 @@ export default function PayrollComputationPage() {
         if (!cache[emp.employee_id]) {
           cache[emp.employee_id] = await loadEmpData(emp.employee_id);
         }
+        console.log(cache[emp.employee_id].allowances);
       }
       const payrolls = filteredEmps.map(emp => {
         const d = cache[emp.employee_id];
@@ -1268,6 +1269,15 @@ export default function PayrollComputationPage() {
           periodOption:selectedPeriod?.period_name||'',
         };
       });
+      console.log(payrolls);
+      for (const emp of filteredEmps) {
+    console.log(
+        emp.employee_id,
+        cache[emp.employee_id].allowances
+    );
+}
+      console.log(payrolls[0].allowances);
+console.log(payrolls[0].deductions);
       console.log('Saving payrolls for run', runId, payrolls);
       const { data } = await api.post('/save_all_employee_payroll', {
         run_id:runId, payrolls, user_id:user?.user_id, admin_name:user?.full_name||user?.username,
@@ -1293,6 +1303,61 @@ export default function PayrollComputationPage() {
     if (!selectedEmp||!runId) return;
     setLoading(true);
     try {
+      console.log({
+  run_id: runId,
+  basic_salary: toNum(payroll.basic_salary),
+  absence_time: toNum(payroll.absence_time),
+  absence_deduction: toNum(payroll.absence_deduction),
+  late_time: toNum(payroll.late_time),
+  late_deduction: toNum(payroll.late_deduction),
+  undertime: toNum(payroll.undertime),
+  undertime_deduction: toNum(payroll.undertime_deduction),
+  overtime: toNum(payroll.overtime),
+  holiday_pay: toNum(payroll.holiday_pay),
+  taxable_allowances: toNum(allowanceTotals?.taxable),
+  non_taxable_allowances: toNum(allowanceTotals?.nontaxable),
+  adj_comp: toNum(payroll.adj_comp),
+  adj_non_comp: toNum(payroll.adj_non_comp),
+  total_leaves_used: toNum(payroll.total_leaves_used),
+  gsis_employee: toNum(payroll.gsis_employee),
+  gsis_employer: toNum(payroll.gsis_employer),
+  gsis_ecc: toNum(payroll.gsis_ecc),
+  sss_employee: toNum(payroll.sss_employee),
+  sss_employer: toNum(payroll.sss_employer),
+  sss_ecc: toNum(payroll.sss_ecc),
+  pagibig_employee: toNum(payroll.pagibig_employee),
+  pagibig_employer: toNum(payroll.pagibig_employer),
+  pagibig_ecc: toNum(payroll.pagibig_ecc),
+  philhealth_employee: toNum(payroll.philhealth_employee),
+  philhealth_employer: toNum(payroll.philhealth_employer),
+  philhealth_ecc: toNum(payroll.philhealth_ecc),
+  tax_withheld: toNum(payroll.tax_withheld),
+  total_deductions: deductionRowsTotal,
+  loans: toNum(payroll.loans),
+  other_deductions: toNum(payroll.other_deductions),
+  premium_adj: toNum(payroll.premium_adj),
+  ytd_sss: toNum(payroll.ytd_sss),
+  ytd_wtax: toNum(payroll.ytd_wtax),
+  ytd_philhealth: toNum(payroll.ytd_philhealth),
+  ytd_gsis: toNum(payroll.ytd_gsis),
+  ytd_pagibig: toNum(payroll.ytd_pagibig),
+  ytd_gross: toNum(payroll.ytd_gross),
+  payroll_status: payroll.payroll_status || 'Active',
+  gross_pay: totals.gross,
+  grand_total_deductions: totals.ded,
+  net_pay: totals.net,
+  ot_nd: normalizeAdjustmentTimes(otNd),
+  ot_nd_adj: normalizeAdjustmentTimes(otNdAdj),
+  att_adj: normalizeAdjustmentTimes(attAdj),
+  periodOption: selectedPeriod?.period_name || '',
+  allowances,
+  deductions: deductions.filter(d => d.deduction_type_id),
+  loanRows,
+  leave_rows: leaveRows.filter(r => r.leave_type_id),
+  user_id: user?.user_id,
+  admin_name: user?.full_name || user?.username,
+});
+
       const { data } = await api.put(`/update_employee_payroll/${selectedEmp.employee_id}`, {
         run_id:runId,
         basic_salary:toNum(payroll.basic_salary),
@@ -1316,7 +1381,7 @@ export default function PayrollComputationPage() {
         ot_nd:normalizeAdjustmentTimes(otNd), ot_nd_adj:normalizeAdjustmentTimes(otNdAdj), att_adj:normalizeAdjustmentTimes(attAdj),
         periodOption:selectedPeriod?.period_name||'',
         allowances, deductions: deductions.filter(d => d.deduction_type_id),
-        leave_rows: leaveRows.filter(r => r.leave_type_id),
+        loanRows, leave_rows: leaveRows.filter(r => r.leave_type_id),
         user_id:user?.user_id, admin_name:user?.full_name||user?.username,
       });
 
@@ -1324,7 +1389,21 @@ export default function PayrollComputationPage() {
       flash('Payroll saved successfully.','success');
       setIsEditing(false); setShowSaveModal(false);
       // Invalidate cache so re-selecting this employee fetches fresh data from the API
-      setEmpDataMap(prev => { const n = {...prev}; delete n[selectedEmp.employee_id]; return n; });
+      setEmpDataMap(prev => ({
+          ...prev, 
+          [selectedEmp.employee_id]: {
+              ...(prev[selectedEmp.employee_id] || {}),
+              payroll,
+              otNd,
+              otNdAdj,
+              attAdj,
+              allowances,
+              deductions,
+              loanRows,
+              leaveRows,
+              savedLeaveRows: leaveRows,
+          }
+      }));
       setSelectedEmp(null);
       await loadRunEmployees(runId);
     } catch(err) {
