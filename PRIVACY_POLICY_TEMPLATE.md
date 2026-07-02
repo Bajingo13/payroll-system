@@ -1,9 +1,9 @@
-# Privacy Policy - Astreablue Payroll System
+# Privacy Policy - Astreablue HRIS & Payroll System
 
-**Last Updated: July 1, 2026**
+**Last Updated: July 2, 2026**
 
 ## Overview
-Astreablue Payroll System ("App") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and protect your information.
+Astreablue HRIS & Payroll System ("App") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and protect your information.
 
 ## Information We Collect
 
@@ -36,18 +36,38 @@ Astreablue Payroll System ("App") is committed to protecting your privacy. This 
 - Access is restricted to authorized personnel only
 - Regular security audits are conducted
 
+## Compliance with the Data Privacy Act
+
+This App and its processing of Personal Information comply with the Data Privacy Act of 2012
+(Republic Act No. 10173) of the Philippines and its Implementing Rules and Regulations. We
+collect and process your personal and sensitive personal information only for declared,
+specified, and legitimate purposes related to employment and payroll administration, and in
+accordance with the principles of transparency, legitimate purpose, and proportionality.
+
+We appoint a Data Protection Officer (DPO) responsible for ensuring compliance with the Data
+Privacy Act. You may reach our DPO through the contact details below for any concerns about
+how your personal data is processed.
+
 ## Data Storage
 
 - Employee data is stored securely in our MySQL database
 - Backups are maintained for disaster recovery
 - Data is retained only as long as legally required
 
-## Your Rights
+## Your Rights Under the Data Privacy Act
 
-- You can request access to your personal data
-- You can request correction of inaccurate data
-- You can request deletion of your data (subject to legal requirements)
-- Contact us at: support@astreablue.com
+As a data subject, the Data Privacy Act of 2012 (RA 10173) grants you the right to:
+
+- Be informed that your personal data will be, are being, or were processed
+- Request access to your personal data
+- Object to the processing of your data
+- Request correction of inaccurate or outdated data
+- Request erasure or blocking of your data, subject to legal and regulatory requirements
+- Data portability, where applicable
+- Be indemnified for damages sustained due to inaccurate, incomplete, outdated, false, unlawfully obtained, or unauthorized use of your personal data
+- File a complaint with the National Privacy Commission (NPC) if you believe your rights have been violated
+
+To exercise any of these rights, contact us at: support@astreablue.com
 
 ## Third-Party Services
 
@@ -64,7 +84,7 @@ We may update this Privacy Policy periodically. Continued use of the app constit
 
 For privacy questions or concerns:
 - Email: privacy@astreablue.com
-- Company: Astreablue
+- Company: Astreablue Intelligence Inc.
 - Website: https://www.astreablue.com
 
 ---

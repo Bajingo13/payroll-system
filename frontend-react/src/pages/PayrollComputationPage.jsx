@@ -1116,54 +1116,6 @@ export default function PayrollComputationPage() {
     return { payroll:nextP, otNd:nextOt, otNdAdj:nextAdj, attAdj:nextAtt, allowances:rec.allowances||[], deductions:rec.deductions||[], hrisData:hris, savedLeaveRows };
   }
 
-  async function loadLoansAndLeaves(empId, basicSalary = 0, periodHrisData = null, savedLeaveRows = null) {
-    setLoansLoading(true); setLeavesLoading(true);
-    try {
-      const [loansResp, leavesResp] = await Promise.all([
-        api.get('/loan_deductions', { params: { employee_id: empId, status: 'Active' } }).catch(() => ({ data: { loans: [] } })),
-        api.get('/payroll/employee-leaves', { params: { employee_id: empId } }).catch(() => ({ data: { leaveBalances: [], leaveRequests: [] } })),
-      ]);
-      const loans = loansResp.data.loans || [];
-      const balances = leavesResp.data.leaveBalances || [];
-      setEmpLoans(loans);
-      setEmpLeaveData({ leaveBalances: balances, leaveRequests: leavesResp.data.leaveRequests || [] });
-      // Build loan rows from active loans
-      const lrows = loans.map(l => ({
-        loan_id: l.loan_id,
-        description: [l.loan_category, l.loan_reference].filter(Boolean).join(' — '),
-        loan_amount: toNum(l.balance_amount),
-        amortization: toNum(l.amortization_amount),
-        date_start: l.start_date || '',
-        date_end: l.end_date || '',
-        balance: toNum(l.balance_amount),
-        skip: false,
-        payment: toNum(l.amortization_amount),
-      }));
-      setLoanRows(lrows);
-      setSelectedLoanRow(null);
-      const loanTotal = lrows.reduce((s,r)=>s+toNum(r.payment),0);
-      setPayroll(p=>({...p, loans: loanTotal.toFixed(2)}));
-      setOtherDedRows([]);
-      setSelectedDedRow(null);
-      // Restore previously saved leave rows if they exist; otherwise build from HRIS.
-      const hasSaved = Array.isArray(savedLeaveRows) && savedLeaveRows.some(r => r.leave_type_id);
-      const dailyRate = toNum(periodHrisData?.rates?.daily_rate) || (toNum(basicSalary) / 26);
-      const newRows = hasSaved
-        ? savedLeaveRows.map((row) => ({
-            ...row,
-            amount: row.leave_type_id && toNum(row.used) > 0
-              ? Math.round(toNum(row.used) * dailyRate * 100) / 100
-              : row.amount
-          }))
-        : buildPeriodLeaveRows(periodHrisData, basicSalary, balances);
-      setLeaveRows(newRows);
-      const totalLeavesAmt = newRows.reduce((s, r) => s + toNum(r.amount), 0);
-      setPayroll(p => ({...p, total_leaves_used: totalLeavesAmt.toFixed(2)}));
-    } finally {
-      setLoansLoading(false); setLeavesLoading(false);
-    }
-  }
-
   async function selectEmployee(emp) {
     if (empDataMap[emp.employee_id]) {
       const d = empDataMap[emp.employee_id];

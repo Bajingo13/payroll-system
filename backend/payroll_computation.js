@@ -1249,15 +1249,39 @@ module.exports = function (app, pool) {
     });
 
     // GET /api/payroll_runs_history — every payroll run ever created, with totals, for the admin Payroll History page
+    //
+    // NOTE: payroll_runs.group_id/period_id/year_id are NOT reliable foreign keys — depending on how the
+    // run was created they may hold the lookup table's numeric id OR its raw name/value (e.g. group_id
+    // can be "1" or "semi-monthly", year_id can be "37" or "2026"). month_id is consistently numeric.
+    // Name resolution and filtering below therefore checks both representations, relying on MySQL's
+    // implicit numeric coercion (not CAST(...AS CHAR), which forces the connection's default collation
+    // and clashes with these columns' utf8mb4_0900_ai_ci collation).
     app.get("/api/payroll_runs_history", async (req, res) => {
         const { year_id, month_id, group_id, status, search } = req.query;
 
         const conditions = [];
         const params = [];
 
-        if (year_id) { conditions.push("pr.year_id = ?"); params.push(year_id); }
-        if (month_id) { conditions.push("pr.month_id = ?"); params.push(month_id); }
-        if (group_id) { conditions.push("pr.group_id = ?"); params.push(group_id); }
+        if (year_id) {
+            conditions.push(`(
+                pr.year_id = ?
+                OR pr.year_id = (SELECT year_value FROM payroll_years WHERE year_id = ? LIMIT 1)
+            )`);
+            params.push(year_id, year_id);
+        }
+        if (month_id) {
+            conditions.push("pr.month_id = ?");
+            params.push(month_id);
+        }
+        if (group_id) {
+            conditions.push(`(
+                pr.group_id = ?
+                OR LOWER(TRIM(pr.group_id)) = (
+                    SELECT LOWER(TRIM(group_name)) FROM payroll_groups WHERE group_id = ? LIMIT 1
+                )
+            )`);
+            params.push(group_id, group_id);
+        }
         if (status) { conditions.push("pr.status = ?"); params.push(status); }
         if (search) { conditions.push("pr.payroll_range LIKE ?"); params.push(`%${search}%`); }
 
@@ -1273,19 +1297,30 @@ module.exports = function (app, pool) {
                     pr.status,
                     pr.date_created,
                     pr.date_completed,
-                    pg.group_name,
-                    pp.period_name,
-                    pm.month_name,
-                    py.year_value,
+                    COALESCE(
+                        (SELECT group_name FROM payroll_groups WHERE group_id = pr.group_id LIMIT 1),
+                        (SELECT group_name FROM payroll_groups WHERE LOWER(TRIM(group_name)) = LOWER(TRIM(pr.group_id)) LIMIT 1),
+                        pr.group_id
+                    ) AS group_name,
+                    COALESCE(
+                        (SELECT period_name FROM payroll_periods WHERE period_id = pr.period_id LIMIT 1),
+                        (SELECT period_name FROM payroll_periods WHERE LOWER(TRIM(period_name)) = LOWER(TRIM(pr.period_id)) LIMIT 1),
+                        pr.period_id
+                    ) AS period_name,
+                    COALESCE(
+                        (SELECT month_name FROM payroll_months WHERE month_id = pr.month_id LIMIT 1),
+                        pr.month_id
+                    ) AS month_name,
+                    COALESCE(
+                        (SELECT year_value FROM payroll_years WHERE year_value = pr.year_id LIMIT 1),
+                        (SELECT year_value FROM payroll_years WHERE year_id = pr.year_id LIMIT 1),
+                        pr.year_id
+                    ) AS year_value,
                     COUNT(ep.payroll_id) AS employee_count,
                     COALESCE(SUM(ep.gross_pay), 0) AS total_gross,
                     COALESCE(SUM(ep.total_deductions), 0) AS total_deductions,
                     COALESCE(SUM(ep.net_pay), 0) AS total_net
                 FROM payroll_runs pr
-                LEFT JOIN payroll_groups pg ON pg.group_id = pr.group_id
-                LEFT JOIN payroll_periods pp ON pp.period_id = pr.period_id
-                LEFT JOIN payroll_months pm ON pm.month_id = pr.month_id
-                LEFT JOIN payroll_years py ON py.year_id = pr.year_id
                 LEFT JOIN employee_payroll ep ON ep.run_id = pr.run_id
                 ${whereClause}
                 GROUP BY pr.run_id
