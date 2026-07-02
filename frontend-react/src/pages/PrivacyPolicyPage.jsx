@@ -1,10 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import './PrivacyPolicyPage.css';
 
 const PrivacyPolicyPage = () => {
   return (
     <div className="privacy-policy-container">
       <div className="privacy-policy-content">
+        <Link className="privacy-back-link" to="/login">← Back to Login</Link>
         <h1>Privacy Policy - Astreablue HRIS & Payroll System</h1>
         <p className="last-updated"><strong>Last Updated: July 2, 2026</strong></p>
 

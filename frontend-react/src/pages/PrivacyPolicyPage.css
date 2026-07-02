@@ -16,6 +16,18 @@
   color: #333;
 }
 
+.privacy-back-link {
+  display: inline-block;
+  margin-bottom: 20px;
+  color: #1e40af;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.privacy-back-link:hover {
+  text-decoration: underline;
+}
+
 .privacy-policy-content h1 {
   color: #0f172a;
   font-size: 32px;

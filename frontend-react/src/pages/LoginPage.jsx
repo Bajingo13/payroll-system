@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { lazy, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { api, getApiMessage } from '../api/client.js';
@@ -9,6 +9,8 @@ import ToastPanel from '../components/ToastPanel.jsx';
 import { AboutUsContent, ContactsContent, HelpContent } from '../components/InfoPopups.jsx';
 import PasswordToggleIcon from '../components/PasswordToggleIcon.jsx';
 import AppIcon from '../components/AppIcon.jsx';
+
+const PrivacyPolicyPage = lazy(() => import('./PrivacyPolicyPage.jsx'));
 
 const POST_LOGIN_REDIRECT_MS = 500;
 const OTP_EXPIRY_MINUTES = 5;
@@ -116,6 +118,7 @@ export default function LoginPage() {
   const [resetUser,    setResetUser]    = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
+  const [privacyOpen,  setPrivacyOpen]  = useState(false);
 
   // ── Step 1: submit credentials ──────────────────────────────────────────────
   async function handleLogin(e) {
@@ -393,8 +396,24 @@ export default function LoginPage() {
               </div>
             </form>
           )}
+
         </section>
       </main>
+
+      <footer className="login-privacy-note">
+        <span>© 2026 Astreablue Intelligence Inc.</span>
+        <span aria-hidden="true">•</span>
+        <button type="button" onClick={() => setPrivacyOpen(true)}>Privacy Policy</button>
+      </footer>
+
+      <Modal
+        open={privacyOpen}
+        title="Privacy Policy"
+        className="privacy-policy-modal"
+        onClose={() => setPrivacyOpen(false)}
+      >
+        <PrivacyPolicyPage />
+      </Modal>
 
       {/* ── Locked account modal ── */}
       <Modal

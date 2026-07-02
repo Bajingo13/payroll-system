@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-export default function Modal({ open, title, children, onClose }) {
+export default function Modal({ open, title, children, onClose, className = '' }) {
   useEffect(() => {
     if (!open) return undefined;
 
@@ -22,7 +22,7 @@ export default function Modal({ open, title, children, onClose }) {
       aria-label={title || 'Dialog'}
       onMouseDown={onClose}
     >
-      <div className="app-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className={`app-modal${className ? ` ${className}` : ''}`} onMouseDown={(event) => event.stopPropagation()}>
         <div className="app-modal-header">
           <h3>{title}</h3>
           <button
