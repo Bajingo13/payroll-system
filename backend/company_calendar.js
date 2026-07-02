@@ -1,7 +1,12 @@
-    const { createNotificationsForAllUsers } = require('./notificationHelper');
+const { createNotificationsForAllUsers, ensureNotificationsTable } = require('./notificationHelper');
 
-module.exports = function (app, pool) {
-    const GOVERNMENT_HOLIDAY_DESCRIPTION = "Auto-added Philippine government holiday.";
+const GOVERNMENT_HOLIDAY_DESCRIPTION = "Auto-added Philippine government holiday.";
+const seededHolidayYears = new Set();
+
+function isHolidayEventType(eventType) {
+    const type = String(eventType || '').trim().toLowerCase();
+    return type.includes('holiday') || type.includes('special non-working');
+}
 
     function makeHoliday(year, month, day, title, eventType = "Regular Holiday") {
         return {
@@ -100,6 +105,71 @@ module.exports = function (app, pool) {
         }
     }
 
+async function ensureGovernmentHolidaysSeeded(conn, year) {
+    if (seededHolidayYears.has(year)) return;
+    await seedGovernmentHolidays(conn, year);
+    seededHolidayYears.add(year);
+}
+
+async function syncUpcomingHolidayNotificationsForUser(pool, userId, daysAhead = 7) {
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        await ensureCompanyCalendarTable(conn);
+        await ensureNotificationsTable(conn);
+
+        const currentYear = new Date().getFullYear();
+        await ensureGovernmentHolidaysSeeded(conn, currentYear);
+        await ensureGovernmentHolidaysSeeded(conn, currentYear + 1);
+
+        const [users] = await conn.execute(
+            `SELECT role FROM users
+             WHERE user_id = ?
+               AND (account_status IS NULL OR LOWER(account_status) NOT IN ('deactivated', 'deleted'))
+             LIMIT 1`,
+            [userId]
+        );
+        if (!users.length || !String(users[0].role || '').toLowerCase().includes('employee')) return 0;
+
+        const [holidays] = await conn.execute(
+            `SELECT DATE_FORMAT(event_date, '%Y-%m-%d') AS event_date,
+                    title, event_type, is_paid_holiday,
+                    DATEDIFF(event_date, CURDATE()) AS days_until
+             FROM company_calendar_events
+             WHERE event_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
+               AND (is_paid_holiday = 1
+                    OR LOWER(event_type) LIKE '%holiday%'
+                    OR LOWER(event_type) LIKE '%special non-working%')
+             ORDER BY event_date, event_id`,
+            [Math.max(0, Number(daysAhead) || 0)]
+        );
+
+        let created = 0;
+        for (const holiday of holidays) {
+            const title = `Holiday: ${holiday.title}`;
+            const timing = Number(holiday.days_until) === 0
+                ? `Today (${holiday.event_date}) is`
+                : `${holiday.event_date} is`;
+            const payType = Number(holiday.is_paid_holiday) === 1 ? 'paid' : 'non-paid';
+            const message = `${timing} ${holiday.title}, a ${payType} ${holiday.event_type}.`;
+            const [result] = await conn.execute(
+                `INSERT INTO notifications (user_id, type, title, message)
+                 SELECT ?, 'holiday', ?, ?
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM notifications
+                   WHERE user_id = ? AND type = 'holiday' AND title = ? AND message LIKE ?
+                 )`,
+                [userId, title, message, userId, title, `%${holiday.event_date}%`]
+            );
+            created += Number(result.affectedRows || 0);
+        }
+        return created;
+    } finally {
+        if (conn) conn.release();
+    }
+}
+
+function registerCompanyCalendar(app, pool) {
     app.get("/api/company-calendar/events", async (req, res) => {
         const { month } = req.query;
         let conn;
@@ -169,7 +239,7 @@ module.exports = function (app, pool) {
             );
 
             const normalizedType = String(event_type || 'Other').trim().toLowerCase();
-            if (normalizedType.includes('holiday')) {
+            if (isHolidayEventType(normalizedType)) {
               const isPaid = is_paid_holiday ? 'paid' : 'non-paid';
               await createNotificationsForAllUsers(
                 pool,
@@ -241,4 +311,7 @@ module.exports = function (app, pool) {
             if (conn) conn.release();
         }
     });
-};
+}
+
+registerCompanyCalendar.syncUpcomingHolidayNotificationsForUser = syncUpcomingHolidayNotificationsForUser;
+module.exports = registerCompanyCalendar;

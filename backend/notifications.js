@@ -1,4 +1,5 @@
 const { ensureNotificationsTable, createNotification } = require('./notificationHelper');
+const { syncUpcomingHolidayNotificationsForUser } = require('./company_calendar');
 
 module.exports = function (app, pool) {
 
@@ -32,6 +33,13 @@ module.exports = function (app, pool) {
     try {
       conn = await pool.getConnection();
       await ensureNotificationsTable(conn);
+
+      // Keep government and HR-created holidays in sync with each employee's bell.
+      // The helper is idempotent, so polling this endpoint never creates duplicates.
+      conn.release();
+      conn = null;
+      await syncUpcomingHolidayNotificationsForUser(pool, userId);
+      conn = await pool.getConnection();
 
       const [rows] = await conn.execute(
         `SELECT notification_id, type, title, message, is_read, created_at, read_at
