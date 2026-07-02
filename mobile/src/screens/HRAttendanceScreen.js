@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,6 +16,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
 import { API_BASE_URL } from '../config';
@@ -96,8 +99,72 @@ function fmtDist(m) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)} km` : `${Math.round(n)} m`;
 }
 
+// Extracts an HH:mm (24h) string from a datetime value, for pre-filling the edit form.
+function toHHMM(value) {
+  if (!value) return '';
+  const str = String(value).replace(' ', 'T');
+  const withTz = str.includes('+') || str.includes('Z') ? str : str + '+08:00';
+  const d = new Date(withTz);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Manila' });
+}
+
+function fmtTimeLocal(date) {
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${min}`;
+}
+
+function formatTime12h(hhmm) {
+  if (!hhmm) return '';
+  const d = new Date(`2000-01-01T${hhmm}:00`);
+  if (Number.isNaN(d.getTime())) return hhmm;
+  return d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function cacheFilenameFor(uri) {
+  const match = /[?&]ref=([^&]+)/.exec(uri || '');
+  const raw = match ? decodeURIComponent(match[1]) : String(uri || '').split('/').pop();
+  return (raw || `photo_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+// react-native's core <Image> networking layer silently drops the Cookie
+// header on some platforms (it's treated as a protected header), so
+// session-gated photo URLs never authenticate. Route the fetch through
+// expo-file-system's downloadAsync instead, which honors custom headers,
+// then point <Image> at the resulting local file.
+function AuthImage({ uri, headers, style, resizeMode }) {
+  const [localUri, setLocalUri] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLocalUri(null);
+    if (!uri || !headers) return undefined;
+    (async () => {
+      try {
+        const dest = `${FileSystem.cacheDirectory}${cacheFilenameFor(uri)}`;
+        const result = await FileSystem.downloadAsync(uri, dest, { headers });
+        if (!cancelled && result?.uri) setLocalUri(result.uri);
+      } catch (err) {
+        console.warn('[AuthImage] failed to load photo:', err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [uri, headers]);
+
+  if (!localUri) return <View style={[style, { backgroundColor: '#e2e8f0' }]} />;
+  return <Image source={{ uri: localUri }} style={style} resizeMode={resizeMode} />;
+}
+
 // ── Status filter options ─────────────────────────────────────────────────
 const FILTER_OPTIONS = ['All', 'Incomplete', 'Absent', 'Complete', 'Undertime'];
+
+const EDIT_TIME_FIELDS = [
+  { key: 'time_in',   label: 'Time In',   icon: 'log-in-outline' },
+  { key: 'break_out', label: 'Break Out', icon: 'cafe-outline' },
+  { key: 'break_in',  label: 'Break In',  icon: 'return-down-back-outline' },
+  { key: 'time_out',  label: 'Time Out',  icon: 'log-out-outline' },
+];
 
 export default function HRAttendanceScreen({ navigation }) {
   const { user }   = useAuth();
@@ -113,6 +180,29 @@ export default function HRAttendanceScreen({ navigation }) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [search,       setSearch]       = useState('');
   const [photoModal,   setPhotoModal]   = useState(null); // full URL string
+  const [imgHeaders,   setImgHeaders]   = useState(null); // Cookie/x-user-id for authenticated photo requests
+
+  // <Image> makes a bare network request that doesn't carry the session
+  // cookie the axios client attaches manually — attach it ourselves so
+  // /api/attendance/photo (session-gated) doesn't 401 on every load.
+  useEffect(() => {
+    (async () => {
+      const pairs = await AsyncStorage.multiGet(['user_id', 'session_cookie']);
+      const headers = {};
+      if (pairs[0][1]) headers['x-user-id'] = pairs[0][1];
+      if (pairs[1][1]) headers['Cookie'] = pairs[1][1];
+      setImgHeaders(headers);
+    })();
+  }, [user?.user_id]);
+
+  // Edit attendance modal
+  const [editRow,             setEditRow]             = useState(null); // record being edited
+  const [editForm,             setEditForm]           = useState(null);
+  const [editSubmitting,       setEditSubmitting]     = useState(false);
+  const [editError,            setEditError]          = useState('');
+  const [editShowDatePicker,   setEditShowDatePicker] = useState(false);
+  const [editActiveTimePicker, setEditActiveTimePicker] = useState(null); // field key or null
+  const [editTempPickerDate,   setEditTempPickerDate] = useState(new Date());
 
   async function loadAttendance(isRefresh = false) {
     if (!user?.user_id) return;
@@ -148,6 +238,71 @@ export default function HRAttendanceScreen({ navigation }) {
     const d = new Date(`${dateStr}T00:00:00`);
     d.setDate(d.getDate() + days);
     setDateStr(toLocalDateStr(d));
+  }
+
+  // ── Edit attendance ──────────────────────────────────────────────────────
+  function openEdit(row) {
+    setEditRow(row);
+    setEditForm({
+      attendance_date: row.attendance_date,
+      time_in:   toHHMM(row.time_in),
+      break_out: toHHMM(row.break_out),
+      break_in:  toHHMM(row.break_in),
+      time_out:  toHHMM(row.time_out),
+    });
+    setEditError('');
+  }
+
+  function closeEdit() {
+    setEditRow(null);
+    setEditForm(null);
+    setEditError('');
+  }
+
+  function openEditTimePicker(key) {
+    const existing = editForm[key];
+    setEditTempPickerDate(existing ? new Date(`2000-01-01T${existing}:00`) : new Date());
+    setEditActiveTimePicker(key);
+  }
+
+  function onEditDateChange(event, selected) {
+    setEditShowDatePicker(false);
+    if (event.type === 'set' && selected) {
+      setEditForm((f) => ({ ...f, attendance_date: toLocalDateStr(selected) }));
+    }
+  }
+
+  function onEditTimeChange(event, selected) {
+    const key = editActiveTimePicker;
+    setEditActiveTimePicker(null);
+    if (event.type === 'set' && selected && key) {
+      setEditForm((f) => ({ ...f, [key]: fmtTimeLocal(selected) }));
+    }
+  }
+
+  async function handleEditSave() {
+    if (!editRow || !editForm) return;
+    setEditError('');
+    setEditSubmitting(true);
+    try {
+      const { data } = await api.put('/attendance_overview', {
+        admin_user_id: user.user_id,
+        user_id: editRow.user_id,
+        original_date: editRow.attendance_date,
+        attendance_date: editForm.attendance_date,
+        time_in: editForm.time_in,
+        break_out: editForm.break_out,
+        break_in: editForm.break_in,
+        time_out: editForm.time_out,
+      });
+      if (!data.success) throw new Error(data.message || 'Failed to update attendance.');
+      closeEdit();
+      loadAttendance();
+    } catch (err) {
+      setEditError(getApiMessage(err, 'Failed to update attendance.'));
+    } finally {
+      setEditSubmitting(false);
+    }
   }
 
   // ── Dedup (one record per employee per day — take first occurrence) ──
@@ -349,8 +504,14 @@ export default function HRAttendanceScreen({ navigation }) {
                     </View>
                   </View>
                 </View>
-                <View style={[s.statusBadge, { backgroundColor: status.bg, borderColor: status.border }]}>
-                  <Text style={[s.statusText, { color: status.color }]}>{status.label}</Text>
+                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                  <View style={[s.statusBadge, { backgroundColor: status.bg, borderColor: status.border }]}>
+                    <Text style={[s.statusText, { color: status.color }]}>{status.label}</Text>
+                  </View>
+                  <TouchableOpacity style={s.editBtn} onPress={() => openEdit(row)} accessibilityLabel="Edit attendance">
+                    <Ionicons name="create-outline" size={13} color={T.accentLight} />
+                    <Text style={s.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -359,7 +520,7 @@ export default function HRAttendanceScreen({ navigation }) {
                 const photoUrl = getAttendancePhotoUrl(row.time_in_photo, ASSET_BASE);
                 return (
                   <TouchableOpacity style={s.photoWrap} onPress={() => setPhotoModal(photoUrl)} activeOpacity={0.8}>
-                    <Image source={{ uri: photoUrl }} style={s.photoThumb} resizeMode="cover" />
+                    <AuthImage uri={photoUrl} headers={imgHeaders} style={s.photoThumb} resizeMode="cover" />
                     <View style={s.photoOverlay}>
                       <Ionicons name="expand-outline" size={14} color="#fff" />
                       <Text style={s.photoOverlayText}>Selfie</Text>
@@ -440,11 +601,98 @@ export default function HRAttendanceScreen({ navigation }) {
       {/* ══ FULLSCREEN PHOTO MODAL ══ */}
       <Modal visible={Boolean(photoModal)} transparent animationType="fade" onRequestClose={() => setPhotoModal(null)}>
         <Pressable style={s.photoModalBg} onPress={() => setPhotoModal(null)}>
-          <Image source={{ uri: photoModal }} style={s.photoModalImg} resizeMode="contain" />
+          <AuthImage uri={photoModal} headers={imgHeaders} style={s.photoModalImg} resizeMode="contain" />
           <TouchableOpacity style={s.photoModalClose} onPress={() => setPhotoModal(null)} accessibilityLabel="Close photo">
             <Ionicons name="close-circle" size={36} color="#fff" />
           </TouchableOpacity>
         </Pressable>
+      </Modal>
+
+      {/* ══ EDIT ATTENDANCE MODAL ══ */}
+      <Modal visible={Boolean(editRow)} transparent animationType="slide" onRequestClose={closeEdit}>
+        <View style={s.editModalBg}>
+          <View style={s.editModalCard}>
+            <View style={s.editModalHeader}>
+              <View>
+                <Text style={s.editModalTitle}>Edit Attendance</Text>
+                {editRow ? (
+                  <Text style={s.editModalSub}>{editRow.employee_name || editRow.full_name || 'Employee'}</Text>
+                ) : null}
+              </View>
+              <TouchableOpacity onPress={closeEdit} accessibilityLabel="Close edit modal">
+                <Ionicons name="close" size={22} color={T.textSub} />
+              </TouchableOpacity>
+            </View>
+
+            {editForm ? (
+              <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+                <Text style={s.editFieldLabel}>Date</Text>
+                <TouchableOpacity style={s.editDateBtn} onPress={() => setEditShowDatePicker(true)}>
+                  <Ionicons name="calendar-outline" size={16} color={T.accent} />
+                  <Text style={s.editDateBtnText}>{formatDisplayDate(editForm.attendance_date)}</Text>
+                </TouchableOpacity>
+
+                {EDIT_TIME_FIELDS.map((tf) => (
+                  <View key={tf.key} style={s.editTimeRow}>
+                    <Text style={s.editFieldLabel}>{tf.label}</Text>
+                    <TouchableOpacity style={s.editTimeBtn} onPress={() => openEditTimePicker(tf.key)}>
+                      <Ionicons name={tf.icon} size={15} color={T.textSub} />
+                      <Text style={[s.editTimeBtnText, !editForm[tf.key] && s.editPlaceholder]}>
+                        {editForm[tf.key] ? formatTime12h(editForm[tf.key]) : 'Not set'}
+                      </Text>
+                      {editForm[tf.key] ? (
+                        <TouchableOpacity onPress={() => setEditForm((f) => ({ ...f, [tf.key]: '' }))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Ionicons name="close-circle" size={16} color={T.textMuted} />
+                        </TouchableOpacity>
+                      ) : (
+                        <Ionicons name="time-outline" size={16} color={T.textMuted} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {editError ? (
+                  <View style={s.editErrorBox}>
+                    <Ionicons name="alert-circle" size={13} color="#dc2626" />
+                    <Text style={s.editErrorText}>{editError}</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+            ) : null}
+
+            <View style={s.editModalActions}>
+              <TouchableOpacity style={s.editCancelBtn} onPress={closeEdit} disabled={editSubmitting}>
+                <Text style={s.editCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.editSaveBtn, editSubmitting && { opacity: 0.6 }]}
+                onPress={handleEditSave}
+                disabled={editSubmitting}
+              >
+                {editSubmitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.editSaveBtnText}>Save Changes</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {editShowDatePicker && editForm && (
+          <DateTimePicker
+            value={new Date(`${editForm.attendance_date}T00:00:00`)}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            maximumDate={new Date()}
+            onChange={onEditDateChange}
+          />
+        )}
+        {editActiveTimePicker !== null && (
+          <DateTimePicker
+            value={editTempPickerDate}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour={false}
+            onChange={onEditTimeChange}
+          />
+        )}
       </Modal>
     </View>
   );
@@ -509,6 +757,8 @@ const s = StyleSheet.create({
   empPillText: { fontSize: 10, color: T.textSub, fontWeight: '600' },
   statusBadge: { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1 },
   statusText:  { fontSize: 10, fontWeight: '800' },
+  editBtn:     { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: T.accentBg, borderWidth: 1, borderColor: '#bfdbfe' },
+  editBtnText: { fontSize: 10, fontWeight: '800', color: T.accentLight },
 
   // Selfie photo
   photoWrap:        { marginBottom: 12, borderRadius: 12, overflow: 'hidden', height: 140, position: 'relative' },
@@ -541,4 +791,29 @@ const s = StyleSheet.create({
   empty:      { alignItems: 'center', paddingVertical: 56, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: T.textSub },
   emptySub:   { fontSize: 12, color: T.textMuted, textAlign: 'center' },
+
+  // Edit attendance modal
+  editModalBg:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  editModalCard: { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 28 },
+  editModalHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
+  editModalTitle: { fontSize: 17, fontWeight: '900', color: T.textPrimary },
+  editModalSub:   { fontSize: 12, color: T.textSub, marginTop: 2 },
+
+  editFieldLabel: { fontSize: 11, fontWeight: '800', color: T.textSub, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, marginTop: 12 },
+  editDateBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.surfaceAlt, borderRadius: 10, borderWidth: 1.5, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 11 },
+  editDateBtnText: { fontSize: 13, fontWeight: '700', color: T.textPrimary },
+
+  editTimeRow:     { marginBottom: 0 },
+  editTimeBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.surfaceAlt, borderRadius: 10, borderWidth: 1.5, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 11 },
+  editTimeBtnText: { flex: 1, fontSize: 13, fontWeight: '700', color: T.textPrimary },
+  editPlaceholder: { color: T.textMuted, fontWeight: '400' },
+
+  editErrorBox:  { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fef2f2', borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', padding: 11, marginTop: 14 },
+  editErrorText: { flex: 1, fontSize: 12, color: '#dc2626' },
+
+  editModalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  editCancelBtn:     { flex: 1, alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: T.border },
+  editCancelBtnText: { fontSize: 14, fontWeight: '700', color: T.textSub },
+  editSaveBtn:       { flex: 2, alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: 12, backgroundColor: T.accent },
+  editSaveBtnText:   { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

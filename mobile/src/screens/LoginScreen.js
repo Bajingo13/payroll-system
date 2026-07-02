@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { api, getApiMessage } from '../api/client';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 
 const { width: SW } = Dimensions.get('window');
 const OTP_EXPIRY_MINUTES = 5;
@@ -69,6 +70,7 @@ export default function LoginScreen() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   async function completeMobileLogin(user) {
     if (normalizeRole(user.role) === 'admin') {
@@ -396,6 +398,9 @@ export default function LoginScreen() {
             {/* Footer */}
             <View style={s.footerRow}>
               <View style={s.footerLine} />
+              <TouchableOpacity onPress={() => setPrivacyOpen(true)} style={s.privacyButton} accessibilityRole="button">
+                <Text style={s.privacyLink}>Privacy Policy</Text>
+              </TouchableOpacity>
               <Text style={s.footerText}>Astreablue Intelligence Inc. © {new Date().getFullYear()}</Text>
               <View style={s.footerLine} />
             </View>
@@ -490,6 +495,7 @@ export default function LoginScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+      <PrivacyPolicyModal visible={privacyOpen} onClose={() => setPrivacyOpen(false)} />
     </>
   );
 }
@@ -612,6 +618,8 @@ const s = StyleSheet.create({
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   footerLine: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
   footerText: { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
+  privacyButton: { paddingVertical: 5 },
+  privacyLink: { color: '#2563eb', fontSize: 11, fontWeight: '700', textDecorationLine: 'underline' },
 
   // Forgot password modal
   modalOverlay: {
